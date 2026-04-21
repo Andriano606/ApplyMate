@@ -21,7 +21,7 @@ html
     link rel="apple-touch-icon" href="/icon.png"
 
     /! Includes all stylesheet files in app/assets/stylesheets
-    = stylesheet_link_tag :app, 'data-turbo-track': 'reload'
+    = stylesheet_link_tag 'application', 'data-turbo-track': 'reload'
     = javascript_include_tag 'application', 'data-turbo-track': 'reload', type: 'module'
 
   body#body(data-controller="hello form-submit")
@@ -34,4 +34,4 @@ html
 
     / Turbo modals are in #turbo-modals. Note, there will only be one at a time since they are replaced.
     / We use target: :_top in order for links in the modal to not trigger a turbo frame/stream request
-    = turbo_frame_tag "turbo-modals", target: :_top
+    = turbo_frame_tag 'turbo-modals', target: :_top
