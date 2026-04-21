@@ -17,6 +17,8 @@ uk:
         back_to_site: На сайт
         jobs: Черга задач
         jobs_description: Моніторинг фонових завдань
+        sources: Джерела
+        sources_description: Джерела
         title: Панель адміністратора
         users: Користувачі
         users_description: Перегляд та управління користувачами
@@ -25,6 +27,29 @@ uk:
         success: Ви увійшли як іншого користувача
       destroy:
         success: Ви повернулися до свого облікового запису
+    source:
+      create:
+        success: Джерело успішно додано
+      destroy:
+        confirm: Ви впевнені?
+        success: Джерело видалено
+      form:
+        logo: Логотип
+        name: Назва
+        target_url: Цільове посилання
+      index:
+        empty: Джереле не додані
+        table:
+          actions: Дії
+          name: Назва
+        title: Джерела
+      new:
+        submit: Додати джерело
+        title: Нове джерело
+      update:
+        submit: Оновити джерело
+        success: Джерело оновлено
+        title: Редагувати джерело
     unauthorized: Доступ заборонено
     user:
       index:
@@ -112,6 +137,7 @@ uk:
       too_long: задовге (максимум %{count} символів)
       too_short: закоротке (мінімум %{count} символів)
   navbar:
+    add_new_source: Додати джерело
     sign_in: Увійти
     sign_out: Вийти
     stop_impersonating: Зупинити імперсонацію

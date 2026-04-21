@@ -12,3 +12,9 @@
       description: I18n.t('admin.dashboard.index.jobs_description'),
       turbo: false)
     = icon(:code_bracket, size: 6, class: 'text-indigo-600')
+  = dashboard_card(path: admin_sources_path,
+      icon_bg: 'bg-indigo-100',
+      title: I18n.t('admin.dashboard.index.sources'),
+      description: I18n.t('admin.dashboard.index.sources_description'),
+      turbo: false)
+    = icon(:code_bracket, size: 6, class: 'text-indigo-600')

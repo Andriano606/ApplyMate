@@ -22,6 +22,7 @@ Rails.application.routes.draw do
     root 'dashboard#index'
     resources :users, only: [ :index ]
     resource :impersonation, only: [ :create, :destroy ]
+    resources :sources, only: [ :new, :create, :index, :edit, :update, :destroy ]
     mount MissionControl::Jobs::Engine, at: '/jobs'
   end
 

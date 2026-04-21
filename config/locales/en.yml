@@ -17,6 +17,8 @@ en:
         back_to_site: To site
         jobs: Job queue
         jobs_description: Monitor background jobs
+        sources: Sources
+        sources_description: Sources
         title: Admin dashboard
         users: Users
         users_description: View and manage users
@@ -25,6 +27,29 @@ en:
         success: You are now logged in as another user
       destroy:
         success: You have returned to your account
+    source:
+      create:
+        success: Source created
+      destroy:
+        confirm: Are you sure?
+        success: Source destroyed
+      form:
+        logo: Логотип
+        name: Назва
+        target_url: Цільове посилання
+      index:
+        empty: No data
+        table:
+          actions: Actions
+          name: Name
+        title: Sources
+      new:
+        submit: Додати джерело
+        title: Нове джерело
+      update:
+        submit: Update source
+        success: Sourсe updated
+        title: Edit source
     unauthorized: Access denied
     user:
       index:
@@ -112,6 +137,7 @@ en:
       too_long: is too long (maximum is %{count} characters)
       too_short: is too short (minimum is %{count} characters)
   navbar:
+    add_new_source: Додати джерело
     sign_in: Sign in
     sign_out: Sign out
     stop_impersonating: Stop impersonating
