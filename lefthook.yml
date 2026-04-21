@@ -1,5 +1,5 @@
 pre-push:
-  files: git diff develop --name-only
+  files: git diff main --name-only
   commands:
     uncommitted_files:
       files: git diff --name-only
@@ -26,9 +26,9 @@ pre-push:
   parallel: true
 fixer:
   # Alternatives for files:
-  # git diff --name-only HEAD develop # Only committed files
+  # git diff --name-only HEAD main # Only committed files
   # git diff HEAD --name-only # Only uncommitted, we can use
-  files: git diff develop --name-only
+  files: git diff main --name-only
   commands:
     i18n-linting:
       glob: "config/locales/*.yml"
