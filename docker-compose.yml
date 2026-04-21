@@ -8,6 +8,25 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  chrome:
+    build: .
+    image: chrome-vnc:latest
+    container_name: apply-mate-chrome-vnc
+    shm_size: "2gb"          # Chrome потребує достатньо shared memory
+    ports:
+      - "6081:6080"          # noVNC web → відкрий http://localhost:6080/vnc.html
+      - "5901:5900"          # VNC (для VNC-клієнтів типу RealVNC/TigerVNC)
+      - "9223:9222"          # Chrome DevTools Protocol (для Python)
+    environment:
+      - SCREEN_WIDTH=1920
+      - SCREEN_HEIGHT=1080
+      - SCREEN_DEPTH=24
+      - VNC_PASSWORD=        # Встанови пароль або залиш порожнім
+    volumes:
+      - ./scripts:/app/scripts   # Монтуй свої Python скрипти сюди
+    security_opt:
+      - seccomp:unconfined
+    restart: unless-stopped
 
 volumes:
   postgres_data:
