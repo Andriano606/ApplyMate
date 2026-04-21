@@ -1,0 +1,7 @@
+- if avatar_attached?
+  = helpers.image_tag(user.avatar.variant(:thumb), \
+      class: "#{wrapper_classes} object-cover", \
+      alt: user.name, loading: 'lazy', decoding: 'async')
+- else
+  .bg-indigo-600.flex.items-center.justify-center class=wrapper_classes
+    span.text-white class=text_classes = initials

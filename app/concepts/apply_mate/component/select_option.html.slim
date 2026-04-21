@@ -1,0 +1,8 @@
+label.cursor-pointer.block(data-controller='select-option' data-action='change->select-option#onChange')
+  = form.radio_button radio_attribute, radio_value,
+      checked: selected?,
+      class: 'sr-only',
+      name: radio_name
+  div(class=card_class)
+    .flex.flex-col.flex-1(class='gap-2')
+      = content

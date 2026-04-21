@@ -1,0 +1,3 @@
+#flash-list.fixed.top-4.right-4.z-50.space-y-3.w-96 class="max-w-[calc(100vw-2rem)]" data-controller="flash"
+  - flash_list.each do |type, message|
+    = render ApplyMate::Component::Flash.new(type: type, message: message)

@@ -1,0 +1,30 @@
+# frozen_string_literal: true
+
+class ApplyMate::Component::Navbar < ApplyMate::Component::Base
+  include ApplyMate::Component::Navbar::UserHelpers
+
+  private
+
+  def items
+    @items ||= build_items.select(&:render?)
+  end
+
+  def items_by_section
+    @items_by_section ||= items.group_by(&:section)
+  end
+
+  def build_items # rubocop:disable Metrics/MethodLength
+    [
+      #-- Logo --
+      Item.new(label: 'ApplyMate', path: root_path, section: :logo),
+
+      Item.new(label: I18n.t('navbar.stop_impersonating'), path: helpers.admin_impersonation_path, section: :user_menu, render: impersonating?, method: :delete, turbo: false, divider: true),
+      Item.new(label: I18n.t('navbar.sign_out'),     path: logout_path,       section: :user_menu, render: signed_in? && !impersonating?, method: :delete, turbo: false, divider: true),
+
+      #-- Guest --
+      Item.new(label: I18n.t('navbar.sign_in'),        path: helpers.login_path, section: :guest,  render: !signed_in?, turbo: :stream)
+    ]
+  end
+  def oauth_path        = helpers.google_oauth_path
+  def logout_path       = '/logout'
+end

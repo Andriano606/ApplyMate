@@ -1,0 +1,15 @@
+# Included files are defined in Rakefile
+
+# NB All Rubocop linters MUST be defined in rubocop.yml, NOT here. (will not work)
+
+linters:
+  LineLength:
+    max: 120
+
+  # Disable since we prefer using helper methods in component classes over ruby: filter
+  ConsecutiveControlStatements:
+    enabled: false
+
+  # Disable due to false positives with multiline \ continuation and () attributes
+  ControlStatementSpacing:
+    enabled: false

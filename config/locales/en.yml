@@ -1,0 +1,153 @@
+---
+en:
+  activerecord:
+    errors:
+      messages:
+        blank: can't be blank
+        invalid: is invalid
+        record_invalid: 'Validation failed: %{errors}'
+        taken: has already been taken
+  admin:
+    common:
+      back: Back
+      back_to_dashboard: Back to dashboard
+      cancel: Cancel
+    dashboard:
+      index:
+        back_to_site: To site
+        jobs: Job queue
+        jobs_description: Monitor background jobs
+        title: Admin dashboard
+        users: Users
+        users_description: View and manage users
+    impersonation:
+      create:
+        success: You are now logged in as another user
+      destroy:
+        success: You have returned to your account
+    unauthorized: Access denied
+    user:
+      index:
+        empty: No users yet
+        table:
+          actions: Actions
+          admin: Admin
+          customer: Customer
+          email: Email
+          impersonate: Login as
+          name: Name
+          role: Role
+        title: Users
+  components:
+    debug_button:
+      label: Admin
+    table:
+      empty: No records found
+  date:
+    abbr_day_names:
+    - Sun
+    - Mon
+    - Tue
+    - Wed
+    - Thu
+    - Fri
+    - Sat
+    abbr_month_names:
+    -
+    - Jan
+    - Feb
+    - Mar
+    - Apr
+    - May
+    - Jun
+    - Jul
+    - Aug
+    - Sep
+    - Oct
+    - Nov
+    - Dec
+    day_names:
+    - Sunday
+    - Monday
+    - Tuesday
+    - Wednesday
+    - Thursday
+    - Friday
+    - Saturday
+    formats:
+      default: "%Y-%m-%d"
+      long: "%B %d, %Y"
+      short: "%b %d"
+    month_names:
+    -
+    - January
+    - February
+    - March
+    - April
+    - May
+    - June
+    - July
+    - August
+    - September
+    - October
+    - November
+    - December
+    order:
+    - :month
+    - :day
+    - :year
+  error_messages:
+    file:
+      incorrect_format: 'Unsupported format. Allowed formats: %{formats}'
+      must_be_attached: File is required
+      too_large: 'File is too large. Maximum size: %{size} MB'
+  errors:
+    messages:
+      blank: can't be blank
+      greater_than: must be greater than %{count}
+      invalid: is invalid
+      less_than: must be less than %{count}
+      not_a_number: is not a number
+      taken: has already been taken
+      too_long: is too long (maximum is %{count} characters)
+      too_short: is too short (minimum is %{count} characters)
+  navbar:
+    sign_in: Sign in
+    sign_out: Sign out
+    stop_impersonating: Stop impersonating
+  payments:
+    pay_now: Pay Now
+    redirecting: Redirecting to payment gateway...
+  print_order:
+    show:
+      settings:
+        color_any: Any color
+  session:
+    auth_modal:
+      message: Please sign in to continue
+      sign_in: Sign in with Google
+      title: Sign in required
+    destroy:
+      success: You have been signed out
+    failure:
+      message: Authentication failed
+    oauth_callback:
+      failure: Failed to sign in
+      success: You have successfully signed in
+  simple_form:
+    error_notification:
+      default_message: 'Please review the problems below:'
+    'no': 'No'
+    required:
+      mark: "*"
+      text: required
+    'yes': 'Yes'
+  time:
+    formats:
+      default: "%a, %d %b %Y %H:%M:%S %z"
+      long: "%B %d, %Y %H:%M"
+      short: "%d %b %H:%M"
+  will_paginate:
+    next_label: Next &raquo;
+    page_gap: "&hellip;"
+    previous_label: "&laquo; Previous"

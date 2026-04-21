@@ -1,0 +1,143 @@
+# Staging environment configuration.
+# Usage: bin/kamal deploy -d staging
+
+# Different service name prevents container conflicts with production on the same host.
+service: apply_mate_staging
+
+image: andriano606/apply_mate
+
+# Multi-arch build: dev machine (amd64) builds its own arch locally,
+# RPi (arm64) is used as a remote native builder — much faster than QEMU emulation.
+builder:
+  arch:
+    - amd64
+    - arm64
+  remote: ssh://andrii@192.168.31.58
+
+proxy:
+  app_port: 80
+  hosts:
+    - staging.applymate.local
+    - gauge-unpredatory-unnormally.ngrok-free.dev
+
+# SSH user for all servers. Override per-server with "user@host" in hosts list.
+ssh:
+  user: andrii
+
+servers:
+  web:
+    hosts:
+      - 192.168.31.58
+
+  # Standard worker on RPi — handles default queue continuously.
+  # Fallback worker on RPi — handles all queues, but polls slowly so PC wins the race.
+  worker:
+    hosts:
+      - 192.168.31.58
+    cmd: bin/jobs
+    env:
+      clear:
+        SQ_QUEUES: "default"
+        SQ_POLLING_INTERVAL: "1"
+        SQ_PROCESSES: "2"
+        SQ_THREADS: "2"
+
+  render_worker:
+    hosts:
+      - 192.168.31.58
+    cmd: bin/jobs
+    env:
+      clear:
+        SQ_QUEUES: "heavy_processing"
+        SQ_POLLING_INTERVAL: "4"
+        SQ_PROCESSES: "1"
+        SQ_THREADS: "1"
+
+  # Primary heavy worker on PC — polls fast so it picks up heavy_processing first.
+  # Deploy only when PC is on: bin/kamal deploy -d staging --roles=render_worker
+  remote_render_worker:
+    hosts:
+      - 192.168.50.37
+    options:
+      gpus: all
+    cmd: bin/jobs
+    env:
+      clear:
+        DB_HOST: 192.168.31.58
+        DB_PORT: "5433"
+        SQ_QUEUES: "heavy_processing"
+        SQ_POLLING_INTERVAL: "0.1"
+        SQ_PROCESSES: "2"
+        SQ_THREADS: "2"
+
+  remote_default_worker:
+    hosts:
+      - 192.168.50.37
+    cmd: bin/jobs
+    env:
+      clear:
+        DB_HOST: 192.168.31.58
+        DB_PORT: "5433"
+        SQ_QUEUES: "default"
+        SQ_POLLING_INTERVAL: "0.1"
+        SQ_PROCESSES: "2"
+        SQ_THREADS: "2"
+
+registry:
+  username: andriano606
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+env:
+  secret:
+    - RAILS_MASTER_KEY
+    - APPLY_MATE_DATABASE_PASSWORD
+    - MINIO_ACCESS_KEY_ID
+    - MINIO_SECRET_ACCESS_KEY
+  clear:
+    RAILS_ENV: staging
+    # Workers run as separate containers — not embedded in Puma.
+    SOLID_QUEUE_IN_PUMA: false
+    # Accessory container name = {service}-db (used by web + worker on RPi via Docker network).
+    DB_HOST: apply_mate_staging-db
+    DB_PORT: "5432"
+    RAILS_LOG_LEVEL: info
+    WEB_CONCURRENCY: 2
+    RAILS_MAX_THREADS: 2
+    APP_HOST: gauge-unpredatory-unnormally.ngrok-free.dev
+    PRINTER_DEADLINE_HOURS: 24
+    # MinIO is reachable at this IP from all machines (RPi containers + PC render_worker).
+    MINIO_ENDPOINT: http://192.168.31.58:9000
+    MINIO_BUCKET: print-mate-staging
+
+accessories:
+  db:
+    image: postgres:17
+    host: 192.168.31.58
+    # Bind on all interfaces (not 127.0.0.1) so render_worker on 192.168.50.x can connect.
+    # Protect with UFW: sudo ufw allow from 192.168.50.0/24 to any port 5433
+    port: "5433:5432"
+    env:
+      clear:
+        POSTGRES_USER: apply_mate
+        POSTGRES_DB: apply_mate_staging
+      secret:
+        - POSTGRES_PASSWORD
+    directories:
+      - data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    host: 192.168.31.58
+    # 9000 = S3 API, 9001 = web console (http://192.168.31.58:9001)
+    options:
+      publish:
+        - "9000:9000"
+        - "9001:9001"
+    cmd: server /data --console-address ":9001"
+    env:
+      secret:
+        - MINIO_ROOT_USER
+        - MINIO_ROOT_PASSWORD
+    directories:
+      - data:/data

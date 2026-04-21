@@ -1,0 +1,7 @@
+label.inline-flex.items-center.gap-1.cursor-pointer(
+  class="text-indigo-600 dark:text-indigo-400 hover:underline transition-colors")
+  = @form.check_box @name, { class: 'sr-only' }.merge(@options)
+  - if @icon
+    = @icon
+  - if @label
+    span = @label

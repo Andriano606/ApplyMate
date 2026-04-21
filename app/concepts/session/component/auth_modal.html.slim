@@ -1,0 +1,14 @@
+= render ApplyMate::Component::TurboModal.new(modal_id: modal_id, title: modal_title, size: :sm) do |modal|
+  - modal.with_body do
+    .text-center.py-4
+      p.text-gray-600.dark:text-gray-400.mb-6
+        = I18n.t("session.auth_modal.message")
+
+      = helpers.button_to helpers.google_oauth_path, \
+        data: { turbo: false }, \
+        class: "inline-flex items-center justify-center gap-2 w-full px-4 py-3 text-sm " \
+               "text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 " \
+               "border border-gray-300 dark:border-gray-600 rounded-lg " \
+               "hover:bg-gray-50 dark:hover:bg-gray-600" do
+        = icon(:google)
+        span = I18n.t("session.auth_modal.sign_in")

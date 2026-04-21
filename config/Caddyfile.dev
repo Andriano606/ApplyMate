@@ -1,0 +1,4 @@
+dev.applymate.io {
+  tls internal
+  reverse_proxy localhost:3000
+}

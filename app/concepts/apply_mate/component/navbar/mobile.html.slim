@@ -1,0 +1,54 @@
+div data-controller="mobile-menu"
+  / Mobile top bar
+  .flex.md:hidden.items-center.justify-between.h-14
+    / Burger button
+    = button(variant: :icon, data: { action: "click->mobile-menu#toggle" }) do
+      span data-mobile-menu-target="burgerIcon"
+        = icon(:burger, size: 6)
+      span.hidden data-mobile-menu-target="closeIcon"
+        = icon(:close, size: 6)
+
+    / Logo
+    - if logo_item
+      = link_to logo_item.label, logo_item.path, \
+        class: "text-lg font-bold text-indigo-600"
+
+    / Right: avatar or sign-in
+    - if signed_in?
+      = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
+    - else
+      - sign_in = guest_items.find(&:form_item?)
+      - if sign_in
+        = button_to sign_in.label, sign_in.path, \
+          method: sign_in.method, data: { turbo: sign_in.turbo }, \
+          class: "text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
+
+  / Expandable menu
+  .hidden.md:hidden.border-t.border-gray-200.dark:border-gray-600.bg-white.dark:bg-gray-800(
+    data-mobile-menu-target="menu"
+  )
+    .px-4.py-3.space-y-1
+      - menu_items.each do |item|
+        - if item.divider?
+          .border-t.border-gray-100.dark:border-gray-700.my-1
+
+        - if item.form_item?
+          = button_to item.label, item.path, \
+            method: item.method, data: { turbo: item.turbo }, \
+            class: "w-full text-left px-3 py-2 text-base " \
+                   "font-medium text-gray-700 dark:text-gray-300 " \
+                   "hover:bg-gray-50 dark:hover:bg-gray-700 " \
+                   "rounded-lg transition-colors"
+        - elsif item.section == :actions
+          = link_to item.label, item.path, \
+            data: ({ turbo_stream: true } if item.turbo_stream?), \
+            class: "block px-3 py-2 text-base font-medium text-indigo-600 dark:text-indigo-400 " \
+                   "hover:bg-indigo-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        - else
+          = link_to item.path, \
+            data: ({ turbo_stream: true } if item.turbo_stream?), \
+            class: "flex items-center gap-2 px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 " \
+                   "hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors" do
+            - if item.icon?
+              = icon(item.icon_name, size: 5, class: "text-gray-400 dark:text-gray-500 shrink-0")
+            = item.label

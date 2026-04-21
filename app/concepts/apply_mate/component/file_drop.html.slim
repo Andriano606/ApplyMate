@@ -1,0 +1,27 @@
+div data-controller="file-drop"
+  .relative.border-2.border-dashed.rounded-lg.p-8.text-center.transition-colors.cursor-pointer[
+    class="border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-500"
+    data-file-drop-target="dropZone"
+    data-action="dragover->file-drop#dragOver \
+      dragenter->file-drop#dragOver \
+      dragleave->file-drop#dragLeave \
+      drop->file-drop#drop \
+      click->file-drop#openFileDialog"
+  ]
+    .flex.flex-col.items-center.gap-2
+      = icon(:upload, size: 10, class: 'text-gray-400 dark:text-gray-500')
+
+      - if hint
+        p.text-sm.text-gray-600.dark:text-gray-400 data-file-drop-target="label"
+          = hint
+
+      - if formats_label
+        p.text-xs.text-gray-400.dark:text-gray-500
+          = formats_label
+
+    = form.input field, as: :file, label: false, input_html: { \
+      accept: accept, \
+      multiple: multiple, \
+      class: 'hidden', \
+      data: { file_drop_target: 'input', action: 'change->file-drop#fileSelected' } \
+    }.merge(options), wrapper: false

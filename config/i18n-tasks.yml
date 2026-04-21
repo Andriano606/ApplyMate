@@ -1,0 +1,11 @@
+base_locale: uk
+
+# Ignore framework/gem translations that are used internally
+ignore_unused:
+  - 'activemodel.errors.*'
+  - 'activerecord.errors.*'
+  - 'errors.messages.*'
+  - 'simple_form.*'
+  - 'will_paginate.*'
+  - 'date.*'
+  - 'time.*'

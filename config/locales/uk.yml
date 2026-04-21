@@ -1,0 +1,153 @@
+---
+uk:
+  activerecord:
+    errors:
+      messages:
+        blank: не може бути порожнім
+        invalid: невірний номер
+        record_invalid: 'Перевірка не пройшла: %{errors}'
+        taken: вже використовується
+  admin:
+    common:
+      back: Назад
+      back_to_dashboard: Повернутися до панелі
+      cancel: Скасувати
+    dashboard:
+      index:
+        back_to_site: На сайт
+        jobs: Черга задач
+        jobs_description: Моніторинг фонових завдань
+        title: Панель адміністратора
+        users: Користувачі
+        users_description: Перегляд та управління користувачами
+    impersonation:
+      create:
+        success: Ви увійшли як іншого користувача
+      destroy:
+        success: Ви повернулися до свого облікового запису
+    unauthorized: Доступ заборонено
+    user:
+      index:
+        empty: Користувачів ще немає
+        table:
+          actions: Дії
+          admin: Адмін
+          customer: Клієнт
+          email: Email
+          impersonate: Увійти як
+          name: Ім'я
+          role: Роль
+        title: Користувачі
+  components:
+    debug_button:
+      label: Адмін
+    table:
+      empty: Записи відсутні
+  date:
+    abbr_day_names:
+    - нд
+    - пн
+    - вт
+    - ср
+    - чт
+    - пт
+    - сб
+    abbr_month_names:
+    -
+    - січ.
+    - лют.
+    - бер.
+    - квіт.
+    - трав.
+    - черв.
+    - лип.
+    - серп.
+    - вер.
+    - жовт.
+    - лист.
+    - груд.
+    day_names:
+    - неділя
+    - понеділок
+    - вівторок
+    - середа
+    - четвер
+    - п'ятниця
+    - субота
+    formats:
+      default: "%d.%m.%Y"
+      long: "%d %B %Y"
+      short: "%d %b"
+    month_names:
+    -
+    - січня
+    - лютого
+    - березня
+    - квітня
+    - травня
+    - червня
+    - липня
+    - серпня
+    - вересня
+    - жовтня
+    - листопада
+    - грудня
+    order:
+    - :day
+    - :month
+    - :year
+  error_messages:
+    file:
+      incorrect_format: 'Непідтримуваний формат. Дозволені формати: %{formats}'
+      must_be_attached: Файл обов'язковий
+      too_large: 'Файл завеликий. Максимальний розмір: %{size} МБ'
+  errors:
+    messages:
+      blank: не може бути порожнім
+      greater_than: має бути більше %{count}
+      invalid: недійсне
+      less_than: має бути менше %{count}
+      not_a_number: не є числом
+      taken: вже використовується
+      too_long: задовге (максимум %{count} символів)
+      too_short: закоротке (мінімум %{count} символів)
+  navbar:
+    sign_in: Увійти
+    sign_out: Вийти
+    stop_impersonating: Зупинити імперсонацію
+  payments:
+    pay_now: Оплатити
+    redirecting: Перенаправлення на платіжний шлюз...
+  print_order:
+    show:
+      settings:
+        color_any: Будь-який колір
+  session:
+    auth_modal:
+      message: Будь ласка, увійдіть, щоб продовжити
+      sign_in: Увійти через Google
+      title: Вхід необхідний
+    destroy:
+      success: Ви вийшли з системи
+    failure:
+      message: Помилка автентифікації
+    oauth_callback:
+      failure: Не вдалося увійти
+      success: Ви успішно увійшли
+  simple_form:
+    error_notification:
+      default_message: 'Будь ласка, виправте помилки нижче:'
+    'no': Ні
+    required:
+      mark: "*"
+      text: обов'язково
+    'yes': Так
+  time:
+    formats:
+      default: "%d.%m.%Y, %H:%M"
+      long: "%d %B %Y, %H:%M"
+      short: "%d %b, %H:%M"
+  will_paginate:
+    next_label: Наступна &raquo;
+    page_gap: "&hellip;"
+    previous_label: "&laquo; Попередня"

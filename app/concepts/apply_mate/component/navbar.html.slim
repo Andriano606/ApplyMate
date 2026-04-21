@@ -1,0 +1,4 @@
+nav.sticky.top-0.z-40.bg-white.dark:bg-gray-800.shadow-sm
+  .max-w-7xl.mx-auto.px-4.sm:px-6.lg:px-8
+    = render ApplyMate::Component::Navbar::Desktop.new(items_by_section: items_by_section)
+    = render ApplyMate::Component::Navbar::Mobile.new(items_by_section: items_by_section)

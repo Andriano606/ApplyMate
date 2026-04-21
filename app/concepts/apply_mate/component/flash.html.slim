@@ -1,0 +1,11 @@
+div id=flash_id class=container_class data-flash-target="message"
+  / Icon container
+  div class=icon_container_class
+    = flash_icon
+
+  / Content
+  .flex-1.min-w-0
+    p class=message_class = message
+
+  / Close button
+  = button(icon: :x_mark, variant: :icon, data: { action: 'click->flash#dismiss' }, 'aria-label': 'Close')

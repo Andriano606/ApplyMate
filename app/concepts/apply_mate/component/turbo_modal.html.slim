@@ -1,0 +1,22 @@
+.fixed.inset-0.flex.items-center.justify-center.bg-black/50.z-50 [
+  data-controller="turbo-modal"
+  data-turbo-modal-target="overlay"
+  data-action="click->turbo-modal#closeBackground keydown.esc@window->turbo-modal#close"
+  id=modal_id
+]
+  div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-full #{size_class} p-6 max-h-[90vh] flex flex-col"
+    / Header
+    - if title
+      .flex.items-center.justify-between.mb-4.shrink-0
+        h2.text-lg.font-semibold.dark:text-gray-100 = title
+        = button(icon: :close, variant: :icon, data: { action: 'click->turbo-modal#close' }, 'aria-label': 'Close')
+
+    / Body
+    - if body?
+      .text-gray-600.dark:text-gray-400.overflow-y-auto
+        = body
+
+    / Footer
+    - if footer?
+      .flex.justify-end.gap-2.mt-6.shrink-0
+        = footer

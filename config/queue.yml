@@ -1,0 +1,25 @@
+default: &default
+  dispatchers:
+    - polling_interval: 1
+      batch_size: 500
+      finished_jobs_retention: 1.day
+  workers:
+    # Queue(s) and polling interval are injected per-role via Kamal env.
+    # worker role:        SQ_QUEUES=default,          SQ_POLLING_INTERVAL=1
+    # render_worker role: SQ_QUEUES=heavy_processing,default  SQ_POLLING_INTERVAL=5
+    - queues: <%= ENV.fetch('SQ_QUEUES', '*').split(',') %>
+      threads: <%= ENV.fetch("SQ_THREADS", 2) %>
+      processes: <%= ENV.fetch("SQ_PROCESSES", 2) %>
+      polling_interval: <%= ENV.fetch("SQ_POLLING_INTERVAL", 0.1) %>
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+staging:
+  <<: *default
+
+production:
+  <<: *default

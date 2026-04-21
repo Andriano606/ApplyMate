@@ -1,0 +1,256 @@
+@import 'select2/dist/css/select2.min.css';
+
+/* ── Select2 Tailwind theme ─────────────────────────────────────────────── */
+
+/* Selection box */
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple {
+  border: 1px solid #d1d5db; /* gray-300 */
+  border-radius: 0.5rem; /* rounded-lg */
+  background-color: #ffffff;
+  min-height: 2.5rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+/* Focus / open */
+.select2-container--default.select2-container--focus .select2-selection--single,
+.select2-container--default.select2-container--focus
+  .select2-selection--multiple,
+.select2-container--default.select2-container--open .select2-selection--single,
+.select2-container--default.select2-container--open
+  .select2-selection--multiple {
+  border-color: #3b82f6; /* blue-500 */
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* Single — rendered text */
+.select2-container--default
+  .select2-selection--single
+  .select2-selection__rendered {
+  color: #111827; /* gray-900 */
+  line-height: 2.5rem;
+  padding-left: 0.75rem;
+  padding-right: 2rem;
+}
+
+.select2-container--default
+  .select2-selection--single
+  .select2-selection__placeholder {
+  color: #9ca3af; /* gray-400 */
+}
+
+/* Single — arrow */
+.select2-container--default
+  .select2-selection--single
+  .select2-selection__arrow {
+  height: 2.5rem;
+  right: 0.75rem;
+}
+
+/* Single — clear */
+.select2-container--default
+  .select2-selection--single
+  .select2-selection__clear {
+  color: #6b7280; /* gray-500 */
+  font-weight: normal;
+  margin-right: 0.25rem;
+}
+.select2-container--default
+  .select2-selection--single
+  .select2-selection__clear:hover {
+  color: #111827;
+}
+
+/* Multiple — inner area */
+.select2-container--default .select2-selection--multiple {
+  padding: 0.25rem 0.5rem;
+  cursor: text;
+}
+
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__rendered {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0;
+}
+
+/* Multiple — tags */
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: #eff6ff; /* blue-50 */
+  border: 1px solid #bfdbfe; /* blue-200 */
+  border-radius: 0.375rem;
+  color: #1d4ed8; /* blue-700 */
+  font-size: 0.8125rem;
+  padding: 0.125rem 0.5rem;
+  margin: 0;
+}
+
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice__remove {
+  color: #60a5fa; /* blue-400 */
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice__remove:hover {
+  color: #1d4ed8; /* blue-700 */
+  background: none;
+}
+
+/* Multiple — search input inside */
+.select2-container--default
+  .select2-selection--multiple
+  .select2-search__field {
+  margin: 0;
+  color: #111827;
+}
+
+/* Dropdown panel */
+.select2-dropdown {
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background-color: #ffffff;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* Avoid double border when opening below/above */
+.select2-container--default.select2-container--open.select2-container--below
+  .select2-selection {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.select2-container--default.select2-container--open.select2-container--above
+  .select2-selection {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.select2-container--open.select2-container--below .select2-dropdown {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.select2-container--open.select2-container--above .select2-dropdown {
+  border-bottom: none;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Dropdown search field */
+.select2-container--default .select2-search--dropdown {
+  padding: 0.5rem;
+}
+.select2-container--default .select2-search--dropdown .select2-search__field {
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.875rem;
+  color: #111827;
+  outline: none;
+  width: 100%;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.select2-container--default
+  .select2-search--dropdown
+  .select2-search__field:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* Results list */
+.select2-results__options {
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.select2-results__option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #111827;
+  cursor: pointer;
+}
+
+.select2-container--default
+  .select2-results__option--highlighted[aria-selected] {
+  background-color: #3b82f6; /* blue-500 */
+  color: #ffffff;
+}
+
+.select2-container--default .select2-results__option[aria-selected='true'] {
+  background-color: #eff6ff; /* blue-50 */
+  color: #1d4ed8; /* blue-700 */
+}
+
+.select2-container--default .select2-results__option--disabled {
+  color: #9ca3af; /* gray-400 */
+  cursor: default;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .select2-container--default .select2-selection--single,
+  .select2-container--default .select2-selection--multiple {
+    background-color: #1f2937; /* gray-800 */
+    border-color: #4b5563; /* gray-600 */
+  }
+
+  .select2-container--default
+    .select2-selection--single
+    .select2-selection__rendered {
+    color: #f3f4f6; /* gray-100 */
+  }
+
+  .select2-dropdown {
+    background-color: #1f2937;
+    border-color: #4b5563;
+  }
+
+  .select2-container--default .select2-search--dropdown .select2-search__field {
+    background-color: #111827; /* gray-900 */
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
+  .select2-results__option {
+    color: #f3f4f6;
+  }
+
+  .select2-container--default .select2-results__option[aria-selected='true'] {
+    background-color: #1e3a5f;
+    color: #93c5fd; /* blue-300 */
+  }
+
+  .select2-container--default
+    .select2-selection--multiple
+    .select2-selection__choice {
+    background-color: #1e3a5f;
+    border-color: #1d4ed8;
+    color: #93c5fd;
+  }
+
+  .select2-container--default
+    .select2-selection--multiple
+    .select2-search__field {
+    color: #f3f4f6;
+  }
+}

@@ -1,0 +1,26 @@
+<div class="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+  <div class="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-xl p-6 w-full max-w-md text-center">
+    <div class="text-yellow-600 dark:text-yellow-400 text-sm font-semibold uppercase tracking-wide mb-1">DEV MODE</div>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-1">WayForPay Simulator</h1>
+    <p class="text-gray-500 dark:text-gray-400 text-sm">
+      Order: <span class="font-mono font-medium"><%= @wfp_params['orderReference'] %></span><br>
+      Amount: <span class="font-semibold"><%= @wfp_params['amount'] %> <%= @wfp_params['currency'] %></span>
+    </p>
+  </div>
+
+  <div class="flex gap-4">
+    <%= form_with url: approve_dev_wayforpay_mock_path, method: :post do |f| %>
+      <% @wfp_params.each do |key, value| %>
+        <%= f.hidden_field key, value: value, id: nil %>
+      <% end %>
+      <%= f.submit 'Approve Payment', class: 'cursor-pointer px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors' %>
+    <% end %>
+
+    <%= form_with url: decline_dev_wayforpay_mock_path, method: :post do |f| %>
+      <% @wfp_params.each do |key, value| %>
+        <%= f.hidden_field key, value: value, id: nil %>
+      <% end %>
+      <%= f.submit 'Decline Payment', class: 'cursor-pointer px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors' %>
+    <% end %>
+  </div>
+</div>

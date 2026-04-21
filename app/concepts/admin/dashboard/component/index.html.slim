@@ -1,0 +1,14 @@
+= header(**header_opts)
+
+.grid.grid-cols-1.md:grid-cols-2.gap-4.md:gap-6
+  = dashboard_card(path: admin_users_path,
+      icon_bg: 'bg-sky-100',
+      title: I18n.t('admin.dashboard.index.users'),
+      description: I18n.t('admin.dashboard.index.users_description'))
+    = icon(:users, size: 6, class: 'text-sky-600')
+  = dashboard_card(path: admin_mission_control_jobs_path,
+      icon_bg: 'bg-indigo-100',
+      title: I18n.t('admin.dashboard.index.jobs'),
+      description: I18n.t('admin.dashboard.index.jobs_description'),
+      turbo: false)
+    = icon(:code_bracket, size: 6, class: 'text-indigo-600')

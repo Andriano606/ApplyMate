@@ -1,0 +1,42 @@
+# Production environment configuration.
+# Usage: bin/kamal deploy -d production
+
+image: andriano606/apply_mate
+
+proxy:
+  app_port: 80
+  hosts:
+    - applymate.local
+
+servers:
+  web:
+    - 192.168.31.58
+
+registry:
+  username: andriano606
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+env:
+  secret:
+    - RAILS_MASTER_KEY
+    - APPLY_MATE_DATABASE_PASSWORD
+  clear:
+    SOLID_QUEUE_IN_PUMA: true
+    # Accessory container name = {service}-db → apply_mate-db
+    DB_HOST: apply_mate-db
+    PRINTER_DEADLINE_HOURS: 24
+
+accessories:
+  db:
+    image: postgres:17
+    host: 192.168.31.58
+    port: "127.0.0.1:5432:5432"
+    env:
+      clear:
+        POSTGRES_USER: apply_mate
+        POSTGRES_DB: apply_mate_production
+      secret:
+        - POSTGRES_PASSWORD
+    directories:
+      - data:/var/lib/postgresql/data

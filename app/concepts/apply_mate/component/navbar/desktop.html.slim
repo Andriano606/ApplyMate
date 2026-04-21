@@ -1,0 +1,68 @@
+.hidden.md:flex.items-center.justify-between.h-16
+  / Left: Logo + nav links
+  .flex.items-center.gap-8
+    - if logo_item
+      = link_to logo_item.label, logo_item.path, \
+        class: "text-xl font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+    - nav_items.each do |item|
+      = link_to item.label, item.path, \
+        class: "text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-indigo-600 transition-colors"
+
+  / Right: actions + user dropdown / guest
+  .flex.items-center.gap-4
+    = debug_button(path: helpers.admin_root_path, text: I18n.t("components.debug_button.label"))
+    - action_items.each do |item|
+      = link_to item.label, item.path, \
+        data: ({ turbo_stream: true } if item.turbo_stream?), \
+        class: "inline-flex items-center px-4 py-2 text-sm font-medium " \
+               "text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+
+    - if user_menu_items.any?
+      = render ApplyMate::Component::Dropdown.new do |dropdown|
+        - dropdown.with_trigger do
+          = button(variant: :icon, class: "gap-2") do
+            = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
+            = icon(:chevron_down, size: 4, class: "text-gray-500 dark:text-gray-400")
+
+        - dropdown.with_menu do
+          div class=('mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 py-1 overflow-hidden')
+            / User info header
+            .px-4.py-3.border-b.border-gray-100.dark:border-gray-700
+              p.text-sm.font-medium.text-gray-900.dark:text-gray-100 = user_display_name
+              p.text-xs.text-gray-500.dark:text-gray-400.truncate = user_email
+
+            / Menu items
+            - user_menu_items.each do |item|
+              - if item.divider?
+                .border-t.border-gray-100.dark:border-gray-700
+
+              - if item.form_item?
+                = button_to item.label, item.path, \
+                  method: item.method, data: { turbo: item.turbo }, \
+                  class: "w-full text-left px-4 py-2 text-sm " \
+                         "text-gray-700 dark:text-gray-300 " \
+                         "hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              - else
+                = link_to item.path, \
+                  class: "flex items-center gap-2 px-4 py-2 text-sm " \
+                         "text-gray-700 dark:text-gray-300 " \
+                         "hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" do
+                  - if item.icon?
+                    = icon(item.icon_name, size: 4, class: "text-gray-400 dark:text-gray-500 shrink-0")
+                  = item.label
+
+    - guest_items.each do |item|
+      - if item.form_item?
+        = button_to item.label, item.path, \
+          method: item.method, data: { turbo: item.turbo }, \
+          class: "inline-flex items-center px-4 py-2 text-sm " \
+                 "font-medium text-gray-700 dark:text-gray-300 " \
+                 "bg-white dark:bg-gray-800 border " \
+                 "border-gray-300 dark:border-gray-600 " \
+                 "rounded-lg hover:bg-gray-50 " \
+                 "dark:hover:bg-gray-700 transition-colors"
+      - else
+        = link_to item.label, item.path, \
+          data: ({ turbo_stream: true } if item.turbo_stream?), \
+          class: "inline-flex items-center px-4 py-2 text-sm font-medium " \
+                 "text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"

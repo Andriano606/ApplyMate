@@ -1,0 +1,37 @@
+doctype html
+html
+  head
+    title = content_for(:title) || 'Apply Mate'
+    meta name="viewport" content="width=device-width,initial-scale=1"
+    meta name="apple-mobile-web-app-capable" content="yes"
+    meta name="application-name" content="Apply Mate"
+    meta name="mobile-web-app-capable" content="yes"
+    meta name="turbo-refresh-method" content="morph"
+    meta name="turbo-refresh-scroll" content="preserve"
+    = csrf_meta_tags
+    = csp_meta_tag
+
+    = yield :head
+
+    /! Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!)
+    /! = tag.link rel: "manifest", href: pwa_manifest_path(format: :json)
+
+    link rel="icon" href="/icon.png" type="image/png"
+    link rel="icon" href="/icon.svg" type="image/svg+xml"
+    link rel="apple-touch-icon" href="/icon.png"
+
+    /! Includes all stylesheet files in app/assets/stylesheets
+    = stylesheet_link_tag :app, 'data-turbo-track': 'reload'
+    = javascript_include_tag 'application', 'data-turbo-track': 'reload', type: 'module'
+
+  body#body(data-controller="hello form-submit")
+    = render ApplyMate::Component::Navbar.new
+    = render ApplyMate::Component::FlashList.new(flash_list: flash)
+
+    .min-h-screen.bg-gray-100.dark:bg-gray-900
+      .max-w-7xl.mx-auto.px-4.sm:px-6.lg:px-8.py-4.md:py-8
+        #main-content = yield
+
+    / Turbo modals are in #turbo-modals. Note, there will only be one at a time since they are replaced.
+    / We use target: :_top in order for links in the modal to not trigger a turbo frame/stream request
+    = turbo_frame_tag "turbo-modals", target: :_top

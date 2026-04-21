@@ -1,0 +1,49 @@
+pre-push:
+  files: git diff main --name-only
+  commands:
+    uncommitted_files:
+      files: git diff --name-only
+      run: echo "You have uncommitted files please commit or stash these before pushing" && exit 1
+    i18n-linting:
+      glob: "config/locales/*.yml"
+      run: bundle exec i18n-tasks check-normalized
+    i18n-health:
+      glob: "config/locales/*.yml"
+      run: bundle exec i18n-tasks health
+    js-lint:
+      glob: "*.{js,ts,es6,jsx,vue}"
+      # use bun prettier --write "{config,app/javascript}/**/*.{js,ts,vue}" to fix any errors
+      run: "bun prettier --check {files}"
+    typescript:
+      glob: "*.{ts}"
+      run: "bun run typecheck"
+    rubocop:
+      glob: "*.{rb,xml.builder}"
+      run: bundle exec rubocop --force-exclusion {files}
+    slim-lint:
+      glob: "*.{slim}"
+      run: bundle exec slim-lint {files}
+  parallel: true
+fixer:
+  # Alternatives for files:
+  # git diff --name-only HEAD main # Only committed files
+  # git diff HEAD --name-only # Only uncommitted, we can use
+  files: git diff main --name-only
+  commands:
+    i18n-linting:
+      glob: "config/locales/*.yml"
+      run: bundle exec i18n-tasks normalize && bundle exec i18n-tasks remove-unused -y
+    js-lint:
+      glob: "*.{js,ts,vue}"
+      run: "bun prettier --write {files}"
+    rubocop:
+      glob: "*.{rb}"
+      run: bundle exec rubocop -A --force-exclusion {files} --only Style/FrozenStringLiteralComment &&
+           bundle exec rubocop --force-exclusion -a {files}
+    slim-lint:
+      glob: "*.{slim}"
+      run: bundle exec slim-lint {files}
+    trigger-definer:
+      glob: "db/schema.rb"
+      run: sed -i "s/CREATE DEFINER = '[^']*'@'[^']*' TRIGGER/CREATE TRIGGER/g" db/schema.rb
+  parallel: true

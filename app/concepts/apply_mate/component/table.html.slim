@@ -1,0 +1,22 @@
+- if rows.any?
+  .bg-white.dark:bg-gray-800.rounded-xl.shadow-md.overflow-hidden
+    .overflow-x-auto
+      table.w-full
+        thead.bg-gray-50.dark:bg-gray-700
+          tr
+            - columns.each do |column|
+              th class=header_class(column)
+                = column.header
+        tbody.divide-y.divide-gray-200.dark:divide-gray-600
+          - rows.each do |row|
+            tr.hover:bg-gray-50.dark:hover:bg-gray-700 data-model-id=row_id(row)
+              - columns.each do |column|
+                td class=cell_class(column)
+                  = cell_content(column, row)
+
+    - if paginate?
+      .px-4.py-3.border-t.border-gray-200.dark:border-gray-600.bg-gray-50.dark:bg-gray-700
+        = will_paginate rows, renderer: ApplyMate::Component::Table::PaginationRenderer, **paginate_options
+- else
+  .bg-white.dark:bg-gray-800.rounded-xl.shadow-md.p-8.text-center.text-gray-500.dark:text-gray-400
+    = empty_message

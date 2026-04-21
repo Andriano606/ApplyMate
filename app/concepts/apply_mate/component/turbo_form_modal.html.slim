@@ -1,0 +1,15 @@
+= render ApplyMate::Component::TurboModal.new(modal_id: modal_id, title: header_text, size: size) do |modal|
+  - modal.with_body do
+    = helpers.simple_form_for model, \
+      url: helpers.polymorphic_path(endpoint), \
+      html: { id: form_id, multipart: multipart, data: { 'controller': 'turbo-form' } } do |f|
+
+      - if f.object.errors[:base].any?
+        = alert(text: f.object.errors[:base].first, type: :error)
+
+      - self.form = f
+      = content
+
+  - modal.with_footer do
+    = button(label: I18n.t('admin.common.cancel'), variant: :secondary, data: { action: 'click->turbo-modal#close' })
+    = render ApplyMate::Component::SubmitButton.new(model: @model, submit_text:, form_id: form_id)

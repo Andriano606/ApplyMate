@@ -1,0 +1,10 @@
+version: "3"
+
+agent:
+  authtoken: 3AlzeWr2d6NUPaT3pDrojHOUCMd_77WDzcuRv8Mw9xsbHh4v7
+
+tunnels:
+  staging:
+    proto: http
+    addr: 80
+    domain: gauge-unpredatory-unnormally.ngrok-free.dev

@@ -1,0 +1,35 @@
+# Base configuration shared across all destinations.
+# Run with: bin/kamal deploy -d staging | -d production
+
+service: apply_mate
+image: andriano606/apply_mate
+
+# SSH user on the remote server.
+ssh:
+  user: andrii
+
+# Build for ARM64 (Raspberry Pi).
+builder:
+  arch: arm64
+
+# Persistent storage for Active Storage files.
+volumes:
+  - "apply_mate_storage:/rails/storage"
+
+# Bridge fingerprinted assets between versions.
+asset_path: /rails/public/assets
+
+# Non-secret environment variables passed to the container.
+env:
+  clear:
+    WEB_CONCURRENCY: 3
+    RAILS_MAX_THREADS: 3
+    JOB_CONCURRENCY: 2
+
+# Aliases are triggered with "bin/kamal <alias>".
+aliases:
+  console: app exec --interactive --reuse "bin/rails console"
+  shell: app exec --interactive --reuse "bash"
+  logs: app logs -f
+  dbc: app exec --interactive --reuse "bin/rails dbconsole --include-password"
+  seed: app exec --interactive --reuse "bin/rails db:seed"
