@@ -123,7 +123,7 @@ jobs:
           bun-version: 1.2.22
 
       - name: Install JS dependencies and build assets
-        run: bun install --frozen-lockfile && bin/rails assets:precompile
+        run: bun install --frozen-lockfile && bun run build:css && bun run build && bin/rails assets:precompile
         env:
           RAILS_ENV: test
 

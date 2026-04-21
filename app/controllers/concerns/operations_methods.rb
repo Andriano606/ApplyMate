@@ -26,7 +26,7 @@ module OperationsMethods
       # We use it for select2 search results
       format.json do
         if action_name == 'index'
-          collection = if result.model.is_a?(PrintMate::Operation::Struct)
+          collection = if result.model.is_a?(ApplyMate::Operation::Struct)
                          key = operation.to_s.split('::').first.underscore.pluralize
                          result.model[key]
           else
