@@ -87,28 +87,28 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libpq-dev \
-            libglib2.0-0 \
-            libgomp1 \
-            libxi6 \
-            libxrender1 \
-            libxxf86vm1 \
-            libegl1 \
-            libgl1-mesa-dri \
-            google-chrome-stable || true 
-            # "|| true" prevents failure if Chrome is already installed
+#          sudo apt-get install -y --no-install-recommends \
+#            libpq-dev \
+#            libglib2.0-0 \
+#            libgomp1 \
+#            libxi6 \
+#            libxrender1 \
+#            libxxf86vm1 \
+#            libegl1 \
+#            libgl1-mesa-dri \
+#            google-chrome-stable || true
+#            # "|| true" prevents failure if Chrome is already installed
 
-      - name: Install Python Dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install numpy trimesh psycopg2-binary
+#      - name: Install Python Dependencies
+#        run: |
+#          python3 -m pip install --upgrade pip
+#          pip install numpy trimesh psycopg2-binary
 
-      - name: Install Blender
-        run: |
-          sudo mkdir -p /opt/blender
-          curl -fSL "https://download.blender.org/release/Blender4.3/blender-4.3.2-linux-x64.tar.xz" \
-            | sudo tar -xJ --strip-components=1 -C /opt/blender
+#      - name: Install Blender
+#        run: |
+#          sudo mkdir -p /opt/blender
+#          curl -fSL "https://download.blender.org/release/Blender4.3/blender-4.3.2-linux-x64.tar.xz" \
+#            | sudo tar -xJ --strip-components=1 -C /opt/blender
 
       - name: Checkout code
         uses: actions/checkout@v6
