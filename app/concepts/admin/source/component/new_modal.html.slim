@@ -1,0 +1,7 @@
+= render ApplyMate::Component::TurboFormModal.new( \
+    model: source, \
+    endpoint: [ :admin, source ], \
+    header_text: @source.new_record? ? I18n.t('admin.source.new.title') : I18n.t('admin.source.update.title'), \
+    submit_text: @source.new_record? ? I18n.t('admin.source.new.submit') : I18n.t('admin.source.update.submit'), \
+    multipart: true) do |modal|
+  = render Admin::Source::Component::Form.new(form: modal.form)

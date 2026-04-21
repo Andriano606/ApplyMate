@@ -1,0 +1,23 @@
+= form.input :name, label: I18n.t('admin.source.form.name')
+= form.input :base_url, label: I18n.t('admin.source.form.target_url')
+.mt-3
+  label.block.text-sm.font-medium.text-gray-700.dark:text-gray-300.mb-1
+    = I18n.t('admin.source.form.logo')
+
+  .mb-3.flex.items-center.space-x-4
+    .relative.w-20.h-20.border.rounded-lg.overflow-hidden.bg-gray-100.flex.items-center.justify-center
+      - if form.object.logo.attached? && form.object.logo.persisted?
+        = image_tag form.object.logo, id: 'logo-preview-img', class: 'object-cover w-full h-full'
+      - else
+        img#logo-preview-img.hidden.object-cover.w-full.h-full
+        span#logo-placeholder.text-gray-400
+          i.fas.fa-image.text-2xl = 'No logo'
+
+  = form.file_field :logo, \
+          accept: 'image/*', \
+          class: 'block w-full text-sm text-gray-500 ' \
+                  'file:mr-4 file:py-2 file:px-4 ' \
+                  'file:rounded-lg file:border-0 ' \
+                  'file:text-sm file:font-semibold ' \
+                  'file:bg-indigo-50 file:text-indigo-700 ' \
+                  'hover:file:bg-indigo-100'
