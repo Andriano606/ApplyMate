@@ -1,0 +1,20 @@
+.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700.px-5.py-4
+  .flex.flex-col.sm:flex-row.sm:items-center.gap-4
+    .flex.items-baseline.gap-2
+      span.text-3xl.font-extrabold.text-gray-900.dark:text-gray-100 = total_count
+      span.text-sm.font-medium.text-gray-500.dark:text-gray-400 = I18n.t('vacancy.total_vacancies')
+
+    .hidden.sm:block.self-stretch.w-px.bg-gray-200.dark:bg-gray-700
+
+    .flex.flex-wrap.gap-2
+      - @total_vacancies.each do |item|
+        .flex.items-center.gap-2.bg-gray-50.dark:bg-gray-700.rounded-lg.px-3.py-1.5
+          - if item.source.logo.attached?
+            = helpers.image_tag(item.source.logo, \
+                class: 'w-5 h-5 object-contain rounded', \
+                alt: item.source.name)
+          span.text-sm.font-medium.text-gray-700.dark:text-gray-300 = item.source.name
+          span.inline-flex.items-center.justify-center.rounded-full.bg-indigo-100.dark:bg-indigo-900 (
+            class="text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2 py-0.5 min-w-[1.5rem]"
+            )
+            = item.count

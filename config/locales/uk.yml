@@ -187,6 +187,10 @@ uk:
       default: "%d.%m.%Y, %H:%M"
       long: "%d %B %Y, %H:%M"
       short: "%d %b, %H:%M"
+  vacancy:
+    card:
+      view_original: Переглянути оригінал
+    total_vacancies: вакансій
   will_paginate:
     next_label: Наступна &raquo;
     page_gap: "&hellip;"

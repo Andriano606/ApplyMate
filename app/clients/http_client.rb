@@ -33,5 +33,13 @@ class HttpClient < BaseClient
       raise "Помилка запиту: #{response.status}"
       nil
     end
+
+  rescue Faraday::TimeoutError, Faraday::ConnectionFailed => e
+    # Ось тут ми перетворюємо помилку сокета на зрозумілу помилку для скрейпера
+    Rails.logger.error "Мережева помилка на URL #{url}: #{e.message}"
+    raise "Виникла помилка мережі: #{e.message}"
+  rescue StandardError => e
+    Rails.logger.error "Непередбачувана помилка: #{e.message}"
+    raise e
   end
 end

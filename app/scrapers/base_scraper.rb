@@ -11,6 +11,12 @@ class BaseScraper
     page = 1
 
     loop do
+      # ПЕРЕВІРКА: чи не прийшов сигнал на зупинку процесу?
+      if Thread.main[:solid_queue_terminating]
+        Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
+        break
+      end
+
       # Формуємо URL для поточної сторінки
       # Якщо у @source.job_list_url вже є параметри, використовуємо &page=, інакше ?page=
       separator = @source.job_list_url.include?('?') ? '&' : '?'
@@ -32,6 +38,9 @@ class BaseScraper
       end
 
       all_jobs.concat(page_jobs)
+
+      # Пауза від 1 до 3 секунд після кожного успішного запиту
+      # sleep(rand(1.0..3.0))
 
       page += 1
     end
@@ -56,28 +65,9 @@ class BaseScraper
       url: full_url(url),
       description:,
       company_name:,
-      company_icon_url: image_valid?(company_icon_url) ? company_icon_url : nil,
+      company_icon_url:,
       external_id:
     )
-  end
-
-  def image_valid?(url)
-    return false if url.blank?
-
-    uri = URI.parse(url)
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = (uri.scheme == 'https')
-    http.open_timeout = 2 # Не чекаємо довго
-    http.read_timeout = 2
-
-    # Використовуємо HEAD замість GET
-    response = http.request_head(uri.request_uri)
-
-    # Перевіряємо, чи статус 200 OK і чи це дійсно зображення
-    response.code == '200' && response['Content-Type']&.start_with?('image/')
-  rescue StandardError => e
-    Rails.logger.error "Image validation error: #{e.message}"
-    false
   end
 
   def full_url(path)
