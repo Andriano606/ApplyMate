@@ -16,7 +16,7 @@ en:
       index:
         back_to_site: To site
         jobs: Job queue
-        jobs_description: Monitor background jobs
+        jobs_description: Monitor background vacancy
         sources: Sources
         sources_description: Sources
         title: Admin dashboard
@@ -34,9 +34,20 @@ en:
         confirm: Are you sure?
         success: Source destroyed
       form:
+        client: Тип клієнта
         logo: Логотип
         name: Назва
+        pagination:
+          title: Pagination
+          url_template: URL template
+        selectors:
+          listings: Job listings selector
+          title: Selectors
+          url: Job URL selector
         target_url: Цільове посилання
+        urls:
+          start_url: Start URL
+          title: URLs
       index:
         empty: No data
         table:
@@ -136,6 +147,9 @@ en:
       taken: has already been taken
       too_long: is too long (maximum is %{count} characters)
       too_short: is too short (minimum is %{count} characters)
+  home:
+    index:
+      no_vacancy: No vacancies fetched
   navbar:
     add_new_source: Додати джерело
     sign_in: Sign in

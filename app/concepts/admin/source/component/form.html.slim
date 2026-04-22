@@ -1,5 +1,12 @@
 = form.input :name, label: I18n.t('admin.source.form.name')
 = form.input :base_url, label: I18n.t('admin.source.form.target_url')
+= form.input :client,
+        collection: Source::CLIENTS.map { |c| [ c.to_s, c.to_s ] },
+        label: I18n.t('admin.source.form.client'),
+        include_blank: false,
+        input_html: { class: 'block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 \
+          focus:ring-indigo-500 sm:text-sm' }
+
 .mt-3
   label.block.text-sm.font-medium.text-gray-700.dark:text-gray-300.mb-1
     = I18n.t('admin.source.form.logo')
@@ -21,3 +28,10 @@
                   'file:text-sm file:font-semibold ' \
                   'file:bg-indigo-50 file:text-indigo-700 ' \
                   'hover:file:bg-indigo-100'
+
+- jsonb_sections.each do |column, fields|
+  fieldset.mt-4.border.border-gray-200.dark:border-gray-700.rounded-lg.p-4
+    legend.text-sm.font-semibold.text-gray-700.dark:text-gray-300.px-1
+      = I18n.t("admin.source.form.#{column}.title")
+    - fields.each do |field|
+      = form.input field, label: I18n.t("admin.source.form.#{column}.#{field}")

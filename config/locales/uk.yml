@@ -34,9 +34,20 @@ uk:
         confirm: Ви впевнені?
         success: Джерело видалено
       form:
+        client: Тип клієнта
         logo: Логотип
         name: Назва
+        pagination:
+          title: Пагінація
+          url_template: Шаблон URL
+        selectors:
+          listings: Список вакансій
+          title: Селектори
+          url: Посилання на вакансію
         target_url: Цільове посилання
+        urls:
+          start_url: Стартова URL
+          title: URL-адреси
       index:
         empty: Джереле не додані
         table:
@@ -136,6 +147,9 @@ uk:
       taken: вже використовується
       too_long: задовге (максимум %{count} символів)
       too_short: закоротке (мінімум %{count} символів)
+  home:
+    index:
+      no_vacancy: Немає жодної вакансії
   navbar:
     add_new_source: Додати джерело
     sign_in: Увійти

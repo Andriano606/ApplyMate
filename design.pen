@@ -1,0 +1,204 @@
+{
+  "version": "2.9",
+  "children": [
+    {
+      "type": "frame",
+      "id": "bi8Au",
+      "x": 0,
+      "y": 0,
+      "name": "Frame",
+      "clip": true,
+      "width": 800,
+      "height": 600,
+      "fill": "#FFFFFF",
+      "layout": "none"
+    },
+    {
+      "type": "frame",
+      "id": "iatCW",
+      "x": 900,
+      "y": 0,
+      "name": "Vacancy Card",
+      "width": 420,
+      "fill": "$bg-white",
+      "cornerRadius": "$radius-card",
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "$border-subtle"
+      },
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "5YLK8",
+          "name": "Card Header",
+          "width": "fill_container",
+          "gap": 12,
+          "padding": [
+            16,
+            20,
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "YcRDd",
+              "name": "iconPlaceholder",
+              "width": 40,
+              "height": 40,
+              "fill": "$bg-card",
+              "cornerRadius": 10,
+              "layout": "none"
+            },
+            {
+              "type": "frame",
+              "id": "PPaK4",
+              "name": "textStack",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "RHLTa",
+                  "name": "companyName",
+                  "fill": "$text-primary",
+                  "content": "TechCorp Inc.",
+                  "fontFamily": "Outfit",
+                  "fontSize": 14,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "iwEnJ",
+                  "name": "badgeFrame",
+                  "fill": "$bg-dark",
+                  "cornerRadius": 10,
+                  "padding": [
+                    3,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "wk9kU",
+                      "name": "badgeText",
+                      "fill": "$text-inverted",
+                      "content": "Djinni",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "9QwKa",
+          "name": "Card Body",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "padding": [
+            12,
+            20,
+            20,
+            20
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "7PT5S",
+              "name": "Vacancy Title",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Senior Ruby on Rails Developer",
+              "lineHeight": 1.1,
+              "fontFamily": "Outfit",
+              "fontSize": 20,
+              "fontWeight": "800",
+              "letterSpacing": -0.5
+            },
+            {
+              "type": "text",
+              "id": "0IDd3",
+              "name": "Vacancy Description",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "We are looking for an experienced Ruby on Rails developer to join our growing team. You will be responsible for building and maintaining scalable web applications, collaborating with cross-functional teams, and contributing to architectural decisions.",
+              "lineHeight": 1.5,
+              "fontFamily": "Inter",
+              "fontSize": 13
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "bg-card": {
+      "type": "color",
+      "value": "#F4F4F5"
+    },
+    "bg-dark": {
+      "type": "color",
+      "value": "#000000"
+    },
+    "bg-white": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "border-subtle": {
+      "type": "color",
+      "value": "#E4E4E7"
+    },
+    "radius-badge": {
+      "type": "number",
+      "value": 16
+    },
+    "radius-card": {
+      "type": "number",
+      "value": 16
+    },
+    "spacing-lg": {
+      "type": "number",
+      "value": 16
+    },
+    "spacing-md": {
+      "type": "number",
+      "value": 12
+    },
+    "spacing-sm": {
+      "type": "number",
+      "value": 8
+    },
+    "spacing-xl": {
+      "type": "number",
+      "value": 24
+    },
+    "text-inverted": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "text-primary": {
+      "type": "color",
+      "value": "#000000"
+    },
+    "text-secondary": {
+      "type": "color",
+      "value": "#71717A"
+    },
+    "text-tertiary": {
+      "type": "color",
+      "value": "#A1A1AA"
+    }
+  }
+}

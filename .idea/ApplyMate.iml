@@ -86,6 +86,8 @@
     <orderEntry type="library" scope="PROVIDED" name="erubi (v1.13.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="et-orbi (v1.4.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday (v2.14.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="faraday-follow_redirects (v0.5.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="faraday-multipart (v1.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-net_http (v3.4.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ferrum (v0.17.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ffi (v1.17.4, asdf: 3.4.8) [gem]" level="application" />
@@ -105,6 +107,7 @@
     <orderEntry type="library" scope="PROVIDED" name="jmespath (v1.6.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="jsbundling-rails (v1.3.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="json (v2.19.4, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="jsonb_accessor (v1.4.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="jwt (v3.1.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="kamal (v2.11.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="language_server-protocol (v3.17.0.5, asdf: 3.4.8) [gem]" level="application" />
@@ -123,6 +126,7 @@
     <orderEntry type="library" scope="PROVIDED" name="msgpack (v1.8.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="multi_test (v1.1.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="multi_xml (v0.8.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="multipart-post (v2.4.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="net-http (v0.9.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="net-imap (v0.6.3, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="net-pop (v0.1.2, asdf: 3.4.8) [gem]" level="application" />
@@ -258,6 +262,9 @@
     <entry key="config/cable">
       <value>file://$MODULE_DIR$/config/cable.yml</value>
     </entry>
+    <entry key="config/cache">
+      <value>file://$MODULE_DIR$/config/cache.yml</value>
+    </entry>
     <entry key="config/database">
       <value>file://$MODULE_DIR$/config/database.yml</value>
     </entry>
@@ -279,8 +286,8 @@
     <entry key="config/routes.rb">
       <value>file://$MODULE_DIR$/config/routes.rb</value>
     </entry>
-    <entry key="config/secrets">
-      <value>file://$MODULE_DIR$/config</value>
+    <entry key="config/solid_cache">
+      <value>file://$MODULE_DIR$/config/solid_cache.yml</value>
     </entry>
     <entry key="db">
       <value>file://$MODULE_DIR$/db</value>
@@ -314,6 +321,11 @@
     </entry>
     <entry key="public/stylesheets">
       <value>file://$MODULE_DIR$/public/stylesheets</value>
+    </entry>
+    <entry key="test/mailers/previews">
+      <value>file://$MODULE_DIR$/spec/mailers/previews</value>
+      <value>file://$MODULE_DIR$/test/mailers/previews</value>
+      <value>file://$MODULE_DIR$/test/mailers/previews</value>
     </entry>
     <entry key="tmp">
       <value>file://$MODULE_DIR$/tmp</value>
