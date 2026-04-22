@@ -21,6 +21,11 @@ gem 'jbuilder'
 
 gem 'dry-matcher' # MIT-License
 gem 'wannabe_bool' # Converts values to boolean
+gem 'jsonb_accessor'
+gem 'faraday' # MIT-License
+gem 'faraday-multipart' # MIT-License
+gem 'faraday-follow_redirects'
+gem 'nokogiri'
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"

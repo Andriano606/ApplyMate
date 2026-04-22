@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_21_170734) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_22_132649) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -165,9 +165,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_170734) do
 
   create_table "sources", force: :cascade do |t|
     t.string "base_url", null: false
+    t.string "client"
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.jsonb "selectors", default: {}
     t.datetime "updated_at", null: false
+    t.jsonb "urls", default: {}
   end
 
   create_table "users", force: :cascade do |t|
@@ -184,6 +187,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_170734) do
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
   end
 
+  create_table "vacancies", force: :cascade do |t|
+    t.string "company_icon_url"
+    t.string "company_name"
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "external_id"
+    t.bigint "source_id", null: false
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.string "url"
+    t.index ["source_id", "external_id"], name: "index_vacancies_on_source_id_and_external_id", unique: true
+    t.index ["source_id"], name: "index_vacancies_on_source_id"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
@@ -192,4 +209,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_170734) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "vacancies", "sources"
 end

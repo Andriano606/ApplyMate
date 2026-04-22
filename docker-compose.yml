@@ -16,7 +16,7 @@ services:
     ports:
       - "6081:6080"          # noVNC web → відкрий http://localhost:6080/vnc.html
       - "5901:5900"          # VNC (для VNC-клієнтів типу RealVNC/TigerVNC)
-      - "9223:9222"          # Chrome DevTools Protocol (для Python)
+      - "9222:9222"          # Chrome DevTools Protocol
     environment:
       - SCREEN_WIDTH=1920
       - SCREEN_HEIGHT=1080

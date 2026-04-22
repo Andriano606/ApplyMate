@@ -1,0 +1,10 @@
+.max-w-7xl.mx-auto.px-4.py-12
+  - if @vacancies.any?
+    .grid.grid-cols-1.gap-6.sm:grid-cols-2.lg:grid-cols-3
+      - @vacancies.each do |vacancy|
+        = render Vacancy::Component::Card.new(vacancy:)
+  - else
+    p.text-gray-500.dark:text-gray-400.text-center.py-12 = I18n.t('home.index.no_vacancy')
+
+- if paginate?
+  = helpers.will_paginate @vacancies, renderer: ApplyMate::Component::Table::PaginationRenderer
