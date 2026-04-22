@@ -1,13 +1,25 @@
-.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700
+.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700.flex.flex-col
   .flex.items-center.gap-3.pt-4.px-5
-    - if @vacancy.company_icon_url.present?
-      .w-10.h-10.rounded-lg.bg-gray-100.dark:bg-gray-700.flex.items-center.justify-center
-        img.max-w-full.max-h-full.object-contain src=@vacancy.company_icon_url alt=@vacancy.company_name
-    - else
-      .w-10.h-10.rounded-lg.bg-gray-100.dark:bg-gray-700.shrink-0
+    .w-10.h-10.rounded-lg.bg-gray-100.dark:bg-gray-700.shrink-0.flex.items-center.justify-center
+      - if valid_icon_url?
+        img.max-w-full.max-h-full.object-contain (
+            src=@vacancy.company_icon_url alt=@vacancy.company_name \
+            onerror="this.style.display='none';this.nextElementSibling.style.display=''"
+          )
+        span.text-sm.font-bold.text-gray-500.dark:text-gray-400 style="display:none" = company_initial
+      - else
+        span.text-sm.font-bold.text-gray-500.dark:text-gray-400 = company_initial
     .flex.flex-col.gap-1
       span.text-sm.font-bold.text-gray-900.dark:text-gray-100 = @vacancy.company_name
       .w-fit = badge(label: @vacancy.source.name, color: :green, variant: :pill)
-  .flex.flex-col.gap-3.px-5.pt-3.pb-5
+  .flex.flex-col.gap-3.px-5.pt-3.pb-4.flex-1
     h3.text-xl.font-extrabold.text-gray-900.dark:text-gray-100.leading-tight.tracking-tight = @vacancy.title
     p.text-sm.text-gray-500.dark:text-gray-400.leading-relaxed = description
+  - if @vacancy.url.present?
+    .border-t.border-gray-200.dark:border-gray-700
+      a.flex.items-center.gap-1.5.px-5.py-3.font-medium.font-outfit.text-gray-900 (
+          class=" text-[13px]  dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" \
+          href=@vacancy.url target="_blank" rel="noopener noreferrer"
+        )
+        = icon(:external_link, size: 4)
+        = I18n.t('vacancy.card.view_original')

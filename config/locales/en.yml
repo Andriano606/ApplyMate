@@ -187,6 +187,10 @@ en:
       default: "%a, %d %b %Y %H:%M:%S %z"
       long: "%B %d, %Y %H:%M"
       short: "%d %b %H:%M"
+  vacancy:
+    card:
+      view_original: View original posting
+    total_vacancies: вакансій
   will_paginate:
     next_label: Next &raquo;
     page_gap: "&hellip;"

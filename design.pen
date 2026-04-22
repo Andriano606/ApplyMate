@@ -108,7 +108,7 @@
           "padding": [
             12,
             20,
-            20,
+            16,
             20
           ],
           "children": [
@@ -136,7 +136,47 @@
               "content": "We are looking for an experienced Ruby on Rails developer to join our growing team. You will be responsible for building and maintaining scalable web applications, collaborating with cross-functional teams, and contributing to architectural decisions.",
               "lineHeight": 1.5,
               "fontFamily": "Inter",
-              "fontSize": 13
+              "fontSize": 13,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "rectangle",
+          "id": "HG0RA",
+          "fill": "$border-subtle",
+          "width": "fill_container",
+          "height": 1
+        },
+        {
+          "type": "frame",
+          "id": "WtHNd",
+          "name": "footer",
+          "width": "fill_container",
+          "gap": 6,
+          "padding": [
+            14,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon_font",
+              "id": "29Rjl",
+              "width": 14,
+              "height": 14,
+              "iconFontName": "external-link",
+              "iconFontFamily": "lucide",
+              "fill": "$text-secondary"
+            },
+            {
+              "type": "text",
+              "id": "6F9ol",
+              "fill": "$text-secondary",
+              "content": "View original posting",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "500"
             }
           ]
         }
