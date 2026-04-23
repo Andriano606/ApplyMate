@@ -77,6 +77,20 @@ jobs:
           - 5432:5432
         options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
 
+      elasticsearch:
+        image: elasticsearch:8.13.0
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\|\"status\":\"yellow\"'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+
       # redis:
       #   image: valkey/valkey:8
       #   ports:
@@ -137,6 +151,7 @@ jobs:
         env:
           RAILS_ENV: test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432
+          ELASTICSEARCH_URL: http://localhost:9200
           BLENDER_BIN: /opt/blender/blender
           # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           # REDIS_URL: redis://localhost:6379/0
@@ -147,6 +162,7 @@ jobs:
           CI: true
           RAILS_ENV: test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432
+          ELASTICSEARCH_URL: http://localhost:9200
           BLENDER_BIN: /opt/blender/blender
           # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           # REDIS_URL: redis://localhost:6379/0

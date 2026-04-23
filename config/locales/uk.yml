@@ -190,6 +190,15 @@ uk:
   vacancy:
     card:
       view_original: Переглянути оригінал
+    search:
+      exclude_placeholder: Виключити слова...
+      placeholder: Пошук вакансій...
+      results_count:
+        few: Знайдено %{count} вакансії
+        many: Знайдено %{count} вакансій
+        one: Знайдено %{count} вакансію
+        other: Знайдено %{count} вакансій
+      submit: Знайти
     total_vacancies: вакансій
   will_paginate:
     next_label: Наступна &raquo;

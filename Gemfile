@@ -21,6 +21,9 @@ gem 'jbuilder'
 
 gem 'dry-matcher' # MIT-License
 gem 'wannabe_bool' # Converts values to boolean
+gem 'elasticsearch', '~> 8'
+gem 'elasticsearch-model', '~> 8'
+gem 'elasticsearch-rails', '~> 8'
 gem 'jsonb_accessor'
 gem 'faraday' # MIT-License
 gem 'faraday-multipart' # MIT-License
@@ -118,6 +121,8 @@ group :development do
 end
 
 group :test do
+  gem 'factory_bot_rails'
+
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem 'capybara'
   gem 'selenium-webdriver'

@@ -1,0 +1,19 @@
+= helpers.simple_form_for :vacancy_search, url: helpers.root_path, method: :get do |f|
+  .max-w-7xl.mx-auto.pt-8.pb-4
+    .flex.gap-2
+      = f.input :query, as: :string, label: false, wrapper: false, \
+          placeholder: I18n.t('vacancy.search.placeholder'), \
+          input_html: { value: @query, name: :query, \
+            class: 'flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 \
+              text-gray-900 dark:text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500' }
+      = f.submit I18n.t('vacancy.search.submit'), \
+          class: 'px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer transition-colors'
+    .flex.gap-2.mt-2
+      = f.input :exclude, as: :string, label: false, wrapper: false, \
+          placeholder: I18n.t('vacancy.search.exclude_placeholder'), \
+          input_html: { value: @exclude, name: :exclude, \
+            class: 'flex-1 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-gray-700 \
+              text-gray-900 dark:text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-400' }
+    - if @count
+      p.text-sm.text-gray-500.dark:text-gray-400.mt-2
+        = I18n.t('vacancy.search.results_count', count: @count)

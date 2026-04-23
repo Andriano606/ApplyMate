@@ -82,9 +82,16 @@
     <orderEntry type="library" scope="PROVIDED" name="dry-core (v1.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="dry-matcher (v1.0.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ed25519 (v1.4.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="elastic-transport (v8.5.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="elasticsearch (v8.19.3, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="elasticsearch-api (v8.19.3, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="elasticsearch-model (v8.0.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="elasticsearch-rails (v8.0.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="erb (v6.0.4, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="erubi (v1.13.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="et-orbi (v1.4.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="factory_bot (v6.5.6, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="TEST" name="factory_bot_rails (v6.5.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday (v2.14.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-follow_redirects (v0.5.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-multipart (v1.2.0, asdf: 3.4.8) [gem]" level="application" />
@@ -124,6 +131,7 @@
     <orderEntry type="library" scope="PROVIDED" name="minitest (v6.0.5, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="mission_control-jobs (v1.1.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="msgpack (v1.8.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="multi_json (v1.20.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="multi_test (v1.1.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="multi_xml (v0.8.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="multipart-post (v2.4.1, asdf: 3.4.8) [gem]" level="application" />
