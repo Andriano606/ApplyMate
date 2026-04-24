@@ -231,6 +231,8 @@ GEM
       logger
     highline (3.1.2)
       reline
+    html2text (0.4.0)
+      nokogiri (>= 1.0, < 2.0)
     i18n (1.14.8)
       concurrent-ruby (~> 1.0)
     i18n-tasks (1.1.2)
@@ -638,6 +640,7 @@ DEPENDENCIES
   faraday-multipart
   ferrum
   hashid-rails
+  html2text
   i18n-tasks
   image_processing (~> 1.2)
   jbuilder
@@ -756,6 +759,7 @@ CHECKSUMS
   hashids (1.0.6) sha256=a344c05f249417492bf48451a93770558834ff7a445e1b64ef112954a0293019
   hashie (5.1.0) sha256=c266471896f323c446ea8207f8ffac985d2718df0a0ba98651a3057096ca3870
   highline (3.1.2) sha256=67cbd34d19f6ef11a7ee1d82ffab5d36dfd5b3be861f450fc1716c7125f4bb4a
+  html2text (0.4.0) sha256=b1becfa0b9150739633f7dc6d8637a49d7e38c3223bcb3afa3cebf59960afdc5
   i18n (1.14.8) sha256=285778639134865c5e0f6269e0b818256017e8cde89993fdfcbfb64d088824a5
   i18n-tasks (1.1.2) sha256=4dcfba49e52a623f30661cb316cb80d84fbba5cb8c6d88ef5e02545fffa3637a
   image_processing (1.14.0) sha256=754cc169c9c262980889bec6bfd325ed1dafad34f85242b5a07b60af004742fb

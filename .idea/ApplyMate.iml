@@ -104,6 +104,7 @@
     <orderEntry type="library" scope="PROVIDED" name="hashids (v1.0.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="hashie (v5.1.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="highline (v3.1.2, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="html2text (v0.4.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="i18n (v1.14.8, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="TEST" name="i18n-tasks (v1.1.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="image_processing (v1.14.0, asdf: 3.4.8) [gem]" level="application" />
