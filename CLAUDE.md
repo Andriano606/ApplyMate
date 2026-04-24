@@ -12,17 +12,6 @@ Rails + Hotwire (Stimulus + Turbo) application using Concepts-based architecture
 - Default locale is **Ukrainian (`uk`)** — use `I18n.t()` (full form, NOT `t()`)
 - All UI must be **responsive** (mobile-first)
 
-## Reference Guides
-
-Consult these guides when working on specific areas:
-
-### Implementation
-- `.ai/docs/controllers.md` - Controllers, endpoint method, Pundit policies
-- `.ai/docs/operations.md` - Operations, authorization, result object
-- `.ai/docs/form_objects.md` - Form objects, input parsing, validation, model sync
-- `.ai/docs/components.md` - Form objects, input parsing, validation, model sync
-- `.ai/docs/select2.md` - Select2 inputs: static collection, AJAX mode, model setup
-
 ### Testing
 - `.ai/docs/rspec.md` - RSpec patterns, shared operation context. **Read this before modifying any spec file.**
 - `.ai/docs/cucumber.md` - Feature tests, step definitions, wait_for patterns
