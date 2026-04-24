@@ -26,6 +26,8 @@ Rails.application.routes.draw do
     mount MissionControl::Jobs::Engine, at: '/jobs'
   end
 
+  resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
+
   # Defines the root path route ("/")
   root 'home#index'
 end

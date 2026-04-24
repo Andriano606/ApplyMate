@@ -19,12 +19,11 @@ class ApplyMate::Endpoint::TurboStream < ApplyMate::Endpoint::Base
 
     case @controller.action_name
     when 'create', 'update'
-      if frame_id.present? && frame_id != 'main-content'
-        html = render(component, result.model, model_name)
-        turbo_actions << @controller.send(:turbo_stream).flash([ [ result.message_level, result.notice[:text] ] ])
-        turbo_actions << @controller.send(:turbo_stream).replace(frame_id, html:, method: :morph)
+      @controller.flash[result.message_level] = result.notice[:text] if result.notice
+      if @controller.request.referer.include?('/new')
+        path = @controller.public_send "#{@controller.controller_name}_path"
+        turbo_actions << @controller.send(:turbo_stream).action(:redirect, path)
       else
-        @controller.flash[result.message_level] = result.notice[:text] if result.notice
         turbo_actions << @controller.send(:turbo_stream).action(:refresh, nil, method: :morph)
       end
     when 'destroy'

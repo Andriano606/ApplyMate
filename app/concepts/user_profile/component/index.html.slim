@@ -1,0 +1,20 @@
+= header(**header_opts) do |h|
+  - h.with_buttons do
+    = helpers.link_to I18n.t('user_profile.index.new'), helpers.new_user_profile_path, \
+      class: 'inline-flex items-center px-4 py-2 text-sm font-medium ' \
+             'text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors'
+
+.py-8
+  - if @user_profiles.any?
+    .space-y-4
+      - @user_profiles.each do |profile|
+        .bg-white.dark:bg-gray-800.rounded-lg.shadow.p-6.flex.items-center.justify-between [data-model-id=profile.id]
+          .flex-1.min-w-0
+            h3.text-base.font-semibold.text-gray-900.dark:text-white = profile.name
+            p.text-sm.text-gray-500.dark:text-gray-400.mt-1.truncate = profile.cv
+          .flex.items-center.gap-2.ml-4.shrink-0
+            = edit_table_button(link: helpers.edit_user_profile_path(profile))
+            = delete_table_button(link: helpers.user_profile_path(profile), \
+              confirm: I18n.t('user_profile.destroy.confirm'))
+  - else
+    p.text-gray-500.dark:text-gray-400.text-center.py-12 = I18n.t('user_profile.index.empty')
