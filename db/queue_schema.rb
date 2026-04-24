@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_22_132649) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_24_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -173,6 +173,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_22_132649) do
     t.jsonb "urls", default: {}
   end
 
+  create_table "user_profiles", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "cv", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id"], name: "index_user_profiles_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
     t.string "avatar_url"
@@ -209,5 +218,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_22_132649) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "user_profiles", "users"
   add_foreign_key "vacancies", "sources"
 end

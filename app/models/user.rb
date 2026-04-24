@@ -2,6 +2,7 @@
 
 class User < ApplicationRecord
   has_many :sources, dependent: :destroy
+  has_many :user_profiles, dependent: :destroy
 
   has_one_attached :avatar do |attachable|
     attachable.variant :thumb, resize_to_fill: [ 64, 64 ], format: :webp

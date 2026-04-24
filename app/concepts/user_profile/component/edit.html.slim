@@ -1,0 +1,12 @@
+= header(**header_opts)
+
+.py-8
+  = helpers.simple_form_for @user_profile, url: helpers.user_profile_path(@user_profile), method: :patch do |f|
+    = render UserProfile::Component::Form.new(form: f)
+    .mt-6.flex.items-center.gap-4
+      = f.submit I18n.t('user_profile.edit.submit'), \
+        class: 'px-6 py-2 bg-indigo-600 text-white text-sm font-medium ' \
+               'rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer'
+      = helpers.link_to I18n.t('user_profile.edit.cancel'), helpers.user_profiles_path, \
+        class: 'px-6 py-2 text-sm font-medium text-gray-700 ' \
+               'dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors'

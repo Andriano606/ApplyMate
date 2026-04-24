@@ -152,6 +152,7 @@ en:
       no_vacancy: No vacancies fetched
   navbar:
     add_new_source: Додати джерело
+    my_profiles: Мої профілі
     sign_in: Sign in
     sign_out: Sign out
     stop_impersonating: Stop impersonating
@@ -187,6 +188,31 @@ en:
       default: "%a, %d %b %Y %H:%M:%S %z"
       long: "%B %d, %Y %H:%M"
       short: "%d %b %H:%M"
+  user_profile:
+    create:
+      success: Профіль створено
+    destroy:
+      confirm: Ви впевнені?
+      success: Профіль видалено
+    edit:
+      back: До профілів
+      cancel: Скасувати
+      submit: Зберегти
+      title: Редагувати профіль
+    form:
+      cv: Резюме
+      name: Назва
+    index:
+      empty: Профілі ще не додані
+      new: Новий профіль
+      title: Мої профілі
+    new:
+      back: До профілів
+      cancel: Скасувати
+      submit: Створити
+      title: Новий профіль
+    update:
+      success: Профіль оновлено
   vacancy:
     card:
       view_original: View original posting

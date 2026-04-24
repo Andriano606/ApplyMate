@@ -152,6 +152,7 @@ uk:
       no_vacancy: Немає жодної вакансії
   navbar:
     add_new_source: Додати джерело
+    my_profiles: Мої профілі
     sign_in: Увійти
     sign_out: Вийти
     stop_impersonating: Зупинити імперсонацію
@@ -187,6 +188,31 @@ uk:
       default: "%d.%m.%Y, %H:%M"
       long: "%d %B %Y, %H:%M"
       short: "%d %b, %H:%M"
+  user_profile:
+    create:
+      success: Профіль створено
+    destroy:
+      confirm: Ви впевнені?
+      success: Профіль видалено
+    edit:
+      back: До профілів
+      cancel: Скасувати
+      submit: Зберегти
+      title: Редагувати профіль
+    form:
+      cv: Резюме
+      name: Назва
+    index:
+      empty: Профілі ще не додані
+      new: Новий профіль
+      title: Мої профілі
+    new:
+      back: До профілів
+      cancel: Скасувати
+      submit: Створити
+      title: Новий профіль
+    update:
+      success: Профіль оновлено
   vacancy:
     card:
       view_original: Переглянути оригінал
