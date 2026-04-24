@@ -17,19 +17,37 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
     return if data.blank?
     data = data.compact
     data = data.uniq(&:external_id)
+    current_external_ids = data.map { |d| d[:external_id] }
 
     Vacancy.transaction do
-      # create/update
+      # Оновлюємо/створюємо
       Vacancy.upsert_all(
         data.map(&:to_h),
         unique_by: [ :source_id, :external_id ],
-        update_only: [ :title, :description, :url, :company_name, :company_icon_url ]
+        update_only: [ :title, :description, :url, :company_name, :company_icon_url ],
+        record_timestamps: true
       )
 
-      # delete old
-      current_external_ids = data.map { |d| d[:external_id] }
+      # Видаляємо старі
       source.vacancies.where.not(external_id: current_external_ids).delete_all
     end
+
+    # 2. Оновлюємо Elasticsearch ПІСЛЯ коміту транзакції
+    # Видаляємо з індексу все, що належить цьому джерелу, але чого вже немає в базі
+    Vacancy.__elasticsearch__.client.delete_by_query(
+      index: Vacancy.index_name,
+      body: {
+        query: {
+          bool: {
+            must: [ { term: { source_id: source.id } } ],
+            must_not: [ { terms: { external_id: current_external_ids } } ]
+          }
+        }
+      }
+    )
+
+    # Імпортуємо актуальні дані
+    source.vacancies.import(batch_size: 1000)
   end
 
   def parse_item(element)

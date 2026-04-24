@@ -79,6 +79,7 @@ class BaseScraper
 
   def sanitize_html(html)
     return '' if html.blank?
-    ActionController::Base.helpers.sanitize(html, tags: %w[p br strong ul li b]).strip
+
+    Html2Text.convert(html)
   end
 end
