@@ -32,22 +32,10 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
       source.vacancies.where.not(external_id: current_external_ids).delete_all
     end
 
-    # 2. Оновлюємо Elasticsearch ПІСЛЯ коміту транзакції
-    # Видаляємо з індексу все, що належить цьому джерелу, але чого вже немає в базі
-    Vacancy.__elasticsearch__.client.delete_by_query(
-      index: Vacancy.index_name,
-      body: {
-        query: {
-          bool: {
-            must: [ { term: { source_id: source.id } } ],
-            must_not: [ { terms: { external_id: current_external_ids } } ]
-          }
-        }
-      }
-    )
-
-    # Імпортуємо актуальні дані
-    source.vacancies.import(batch_size: 1000)
+    # TODO: reindex
+    Vacancy.__elasticsearch__.delete_index!
+    Vacancy.__elasticsearch__.create_index!
+    Vacancy.import
   end
 
   def parse_item(element)
