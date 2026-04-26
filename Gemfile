@@ -32,6 +32,8 @@ gem 'nokogiri'
 gem 'html2text'
 gem 'gemini-ai'
 gem 'hashid-rails'
+gem 'redcarpet' # Для Markdown -> HTML
+gem 'grover'    # Для HTML -> PDF
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"

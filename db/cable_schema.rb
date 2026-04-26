@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_26_204322) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_27_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -56,6 +56,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_26_204322) do
   create_table "applies", force: :cascade do |t|
     t.bigint "ai_integration_id", null: false
     t.datetime "created_at", null: false
+    t.text "cv_markdown"
     t.text "error"
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
@@ -66,6 +67,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_26_204322) do
     t.index ["user_id"], name: "index_applies_on_user_id"
     t.index ["user_profile_id"], name: "index_applies_on_user_profile_id"
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
+  end
+
+  create_table "solid_cable_messages", force: :cascade do |t|
+    t.binary "channel", null: false
+    t.bigint "channel_hash", null: false
+    t.datetime "created_at", null: false
+    t.binary "payload", null: false
+    t.index ["channel"], name: "index_solid_cable_messages_on_channel"
+    t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
+    t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
   end
 
   create_table "solid_queue_blocked_executions", force: :cascade do |t|
