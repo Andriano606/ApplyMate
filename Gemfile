@@ -30,6 +30,8 @@ gem 'faraday-multipart' # MIT-License
 gem 'faraday-follow_redirects'
 gem 'nokogiri'
 gem 'html2text'
+gem 'gemini-ai'
+gem 'hashid-rails'
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"

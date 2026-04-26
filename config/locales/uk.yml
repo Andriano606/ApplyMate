@@ -74,6 +74,39 @@ uk:
           name: Ім'я
           role: Роль
         title: Користувачі
+  ai_integration:
+    create:
+      success: AI інтеграцію успішно підключено
+    destroy:
+      confirm: Ви впевнені? Це видалить вашу AI інтеграцію.
+      success: AI інтеграцію видалено
+    edit:
+      submit: Зберегти
+      title: Редагувати AI інтеграцію
+    errors:
+      already_exists: вже існує для цього провайдера
+      invalid_api_key: невірний або відкликаний
+    form:
+      api_key: API ключ
+      api_key_hint: 'Отримайте ваш ключ на сторінці:'
+      api_key_link_text: Google AI Studio
+      api_key_required: Щоб отримати доступні моделі, спочатку введіть токен
+      model: Модель
+      model_notice: Наразі підтримується лише gemini-2.5-flash.
+      select_model: Оберіть модель...
+    index:
+      new: Додати інтеграцію
+      table:
+        actions: Дії
+        created_at: Підключено
+        model: Модель
+        provider: Провайдер
+      title: AI Інтеграції
+    new:
+      submit: Підключити
+      title: Підключити Gemini AI
+    update:
+      success: AI інтеграцію оновлено
   components:
     debug_button:
       label: Адмін
@@ -152,6 +185,7 @@ uk:
       no_vacancy: Немає жодної вакансії
   navbar:
     add_new_source: Додати джерело
+    ai_integrations: AI Інтеграції
     my_profiles: Мої профілі
     sign_in: Увійти
     sign_out: Вийти
@@ -159,10 +193,6 @@ uk:
   payments:
     pay_now: Оплатити
     redirecting: Перенаправлення на платіжний шлюз...
-  print_order:
-    show:
-      settings:
-        color_any: Будь-який колір
   session:
     auth_modal:
       message: Будь ласка, увійдіть, щоб продовжити

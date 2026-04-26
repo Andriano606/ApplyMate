@@ -1,0 +1,17 @@
+= turbo_form_modal( \
+    model: @ai_integration, \
+    endpoint: @ai_integration, \
+    header_text: I18n.t('ai_integration.edit.title'), \
+    submit_text: I18n.t('ai_integration.edit.submit')) do |modal|
+
+  - AiIntegration::PROVIDERS.each do |provider|
+    = radio_button(form: modal.form,
+            attribute: :provider,
+            value: provider.to_s,
+            label: PROVIDER_UI[provider][:label],
+            icon_name: PROVIDER_UI[provider][:icon_name],
+            input_html: { data: { action: 'change->turbo-form#update' } })
+
+  .mt-4
+    - if @ai_integration.provider == 'gemini'
+      = render AiIntegration::Component::GeminiForm.new(form: modal.form, ai_integration: @ai_integration)

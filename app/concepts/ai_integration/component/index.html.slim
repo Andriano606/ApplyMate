@@ -1,0 +1,8 @@
+= header(**header_opts) do |h|
+  - h.with_buttons do
+    = helpers.link_to I18n.t('ai_integration.index.new'), helpers.new_ai_integration_path, \
+      data: { turbo_stream: true }, \
+      class: 'inline-flex items-center px-4 py-2 text-sm font-medium ' \
+             'text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors'
+
+= render AiIntegration::Component::Table.new(ai_integrations: @ai_integrations)

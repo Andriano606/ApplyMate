@@ -1,4 +1,4 @@
-= render ApplyMate::Component::TurboFormModal.new( \
+= turbo_form_modal( \
     model: source, \
     endpoint: [ :admin, source ], \
     header_text: @source.new_record? ? I18n.t('admin.source.new.title') : I18n.t('admin.source.update.title'), \
