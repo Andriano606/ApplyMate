@@ -92,6 +92,7 @@ en:
       api_key_link_text: Google AI Studio
       api_key_required: To fetch available models please provide token first
       model: Model
+      model_notice: Only gemini-2.5-flash is supported at this time.
       select_model: Select model...
     index:
       new: Add Integration

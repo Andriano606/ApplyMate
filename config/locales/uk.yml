@@ -92,6 +92,7 @@ uk:
       api_key_link_text: Google AI Studio
       api_key_required: Щоб отримати доступні моделі, спочатку введіть токен
       model: Модель
+      model_notice: Наразі підтримується лише gemini-2.5-flash.
       select_model: Оберіть модель...
     index:
       new: Додати інтеграцію

@@ -15,6 +15,7 @@
           class: 'text-indigo-600 hover:text-indigo-700 underline'
 
   .space-y-1
+    = alert(type: :info, text: I18n.t('ai_integration.form.model_notice'))
     = @form.input :model,
         as: :select,
         collection: available_models.map { |m| [ m, m ] },
