@@ -1,0 +1,10 @@
+div(data-controller="accordion")
+  button.w-full.flex.items-center.justify-between.py-2.text-left(
+    type="button"
+    data-action="click->accordion#toggle"
+  )
+    span.text-xs.font-medium.text-gray-400.dark:text-gray-500.uppercase.tracking-wide = @title
+    span.text-gray-400.transition-transform.duration-200(data-accordion-target="icon" class="#{'rotate-180' if @open}")
+      = icon(:chevron_down, size: 4)
+  div(data-accordion-target="content" class="#{'hidden' unless @open}")
+    = content

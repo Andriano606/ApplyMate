@@ -2,4 +2,4 @@
 
 = render Vacancy::Component::SearchBar.new(query: @query, exclude: @exclude, count: @vacancies.total_entries)
 
-= render Vacancy::Component::Index.new(vacancies: @vacancies)
+= render Vacancy::Component::Index.new(vacancies: @vacancies, applies_by_vacancy: @applies_by_vacancy)

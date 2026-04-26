@@ -6,6 +6,8 @@ class Vacancy < ApplicationRecord
 
   belongs_to :source
 
+  has_many :applies, dependent: :destroy
+
   index_name "vacancies_#{Rails.env}"
 
   settings index: { number_of_shards: 1, number_of_replicas: 0 } do

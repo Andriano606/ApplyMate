@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 class Vacancy::Component::Index < ApplyMate::Component::Base
-  def initialize(vacancies:)
+  def initialize(vacancies:, applies_by_vacancy: {})
     @vacancies = vacancies
+    @applies_by_vacancy = applies_by_vacancy
   end
 
   private

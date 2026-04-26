@@ -107,6 +107,53 @@ en:
       title: Підключити Gemini AI
     update:
       success: AI integration updated
+  apply:
+    create:
+      success: Відгук створено
+    destroy:
+      confirm: Ви впевнені? Це видалить відгук.
+      success: Відгук видалено
+    index:
+      table:
+        actions: Дії
+        ai_integration: AI інтеграція
+        company: Компанія
+        created_at: Дата
+        profile: Профіль
+        status: Статус
+        vacancy: Вакансія
+      title: Мої відгуки
+    new:
+      button: Відгукнутись
+      form:
+        ai_integration: AI інтеграція
+        select_integration: Оберіть інтеграцію...
+        select_profile: Оберіть профіль...
+        user_profile: Профіль
+      submit: Відгукнутись
+      title: Новий відгук
+    show:
+      back: До відгуків
+      download_cv: Завантажити резюме
+      fields:
+        ai_integration: AI інтеграція
+        created_at: Дата
+        cv: Резюме
+        error: Помилка
+        profile: Профіль
+        status: Статус
+        vacancy: Вакансія
+      profile_cv: Резюме профілю
+      title: Відгук
+      vacancy_description: Опис вакансії
+    status:
+      completed: Завершено
+      cv_generated: Резюме готове
+      failed_cv_generation: Помилка генерації резюме
+      failed_cv_sending: Помилка надсилання
+      generating_cv: Генерація резюме
+      pending: Очікує
+      sending_cv: Надсилання
   components:
     debug_button:
       label: Admin
@@ -186,6 +233,7 @@ en:
   navbar:
     add_new_source: Додати джерело
     ai_integrations: AI Integrations
+    my_applies: Мої відгуки
     my_profiles: Мої профілі
     sign_in: Sign in
     sign_out: Sign out

@@ -1,0 +1,22 @@
+= turbo_form_modal( \
+    model: @apply, \
+    endpoint: @apply, \
+    header_text: I18n.t('apply.new.title'), \
+    submit_text: I18n.t('apply.new.submit')) do |modal|
+
+  = modal.form.hidden_field :vacancy_id
+
+  .space-y-4
+    = modal.form.input :user_profile_id, \
+        collection: current_user.user_profiles, \
+        label_method: :name, \
+        value_method: :id, \
+        include_blank: I18n.t('apply.new.form.select_profile'), \
+        label: I18n.t('apply.new.form.user_profile')
+
+    = modal.form.input :ai_integration_id, \
+        collection: current_user.ai_integrations, \
+        label_method: proc { |ai| "#{ai.provider.capitalize} (#{ai.model})" }, \
+        value_method: :id, \
+        include_blank: I18n.t('apply.new.form.select_integration'), \
+        label: I18n.t('apply.new.form.ai_integration')

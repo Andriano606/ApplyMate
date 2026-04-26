@@ -21,8 +21,10 @@ import SelectOptionController from './select_option_controller';
 import ChatPanelController from './chat_panel_controller';
 import ChatInputController from './chat_input_controller';
 import NumberStepperController from './number_stepper_controller';
+import AccordionController from './accordion_controller';
 
 application.register('number-stepper', NumberStepperController);
+application.register('accordion', AccordionController);
 application.register('dropdown', DropdownController);
 application.register('image-slider', ImageSliderController);
 application.register('file-drop', FileDropController);
