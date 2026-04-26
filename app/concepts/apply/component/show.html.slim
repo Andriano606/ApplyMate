@@ -2,6 +2,7 @@
 
 div(class=card_class)
   / Status
+  = Apply::TurboHandler::StatusUpdate.stream_from(@apply, helpers)
   .px-6.py-4.flex.items-center.justify-between
     span.text-sm.font-medium.text-gray-500.dark:text-gray-400 = I18n.t('apply.show.fields.status')
     = render Apply::Component::StatusBadge.new(apply: @apply)

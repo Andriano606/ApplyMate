@@ -25,7 +25,10 @@ class Apply::Component::Table < ApplyMate::Component::Base
     end
 
     table.add_column(header: I18n.t('apply.index.table.status')) do |apply|
-      render Apply::Component::StatusBadge.new(apply:)
+      helpers.safe_join([
+        Apply::TurboHandler::StatusUpdate.stream_from(apply, helpers),
+        render(Apply::Component::StatusBadge.new(apply:))
+      ])
     end
 
     table.add_column(header: I18n.t('apply.index.table.created_at')) do |apply|

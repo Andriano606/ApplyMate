@@ -23,6 +23,7 @@
           = icon(:send, size: 3)
           = I18n.t('apply.new.button')
       - else
+        = Apply::TurboHandler::StatusUpdate.stream_from(@apply, helpers)
         = helpers.link_to helpers.apply_path(@apply) do
           = render Apply::Component::StatusBadge.new(apply: @apply)
   .flex.flex-col.gap-3.px-5.pt-3.pb-4.flex-1

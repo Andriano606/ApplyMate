@@ -2,6 +2,9 @@
 
 class AiIntegration < ApplicationRecord
   PROVIDERS = [ :gemini ].freeze
+  PROVIDER_CLIENTS = {
+    'gemini' => Ai::GeminiClient
+  }.freeze
 
   attr_accessor :fetch_models
 

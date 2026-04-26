@@ -13,6 +13,8 @@ class Apply::Operation::Create < ApplyMate::Operation::Base
         default_ai_integration_id: model.ai_integration_id
       )
     end
+
+    Apply::Job::GenerateCv.perform_later(model.id)
     notice(I18n.t('apply.create.success'))
   end
 end
