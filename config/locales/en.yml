@@ -74,6 +74,38 @@ en:
           name: Name
           role: Role
         title: Users
+  ai_integration:
+    create:
+      success: AI інтеграцію успішно підключено
+    destroy:
+      confirm: Ви впевнені? Це видалить вашу AI інтеграцію.
+      success: AI інтеграцію видалено
+    edit:
+      submit: Save
+      title: Edit AI Integration
+    errors:
+      already_exists: вже існує для цього провайдера
+      invalid_api_key: is invalid or has been revoked
+    form:
+      api_key: API Key
+      api_key_hint: 'Get your key at:'
+      api_key_link_text: Google AI Studio
+      api_key_required: To fetch available models please provide token first
+      model: Model
+      select_model: Select model...
+    index:
+      new: Add Integration
+      table:
+        actions: Actions
+        created_at: Connected at
+        model: Model
+        provider: Provider
+      title: AI Integrations
+    new:
+      submit: Підключити
+      title: Підключити Gemini AI
+    update:
+      success: AI integration updated
   components:
     debug_button:
       label: Admin
@@ -152,6 +184,7 @@ en:
       no_vacancy: No vacancies fetched
   navbar:
     add_new_source: Додати джерело
+    ai_integrations: AI Integrations
     my_profiles: Мої профілі
     sign_in: Sign in
     sign_out: Sign out
@@ -159,10 +192,6 @@ en:
   payments:
     pay_now: Pay Now
     redirecting: Redirecting to payment gateway...
-  print_order:
-    show:
-      settings:
-        color_any: Any color
   session:
     auth_modal:
       message: Please sign in to continue

@@ -35,16 +35,16 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::Tag.new(label:, color:, variant:))
   end
 
-  def color_dot(hex: nil, size: :md, ring: 'ring-1 ring-gray-300', extra_class: nil)
-    render(ApplyMate::Component::ColorDot.new(hex:, size:, ring:, extra_class:))
-  end
-
   def alert(text:, type: :error)
     render(ApplyMate::Component::Alert.new(text:, type:))
   end
 
   def select_option(form:, radio_attribute:, radio_value:, radio_name:, selected:, &block)
     render(ApplyMate::Component::SelectOption.new(form:, radio_attribute:, radio_value:, radio_name:, selected:), &block)
+  end
+
+  def radio_button(form:, attribute:, value:, label:, icon_name:, input_html: {})
+    render(ApplyMate::Component::RadioButton.new(form:, attribute:, value:, label:, icon_name:, input_html:))
   end
 
   def data_test_id(value)

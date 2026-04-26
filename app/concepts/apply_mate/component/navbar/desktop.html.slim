@@ -45,6 +45,7 @@
                          'hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors'
               - else
                 = link_to item.path, \
+                  data: ({ turbo_stream: true } if item.turbo_stream?), \
                   class: 'flex items-center gap-2 px-4 py-2 text-sm ' \
                          'text-gray-700 dark:text-gray-300 ' \
                          'hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors' do

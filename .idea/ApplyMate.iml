@@ -90,16 +90,23 @@
     <orderEntry type="library" scope="PROVIDED" name="erb (v6.0.4, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="erubi (v1.13.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="et-orbi (v1.4.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="ethon (v0.18.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="event_stream_parser (v1.0.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="factory_bot (v6.5.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="TEST" name="factory_bot_rails (v6.5.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday (v2.14.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-follow_redirects (v0.5.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-multipart (v1.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-net_http (v3.4.2, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="faraday-typhoeus (v1.1.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ferrum (v0.17.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ffi (v1.17.4, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="fugit (v1.12.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="gemini-ai (v4.3.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="globalid (v1.3.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="google-cloud-env (v2.3.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="google-logging-utils (v0.2.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="googleauth (v1.16.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="hashid-rails (v1.4.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="hashids (v1.0.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="hashie (v5.1.0, asdf: 3.4.8) [gem]" level="application" />
@@ -152,6 +159,7 @@
     <orderEntry type="library" scope="PROVIDED" name="omniauth-google-oauth2 (v1.2.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="omniauth-oauth2 (v1.9.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="omniauth-rails_csrf_protection (v2.0.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="os (v1.1.4, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ostruct (v0.6.3, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="parallel (v2.0.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="parser (v3.3.11.1, asdf: 3.4.8) [gem]" level="application" />
@@ -199,6 +207,7 @@
     <orderEntry type="library" scope="PROVIDED" name="rubyzip (v3.2.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="securerandom (v0.4.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="TEST" name="selenium-webdriver (v4.41.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="signet (v0.21.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="simple_form (v5.4.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="slim (v5.2.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="slim-rails (v4.0.0, asdf: 3.4.8) [gem]" level="application" />
@@ -219,6 +228,7 @@
     <orderEntry type="library" scope="PROVIDED" name="timeout (v0.6.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="tsort (v0.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="turbo-rails (v2.0.23, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="typhoeus (v1.6.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="tzinfo (v2.0.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="unicode-display_width (v3.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="unicode-emoji (v4.2.0, asdf: 3.4.8) [gem]" level="application" />
