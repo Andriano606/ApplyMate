@@ -29,7 +29,7 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
       )
 
       # Видаляємо старі
-      source.vacancies.where.not(external_id: current_external_ids).delete_all
+      source.vacancies.where.not(external_id: current_external_ids).destroy_all
     end
 
     # TODO: reindex

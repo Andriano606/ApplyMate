@@ -3,6 +3,10 @@
 class User < ApplicationRecord
   has_many :user_profiles, dependent: :destroy
   has_many :ai_integrations, dependent: :destroy
+  has_many :applies, dependent: :destroy
+
+  belongs_to :default_profile, class_name: 'UserProfile', optional: true
+  belongs_to :default_ai_integration, class_name: 'AiIntegration', optional: true
 
   has_one_attached :avatar do |attachable|
     attachable.variant :thumb, resize_to_fill: [ 64, 64 ], format: :webp

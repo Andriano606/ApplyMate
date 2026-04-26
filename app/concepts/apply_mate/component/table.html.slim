@@ -12,7 +12,11 @@
             tr.hover:bg-gray-50.dark:hover:bg-gray-700 data-model-id=row_id(row)
               - columns.each do |column|
                 td class=cell_class(column)
-                  = cell_content(column, row)
+                  - if column.type == :actions
+                    .flex.items-center.justify-end.gap-1
+                      = cell_content(column, row)
+                  - else
+                    = cell_content(column, row)
 
     - if paginate?
       .px-4.py-3.border-t.border-gray-200.dark:border-gray-600.bg-gray-50.dark:bg-gray-700

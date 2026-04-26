@@ -2,7 +2,7 @@
   - if @vacancies.any?
     .grid.grid-cols-1.gap-6.sm:grid-cols-2.lg:grid-cols-3
       - @vacancies.each do |vacancy|
-        = render Vacancy::Component::Card.new(vacancy:)
+        = render Vacancy::Component::Card.new(vacancy:, apply: @applies_by_vacancy[vacancy.id])
   - else
     p.text-gray-500.dark:text-gray-400.text-center.py-12 = I18n.t('home.index.no_vacancy')
 

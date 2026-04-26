@@ -39,6 +39,10 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::Alert.new(text:, type:))
   end
 
+  def accordion(title:, open: false, &block)
+    render(ApplyMate::Component::Accordion.new(title:, open:), &block)
+  end
+
   def select_option(form:, radio_attribute:, radio_value:, radio_name:, selected:, &block)
     render(ApplyMate::Component::SelectOption.new(form:, radio_attribute:, radio_value:, radio_name:, selected:), &block)
   end
