@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class BaseScraper
+class DjinniScraper
   def initialize(source, client)
     @source = source
     @client = client
