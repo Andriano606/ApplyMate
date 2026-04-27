@@ -59,4 +59,9 @@ Rails.application.configure do
 
   # config.active_record.strict_loading_by_default = true
   config.active_job.queue_adapter = :async
+
+  # Encryption configuration for tests
+  config.active_record.encryption.primary_key = 'test_primary_key_32_chars_long_!'
+  config.active_record.encryption.deterministic_key = 'test_deterministic_key_32_chars_'
+  config.active_record.encryption.key_derivation_salt = 'test_key_derivation_salt'
 end

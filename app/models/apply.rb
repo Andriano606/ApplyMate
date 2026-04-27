@@ -5,6 +5,9 @@ class Apply < ApplicationRecord
   belongs_to :vacancy
   belongs_to :user_profile
   belongs_to :ai_integration
+  belongs_to :source_profile
+
+  validate :source_must_match
 
   has_one_attached :cv
 
@@ -17,7 +20,9 @@ class Apply < ApplicationRecord
     failed_cv_generation: 5,
     failed_cv_sending: 6,
     fetching_details: 7,
-    failed_fetching_details: 8
+    failed_fetching_details: 8,
+    checking_applyble: 9,
+    failed_checking_applyble: 10
   }
 
   def in_progress?
@@ -26,5 +31,15 @@ class Apply < ApplicationRecord
 
   def failed?
     failed_fetching_details? || failed_cv_generation? || failed_cv_sending?
+  end
+
+  private
+
+  def source_must_match
+    return if vacancy.blank? || source_profile.blank?
+
+    return if source_profile.source_id == vacancy.source_id
+
+    errors.add(:source_profile, 'must belong to the same source as the vacancy')
   end
 end

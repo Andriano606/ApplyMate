@@ -8,4 +8,8 @@ class BaseScraper
   def fetch_details(url)
     raise NotImplementedError
   end
+
+  def fetch_applyble(url, session_id:)
+    raise NotImplementedError
+  end
 end

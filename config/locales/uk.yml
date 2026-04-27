@@ -133,6 +133,8 @@ uk:
         ai_integration: AI інтеграція
         select_integration: Оберіть інтеграцію...
         select_profile: Оберіть профіль...
+        select_source_profile: Оберіть профіль джерела...
+        source_profile: Профіль джерела
         user_profile: Профіль
       submit: Відгукнутись
       title: Новий відгук
@@ -153,8 +155,10 @@ uk:
       vacancy_description: Опис вакансії
       vacancy_details: Деталі вакансії
     status:
+      checking_applyble: Перевірка доступності
       completed: Завершено
       cv_generated: Резюме готове
+      failed_checking_applyble: Помилка перевірки доступності
       failed_cv_generation: Помилка генерації резюме
       failed_cv_sending: Помилка надсилання
       failed_fetching_details: Помилка отримання деталей
@@ -245,6 +249,7 @@ uk:
     my_profiles: Мої профілі
     sign_in: Увійти
     sign_out: Вийти
+    source_profiles: Мої джерела
     stop_impersonating: Зупинити імперсонацію
   payments:
     pay_now: Оплатити
@@ -269,6 +274,33 @@ uk:
       mark: "*"
       text: обов'язково
     'yes': Так
+  source_profile:
+    create:
+      success: Профіль джерела успішно створено
+    destroy:
+      confirm: Ви впевнені? Це видалить профіль джерела.
+      success: Профіль джерела видалено
+    edit:
+      submit: Зберегти
+      title: Редагувати профіль джерела
+    form:
+      name: Назва
+      session_id: Session ID
+      session_id_hint: Увійдіть на платформу в браузері. Відкрийте DevTools (F12)
+        → Application → Cookies, знайдіть cookie сесії та скопіюйте його значення.
+    index:
+      table:
+        actions: Дії
+        auth_method: Метод
+        name: Назва
+        source: Джерело
+      title: Мої джерела
+    new:
+      submit: Підключити
+      title: Підключити джерело
+    new_link: Підключити джерело
+    update:
+      success: Профіль джерела оновлено
   time:
     formats:
       default: "%d.%m.%Y, %H:%M"

@@ -24,4 +24,12 @@ ActiveSupport.on_load :turbo_streams_tag_builder do
   def remove_by_id(target)
     action :remove_by_id, target
   end
+
+  def select_option(target, component:)
+    action :select_option, target, component
+  end
+
+  def close_active_modal
+    turbo_stream_action_tag :close_active_modal
+  end
 end

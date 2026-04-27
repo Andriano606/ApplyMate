@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_27_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_27_000008) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -56,15 +56,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_000003) do
 
   create_table "applies", force: :cascade do |t|
     t.bigint "ai_integration_id", null: false
+    t.boolean "applyble"
     t.datetime "created_at", null: false
     t.text "cv_markdown"
     t.text "error"
+    t.bigint "source_profile_id", null: false
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "user_profile_id", null: false
     t.bigint "vacancy_id", null: false
     t.index ["ai_integration_id"], name: "index_applies_on_ai_integration_id"
+    t.index ["source_profile_id"], name: "index_applies_on_source_profile_id"
     t.index ["user_id"], name: "index_applies_on_user_id"
     t.index ["user_profile_id"], name: "index_applies_on_user_profile_id"
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
@@ -201,6 +204,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_000003) do
     t.index ["key"], name: "index_solid_queue_semaphores_on_key", unique: true
   end
 
+  create_table "source_profiles", force: :cascade do |t|
+    t.integer "auth_method", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.string "session_id"
+    t.bigint "source_id", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["source_id"], name: "index_source_profiles_on_source_id"
+    t.index ["user_id"], name: "index_source_profiles_on_user_id"
+  end
+
   create_table "sources", force: :cascade do |t|
     t.string "base_url", null: false
     t.string "client"
@@ -226,12 +241,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_000003) do
     t.datetime "created_at", null: false
     t.bigint "default_ai_integration_id"
     t.bigint "default_profile_id"
+    t.bigint "default_source_profile_id"
     t.string "email", null: false
     t.string "middle_name"
     t.string "name", null: false
     t.string "provider", null: false
     t.string "uid", null: false
     t.datetime "updated_at", null: false
+    t.index ["default_source_profile_id"], name: "index_users_on_default_source_profile_id"
     t.index ["email"], name: "index_users_on_email"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
   end
@@ -255,6 +272,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_000003) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_integrations", "users"
   add_foreign_key "applies", "ai_integrations"
+  add_foreign_key "applies", "source_profiles"
   add_foreign_key "applies", "user_profiles"
   add_foreign_key "applies", "users"
   add_foreign_key "applies", "vacancies"
@@ -264,8 +282,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_000003) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "source_profiles", "sources"
+  add_foreign_key "source_profiles", "users"
   add_foreign_key "user_profiles", "users"
   add_foreign_key "users", "ai_integrations", column: "default_ai_integration_id"
+  add_foreign_key "users", "source_profiles", column: "default_source_profile_id"
   add_foreign_key "users", "user_profiles", column: "default_profile_id"
   add_foreign_key "vacancies", "sources"
 end

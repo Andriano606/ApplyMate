@@ -2,6 +2,7 @@
 
 class ApplyMate::Endpoint::TurboStream < ApplyMate::Endpoint::Base
   include ApplyMate::Base::ConceptNaming
+  include TurboCallback
 
   def initialize(controller:, component:)
     @controller = controller
@@ -13,6 +14,10 @@ class ApplyMate::Endpoint::TurboStream < ApplyMate::Endpoint::Base
   end
 
   def render_success(result, component)
+    # When requesting a turbo callback, we don't execute the default actions. The turbo callback should define
+    # all the actions if you need to do multiple actions.
+    return turbo_callback(model: result.model) if turbo_callback_request?
+
     turbo_actions = []
     model_name = find_model_name(component) if component
     frame_id = @controller.send(:turbo_frame_request_id) || 'main-content'

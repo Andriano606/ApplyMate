@@ -133,6 +133,8 @@ en:
         ai_integration: AI інтеграція
         select_integration: Оберіть інтеграцію...
         select_profile: Оберіть профіль...
+        select_source_profile: Select source profile...
+        source_profile: Source profile
         user_profile: Профіль
       submit: Відгукнутись
       title: Новий відгук
@@ -153,8 +155,10 @@ en:
       vacancy_description: Опис вакансії
       vacancy_details: Деталі вакансії
     status:
+      checking_applyble: Перевірка доступності
       completed: Завершено
       cv_generated: Резюме готове
+      failed_checking_applyble: Помилка перевірки доступності
       failed_cv_generation: Помилка генерації резюме
       failed_cv_sending: Помилка надсилання
       failed_fetching_details: Помилка отримання деталей
@@ -245,6 +249,7 @@ en:
     my_profiles: Мої профілі
     sign_in: Sign in
     sign_out: Sign out
+    source_profiles: My Sources
     stop_impersonating: Stop impersonating
   payments:
     pay_now: Pay Now
@@ -269,6 +274,33 @@ en:
       mark: "*"
       text: required
     'yes': 'Yes'
+  source_profile:
+    create:
+      success: Source profile successfully created
+    destroy:
+      confirm: Are you sure? This will delete the source profile.
+      success: Source profile deleted
+    edit:
+      submit: Save
+      title: Edit source profile
+    form:
+      name: Name
+      session_id: Session ID
+      session_id_hint: Log in to the platform in your browser. Open DevTools (F12)
+        → Application → Cookies, find the session cookie and copy its value.
+    index:
+      table:
+        actions: Actions
+        auth_method: Method
+        name: Name
+        source: Source
+      title: My Sources
+    new:
+      submit: Connect
+      title: Connect source
+    new_link: Connect source
+    update:
+      success: Source profile updated
   time:
     formats:
       default: "%a, %d %b %Y %H:%M:%S %z"

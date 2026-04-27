@@ -63,6 +63,27 @@ class DjinniScraper < BaseScraper
     sections.reject(&:blank?).join("\n\n")
   end
 
+  def fetch_applyble(url, session_id:)
+    connection = Faraday.new do |f|
+      f.use Faraday::FollowRedirects::Middleware
+      f.options.timeout = 15
+      f.options.open_timeout = 15
+      f.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      f.headers['Cookie'] = "sessionid=#{session_id}"
+      f.adapter Faraday.default_adapter
+    end
+
+    response = connection.get(url)
+    doc = Nokogiri::HTML(response.body)
+
+    button = doc.at_css('button.js-inbox-toggle-reply-form')
+    unless button
+      button = doc.xpath("//button[contains(translate(text(), 'ВІДГУКНУТИСЯ', 'відгукнутися'), 'відгукнутися')]").first
+    end
+
+    !!(button && !button['disabled'])
+  end
+
   private
 
   def parse_section(doc, header_text, name_selector)
