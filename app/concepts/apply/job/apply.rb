@@ -5,6 +5,7 @@ class Apply::Job::Apply < ApplicationJob
 
   def perform(apply_id)
     apply = Apply.find(apply_id)
+    Apply::Operation::CheckApplyable.call(apply:)
     Apply::Operation::FetchDetails.call(apply:)
     Apply::Operation::GeneratePdfCv.call(apply_id:)
   end

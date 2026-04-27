@@ -7,6 +7,21 @@
   = modal.form.hidden_field :vacancy_id
 
   .space-y-4
+    = modal.form.input :source_profile_id, \
+        as: :select, \
+        wrapper: :select, \
+        collection: current_user.source_profiles.includes(:source).where(source_id: @apply.vacancy&.source_id), \
+        label_method: proc { |sp| "#{sp.source.name} (#{sp.name})" }, \
+        value_method: :id, \
+        include_blank: I18n.t('apply.new.form.select_source_profile'), \
+        label: I18n.t('apply.new.form.source_profile'), \
+        with_new_link: { \
+          link: helpers.link_to(I18n.t('source_profile.new_link'),
+                  helpers.new_source_profile_path(source_profile: { source_id: @apply.vacancy&.source_id }),
+                  class: 'text-blue-600 underline hover:text-blue-700', data: { turbo_stream: true }), \
+          option_component: 'SourceProfile::Component::SelectOption' \
+        }
+
     = modal.form.input :user_profile_id, \
         collection: current_user.user_profiles, \
         label_method: :name, \

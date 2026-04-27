@@ -70,3 +70,33 @@ SimpleForm.setup do |config|
     collection_select: :select
   }
 end
+
+module SimpleForm::WithNewLink
+  def initialize(*args)
+    super
+    new_options = options.delete(:with_new_link)
+    return if new_options.blank?
+
+    new_link = new_options.delete(:link)
+    return if new_link.nil?
+
+    doc = Nokogiri::HTML::DocumentFragment.parse(new_link)
+    uri = URI.parse(doc.at('a')['href'])
+    params = Rack::Utils.parse_query(uri.query)
+    target = input_html_options[:id] || @builder.field_id(attribute_name)
+
+    # While the turbo_callback string is safe to expose to the users we sign the string to avoid leaking internal
+    # components/logic to the users.
+    # The turbo_callback string is decoded in app/controllers/concerns/turbo_callback.rb when the callback is executed.
+    verifier = ActiveSupport::MessageVerifier.new(Rails.application.credentials.secret_key_base)
+    callback_options = verifier.generate(new_options)
+    params['turbo_callback'] = [ :select_option, target, callback_options ].compact.join(':')
+
+    uri.query = params.to_query
+    doc.at('a')['href'] = uri.to_s
+
+    existing_hint = options[:hint]
+    options[:hint] = [ existing_hint, doc.to_html ].compact.join(' ').html_safe # rubocop:disable Rails/OutputSafety
+  end
+end
+SimpleForm::Inputs::CollectionSelectInput.prepend SimpleForm::WithNewLink

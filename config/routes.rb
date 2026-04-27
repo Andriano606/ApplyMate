@@ -29,6 +29,7 @@ Rails.application.routes.draw do
   resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :ai_integrations, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :applies, only: [ :index, :show, :new, :create, :destroy ]
+  resources :source_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
 
   # Defines the root path route ("/")
   root 'home#index'

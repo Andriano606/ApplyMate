@@ -1,0 +1,7 @@
+.space-y-4
+  = alert(text: I18n.t('source_profile.form.session_id_hint'), type: :info)
+
+  = @form.input :session_id,
+      label: I18n.t('source_profile.form.session_id'),
+      required: true,
+      input_html: { autocomplete: 'off' }

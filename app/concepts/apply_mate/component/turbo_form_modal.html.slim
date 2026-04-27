@@ -4,6 +4,9 @@
       url: helpers.polymorphic_path(endpoint), \
       html: { id: form_id, multipart: multipart, data: { 'controller': 'turbo-form' } } do |f|
 
+      - if params[:turbo_callback]
+        = hidden_field_tag :turbo_callback, params[:turbo_callback], 'data-turbo-permanent': true
+
       - if f.object.errors[:base].any?
         = alert(text: f.object.errors[:base].first, type: :error)
 

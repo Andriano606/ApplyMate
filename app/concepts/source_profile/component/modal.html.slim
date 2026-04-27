@@ -1,0 +1,28 @@
+- action = @source_profile.new_record? ? :new : :edit
+= turbo_form_modal( \
+    model: @source_profile, \
+    endpoint: @source_profile, \
+    header_text: I18n.t("source_profile.#{action}.title"), \
+    submit_text: I18n.t("source_profile.#{action}.submit")) do |modal|
+
+  = modal.form.input :name, label: I18n.t('source_profile.form.name')
+
+  .flex.gap-3.w-full
+    - Source.all.each do |source|
+      = radio_button(form: modal.form,
+              attribute: :source_id,
+              value: source.id,
+              label: source.name,
+              icon_name: :external_link)
+
+  .flex.gap-3.w-full.mt-4
+    - SourceProfile.auth_methods.keys.each do |auth_method|
+      = radio_button(form: modal.form,
+              attribute: :auth_method,
+              value: auth_method,
+              label: AUTH_METHOD_UI[auth_method.to_sym][:label],
+              icon_name: AUTH_METHOD_UI[auth_method.to_sym][:icon_name],
+              input_html: { data: { action: 'change->turbo-form#update' } })
+  .mt-4
+    - if @source_profile.auth_method == 'session_id'
+      = render SourceProfile::Component::SessionIdForm.new(form: modal.form, source_profile: @source_profile)
