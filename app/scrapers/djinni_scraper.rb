@@ -48,7 +48,45 @@ class DjinniScraper < BaseScraper
     all_jobs
   end
 
+  def fetch_details(url)
+    body = @client.fetch_body(url)
+    doc = Nokogiri::HTML(body)
+
+    sections = []
+
+    skills = parse_section(doc, 'Необхідний досвід з навичками', 'span.fw-bold')
+    sections << format_section('Необхідний досвід з навичками', skills) if skills.any?
+
+    languages = parse_section(doc, 'Вимоги до володіння мовами', 'span.fw-semibold')
+    sections << format_section('Вимоги до володіння мовами', languages) if languages.any?
+
+    sections.reject(&:blank?).join("\n\n")
+  end
+
   private
+
+  def parse_section(doc, header_text, name_selector)
+    header = doc.at_xpath("//h2[contains(., '#{header_text}')] | //h3[contains(., '#{header_text}')]")
+    return {} unless header
+
+    data = {}
+    current = header.next_element
+    while current && !current.name.match?(/^h[1-6]$/)
+      table_rows = current.name == 'table' ? current.css('tr') : current.css('table tr')
+      table_rows.each do |row|
+        name = row.at_css(name_selector)&.text&.strip
+        value = row.css('td').last&.text&.strip
+        data[name] = value if name.present? && value.present?
+      end
+      current = current.next_element
+    end
+    data
+  end
+
+  def format_section(title, data)
+    lines = [ "#{title}:" ] + data.map { |name, value| "#{name} — #{value}" }
+    lines.join("\n")
+  end
 
   def extract_job_data(element)
     title = element.at_css('h2.job-item__position')&.text&.strip

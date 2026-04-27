@@ -14,7 +14,7 @@ class Apply::Operation::Create < ApplyMate::Operation::Base
       )
     end
 
-    Apply::Job::GenerateCv.perform_later(model.id)
+    Apply::Job::Apply.perform_later(model.id)
     notice(I18n.t('apply.create.success'))
   end
 end

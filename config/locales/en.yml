@@ -148,13 +148,17 @@ en:
         status: Статус
         vacancy: Вакансія
       profile_cv: Резюме профілю
+      prompt: Prompt
       title: Відгук
       vacancy_description: Опис вакансії
+      vacancy_details: Деталі вакансії
     status:
       completed: Завершено
       cv_generated: Резюме готове
       failed_cv_generation: Помилка генерації резюме
       failed_cv_sending: Помилка надсилання
+      failed_fetching_details: Помилка отримання деталей
+      fetching_details: Отримання деталей
       generating_cv: Генерація резюме
       pending: Очікує
       sending_cv: Надсилання
