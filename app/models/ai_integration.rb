@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 class AiIntegration < ApplicationRecord
-  PROVIDERS = [ :gemini ].freeze
+  PROVIDERS = [ :gemini, :ollama ].freeze
   PROVIDER_CLIENTS = {
-    'gemini' => Ai::GeminiClient
+    'gemini' => Ai::GeminiClient,
+    'ollama' => Ai::OllamaClient
   }.freeze
 
   attr_accessor :fetch_models
@@ -13,7 +14,12 @@ class AiIntegration < ApplicationRecord
   encrypts :api_key
 
   validates :provider, presence: true, inclusion: { in: PROVIDERS.map(&:to_s) }
-  validates :api_key, presence: true
+  validates :api_key, presence: true, unless: :ollama?
+  validates :host, presence: true, if: :ollama?
   validates :model, presence: true
   validates :user_id, uniqueness: { scope: :provider, message: I18n.t('ai_integration.errors.already_exists') }
+
+  def ollama?
+    provider == 'ollama'
+  end
 end

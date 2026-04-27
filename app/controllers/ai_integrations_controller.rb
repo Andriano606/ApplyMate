@@ -6,19 +6,19 @@ class AiIntegrationsController < ApplicationController
   end
 
   def new
-    endpoint AiIntegration::Operation::New, AiIntegration::Component::NewModal
+    endpoint AiIntegration::Operation::New, AiIntegration::Component::Modal
   end
 
   def edit
-    endpoint AiIntegration::Operation::Edit, AiIntegration::Component::EditModal
+    endpoint AiIntegration::Operation::Edit, AiIntegration::Component::Modal
   end
 
   def update
-    endpoint AiIntegration::Operation::Update, AiIntegration::Component::EditModal
+    endpoint AiIntegration::Operation::Update, AiIntegration::Component::Modal
   end
 
   def create
-    endpoint AiIntegration::Operation::Create, AiIntegration::Component::NewModal
+    endpoint AiIntegration::Operation::Create, AiIntegration::Component::Modal
   end
 
   def destroy

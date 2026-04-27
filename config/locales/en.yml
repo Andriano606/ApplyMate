@@ -85,12 +85,16 @@ en:
       title: Edit AI Integration
     errors:
       already_exists: вже існує для цього провайдера
+      connection_failed: could not connect to the server
       invalid_api_key: is invalid or has been revoked
     form:
       api_key: API Key
       api_key_hint: 'Get your key at:'
       api_key_link_text: Google AI Studio
       api_key_required: To fetch available models please provide token first
+      host: Host
+      host_hint: Address of your Ollama server, e.g. http://localhost:11434
+      host_required: Enter host address to fetch available models
       model: Model
       model_notice: Only gemini-2.5-flash is supported at this time.
       select_model: Select model...
@@ -103,8 +107,8 @@ en:
         provider: Provider
       title: AI Integrations
     new:
-      submit: Підключити
-      title: Підключити Gemini AI
+      submit: Connect
+      title: Connect AI Integration
     update:
       success: AI integration updated
   apply:

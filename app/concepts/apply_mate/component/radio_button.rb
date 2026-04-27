@@ -23,7 +23,7 @@ class ApplyMate::Component::RadioButton < ApplyMate::Component::Base
   end
 
   def card_class
-    base = 'flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer ' \
+    base = 'flex flex-1 flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer ' \
            'transition-all duration-150 ease-in-out'
     state = if selected?
               'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-400'

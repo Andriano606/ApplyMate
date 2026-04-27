@@ -31,6 +31,7 @@ gem 'faraday-follow_redirects'
 gem 'nokogiri'
 gem 'html2text'
 gem 'gemini-ai'
+gem 'ollama-ai'
 gem 'hashid-rails'
 gem 'redcarpet' # Для Markdown -> HTML
 gem 'grover'    # Для HTML -> PDF
