@@ -55,6 +55,7 @@ class Apply::Operation::GenerateMarkdownCv < ApplyMate::Operation::Base
     return if apply.cv_markdown.present?
 
     markdown = call_ai(apply)
+    # TODO: store raw markdown for debug purpose
     markdown = extract_markdown_content(markdown)
     apply.update!(cv_markdown: markdown)
   end
