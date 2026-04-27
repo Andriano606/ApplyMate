@@ -6,7 +6,7 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
   def perform
     Source.all.each do |source|
       client = source.client.constantize.new
-      vacancies_data = DjinniScraper.new(source, client).perform
+      vacancies_data = DjinniScraper.new(source, client).fetch_listing
       sync_vacancies(vacancies_data, source)
     end
   end

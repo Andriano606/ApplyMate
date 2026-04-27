@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-class DjinniScraper
+class DjinniScraper < BaseScraper
   def initialize(source, client)
     @source = source
     @client = client
   end
 
-  def perform
+  def fetch_listing
     all_jobs = []
     page = 1
 
