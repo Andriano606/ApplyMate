@@ -45,6 +45,22 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
     failed_checking_applyble: {
       color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
       icon: :x_circle
+    },
+    fetching_form: {
+      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+      icon: :magnifying_glass
+    },
+    failed_fetching_form: {
+      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      icon: :x_circle
+    },
+    filling_form: {
+      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+      icon: :sparkles
+    },
+    failed_filling_form: {
+      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      icon: :x_circle
     }
   }.freeze
 

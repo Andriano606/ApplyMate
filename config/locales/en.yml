@@ -84,7 +84,6 @@ en:
       submit: Save
       title: Edit AI Integration
     errors:
-      already_exists: вже існує для цього провайдера
       connection_failed: could not connect to the server
       invalid_api_key: is invalid or has been revoked
     form:
@@ -149,6 +148,8 @@ en:
         profile: Профіль
         status: Статус
         vacancy: Вакансія
+      filled_form_data: Filled Form Data
+      form_data: Form Data
       profile_cv: Резюме профілю
       prompt: Prompt
       title: Відгук
@@ -162,7 +163,11 @@ en:
       failed_cv_generation: Помилка генерації резюме
       failed_cv_sending: Помилка надсилання
       failed_fetching_details: Помилка отримання деталей
+      failed_fetching_form: Failed fetching form
+      failed_filling_form: Failed filling form
       fetching_details: Отримання деталей
+      fetching_form: Fetching form
+      filling_form: Filling form
       generating_cv: Генерація резюме
       pending: Очікує
       sending_cv: Надсилання

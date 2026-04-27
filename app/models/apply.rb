@@ -22,15 +22,19 @@ class Apply < ApplicationRecord
     fetching_details: 7,
     failed_fetching_details: 8,
     checking_applyble: 9,
-    failed_checking_applyble: 10
+    failed_checking_applyble: 10,
+    fetching_form: 11,
+    failed_fetching_form: 12,
+    filling_form: 13,
+    failed_filling_form: 14
   }
 
   def in_progress?
-    pending? || fetching_details? || generating_cv? || cv_generated? || sending_cv?
+    pending? || fetching_details? || generating_cv? || cv_generated? || sending_cv? || fetching_form? || filling_form?
   end
 
   def failed?
-    failed_fetching_details? || failed_cv_generation? || failed_cv_sending?
+    failed_fetching_details? || failed_cv_generation? || failed_cv_sending? || failed_fetching_form? || failed_filling_form?
   end
 
   private

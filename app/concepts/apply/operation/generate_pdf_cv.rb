@@ -6,6 +6,8 @@ class Apply::Operation::GeneratePdfCv < ApplyMate::Operation::Base
   def perform!(apply_id:, **)
     self.model = Apply.includes(:vacancy, :user_profile, :ai_integration).find(apply_id)
 
+    return if model.error.present?
+
     markdown = ask_ai_generate_markdown_cv
     raw_pdf = convert_markdown_to_pdf(markdown)
 

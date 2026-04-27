@@ -16,7 +16,13 @@ class Apply::Operation::CheckApplyable < ApplyMate::Operation::Base
     session_id = apply.source_profile.session_id
 
     applyble = scraper.fetch_applyble(apply.vacancy.url, session_id:)
-    apply.update!(applyble:, status: :pending)
+
+    unless applyble
+      apply.update!(applyble: false, status: :failed_checking_applyble, error: 'Vacancy is not applyable')
+      raise 'Vacancy is not applyable'
+    end
+
+    apply.update!(applyble: true, status: :pending)
     Apply::TurboHandler::StatusUpdate.broadcast(apply)
   rescue StandardError => e
     apply.update!(status: :failed_checking_applyble, error: e.message)
