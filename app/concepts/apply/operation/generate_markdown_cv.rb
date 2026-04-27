@@ -2,7 +2,12 @@
 
 class Apply::Operation::GenerateMarkdownCv < ApplyMate::Operation::Base
   PROMPT_TEMPLATE = <<~PROMPT
-    Strict Rule: DO NOT include any preamble or post-amble. Start directly with the content.
+    STRICT RULES (Negative Constraints):
+      - NO INTRODUCTIONS: Не пиши жодних вступних фраз на кшталт "Ось ваше резюме...".
+      - NO OUTRO/NOTES: Не додавай жодних нотаток, пояснень чи приміток (Notes) в кінці.
+      - NO META-COMMENTARY: Не пояснюй, які ключові слова ти використав або чому.
+      - ONLY MARKDOWN: Результатом має бути виключно текст резюме у форматі Markdown і нічого більше.
+      - DO NOT include any preamble or post-amble. Start directly with the content.
 
     Роль: Ти — професійний Technical Resume Writer з 15-річним досвідом у наймі для Big Tech компаній (Google, Meta, Amazon). Твоє завдання — створити ідеальне, оптимізоване під ATS резюме, яке гарантовано пройде автоматичні фільтри та отримає 95+ match score.
 
@@ -35,7 +40,12 @@ class Apply::Operation::GenerateMarkdownCv < ApplyMate::Operation::Base
     Не додавай мій linkedin.
     Формат виводу: Надай текст резюме у форматі Markdown. Не використовуй графіку або складні таблиці, які можуть "зламати" ATS. СУВОРА ЗАБОРОНА на будь-який супровідний текст. Не пиши "Ось ваше резюме..." або "Я адаптував навички...". Виводь ТІЛЬКИ текст самого резюме.
 
-    Output Constraint: Надай ТІЛЬКИ текст резюме у форматі Markdown. Не додавай жодних вступних фраз, пояснень, висновків чи коментарів до своєї роботи. Твоя відповідь має починатися безпосередньо з імені кандидата.
+    Output Constraint:
+      - Починай відповідь з символів '___$$$$___' і закінчуй символами '___$$$$___'. Все, що поза цими межами, буде ігноруватися моєю системою, тому не пиши там нічого.#{' '}
+      - Надай ТІЛЬКИ текст резюме у форматі Markdown.
+      - Не додавай жодних вступних фраз, пояснень, висновків чи коментарів до своєї роботи.#{' '}
+      - Твоя відповідь має починатися безпосередньо з імені кандидата.
+      - Output ONLY the Markdown content. Do not include any conversational text, preamble, or post-analysis notes. Start directly with the candidate's name.
   PROMPT
 
   def perform!(apply:, **)
@@ -54,6 +64,12 @@ class Apply::Operation::GenerateMarkdownCv < ApplyMate::Operation::Base
   def extract_markdown_content(text)
     return '' if text.blank?
 
+    if text.include?('___$$$$___')
+      parts = text.split('___$$$$___')
+      # Беремо другу частину (індекс 1), якщо вона існує
+      return parts[1].strip if parts.size >= 2 && parts[1].strip.present?
+    end
+
     match = text.match(/```markdown\s+(.*?)\s+```/m)
     match ? match[1].strip : text.strip
   end
@@ -66,10 +82,7 @@ class Apply::Operation::GenerateMarkdownCv < ApplyMate::Operation::Base
 
   def build_client(ai_integration)
     client_class = AiIntegration::PROVIDER_CLIENTS.fetch(ai_integration.provider)
-    client_class.new(
-      api_key: ai_integration.api_key,
-      model: ai_integration.model
-    )
+    client_class.new(api_key: ai_integration.api_key, host: ai_integration.host, model: ai_integration.model)
   end
 
   def build_prompt(apply)

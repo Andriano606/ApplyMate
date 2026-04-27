@@ -1,0 +1,22 @@
+.space-y-4
+  .space-y-0
+    = @form.input :host,
+        label: I18n.t('ai_integration.form.host'),
+        required: true,
+        wrapper_html: { class: 'mb-0' },
+        input_html: { data: { action: 'input->turbo-form#update' },
+                autocomplete: 'off',
+                placeholder: 'http://localhost:11434' }
+    p.text-xs.text-gray-500.dark:text-gray-400
+      = I18n.t('ai_integration.form.host_hint')
+
+  .space-y-1
+    = @form.input :model,
+        as: :select,
+        collection: available_models.map { |m| [ m, m ] },
+        label: I18n.t('ai_integration.form.model'),
+        include_blank: I18n.t('ai_integration.form.select_model')
+    - unless host_valid?
+      p.text-xs.text-amber-600.dark:text-amber-400.flex.items-center.gap-1.mt-1
+        = icon(:info_circle, size: 4)
+        = I18n.t('ai_integration.form.host_required')
