@@ -84,7 +84,6 @@ uk:
       submit: Зберегти
       title: Редагувати AI інтеграцію
     errors:
-      already_exists: вже існує для цього провайдера
       connection_failed: не вдалося підключитися до сервера
       invalid_api_key: невірний або відкликаний
     form:
@@ -149,6 +148,8 @@ uk:
         profile: Профіль
         status: Статус
         vacancy: Вакансія
+      filled_form_data: Заповнені дані форми
+      form_data: Дані форми
       profile_cv: Резюме профілю
       prompt: Промпт
       title: Відгук
@@ -162,7 +163,11 @@ uk:
       failed_cv_generation: Помилка генерації резюме
       failed_cv_sending: Помилка надсилання
       failed_fetching_details: Помилка отримання деталей
+      failed_fetching_form: Помилка отримання форми
+      failed_filling_form: Помилка заповнення форми
       fetching_details: Отримання деталей
+      fetching_form: Отримання форми
+      filling_form: Заповнення форми
       generating_cv: Генерація резюме
       pending: В процесі
       sending_cv: Надсилання

@@ -17,7 +17,6 @@ class AiIntegration < ApplicationRecord
   validates :api_key, presence: true, unless: :ollama?
   validates :host, presence: true, if: :ollama?
   validates :model, presence: true
-  validates :user_id, uniqueness: { scope: :provider, message: I18n.t('ai_integration.errors.already_exists') }
 
   def ollama?
     provider == 'ollama'

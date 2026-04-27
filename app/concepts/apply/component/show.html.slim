@@ -57,6 +57,20 @@ div(class=card_class)
         = icon(:paperclip, size: 4)
         = I18n.t('apply.show.download_cv')
 
+  / Form Data
+  - if @apply.form_data.present?
+    .px-6.py-4
+      = accordion(title: I18n.t('apply.show.form_data')) do
+        .pt-2.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.whitespace-pre-wrap.font-mono
+          = JSON.pretty_generate(@apply.form_data)
+
+  / Filled Form Data
+  - if @apply.filled_form_data.present?
+    .px-6.py-4
+      = accordion(title: I18n.t('apply.show.filled_form_data')) do
+        .pt-2.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.whitespace-pre-wrap.font-mono
+          = JSON.pretty_generate(@apply.filled_form_data)
+
   / Prompt
   .px-6.py-4
     = accordion(title: I18n.t('apply.show.prompt')) do

@@ -5,6 +5,8 @@ class Apply::Operation::FetchDetails < ApplyMate::Operation::Base
     skip_authorize
     self.model = apply
 
+    return if apply.error.present?
+
     apply.update!(status: :fetching_details)
     Apply::TurboHandler::StatusUpdate.broadcast(apply)
 

@@ -63,6 +63,82 @@ class DjinniScraper < BaseScraper
     sections.reject(&:blank?).join("\n\n")
   end
 
+  def fetch_form_data(url, session_id: nil)
+    connection = Faraday.new do |f|
+      f.use Faraday::FollowRedirects::Middleware
+      f.options.timeout = 15
+      f.options.open_timeout = 15
+      f.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      f.headers['Cookie'] = "sessionid=#{session_id}" if session_id.present?
+      f.adapter Faraday.default_adapter
+    end
+
+    response = connection.get(url)
+    doc = Nokogiri::HTML(response.body)
+    form = doc.at_css('form#apply_form')
+    return nil unless form
+
+    csrf_match = response.headers['set-cookie'].to_s.match(/csrftoken=([^;,\s]+)/)
+
+    data = {
+      action:  full_url(form['action']) || url,
+      method:  form['method'] || 'post',
+      enctype: form['enctype'],
+      cookies: csrf_match ? "csrftoken=#{csrf_match[1]}" : nil,
+      inputs:  []
+    }
+
+    radio_groups = {}
+
+    form.css('input, textarea, select, button').each do |el|
+      next if el.name == 'button'
+      next if el['type'] == 'submit'
+      next if el['name'].blank?
+
+      if el['type'] == 'radio'
+        name = el['name']
+        option_label = form.at_css("label[for='#{el['id']}']")&.text&.strip
+
+        if radio_groups.key?(name)
+          data[:inputs][radio_groups[name]][:options] << { label: option_label, value: el['value'] }
+        else
+          question_label = find_radio_question_label(el, form)
+          entry = {
+            id:          nil,
+            tag:         'input',
+            type:        'radio',
+            name:        name,
+            label:       question_label,
+            value:       nil,
+            placeholder: nil,
+            options:     [ { label: option_label, value: el['value'] } ]
+          }
+          radio_groups[name] = data[:inputs].size
+          data[:inputs] << entry
+        end
+        next
+      end
+
+      input_data = {
+        id:          el['id'],
+        tag:         el.name,
+        type:        el['type'],
+        name:        el['name'],
+        value:       el['value'],
+        placeholder: el['placeholder']
+      }
+
+      input_data[:value] = el.text.strip if el.name == 'textarea'
+
+      label = find_input_label(el, form)
+      input_data[:label] = label if label.present?
+
+      data[:inputs] << input_data
+    end
+
+    ApplyMate::Operation::Struct.new(data)
+  end
+
   def fetch_applyble(url, session_id:)
     connection = Faraday.new do |f|
       f.use Faraday::FollowRedirects::Middleware
@@ -85,6 +161,48 @@ class DjinniScraper < BaseScraper
   end
 
   private
+
+  def find_radio_question_label(el, form)
+    container = el.parent
+    until container.nil? || container == form
+      container.css('> label').each do |label|
+        for_id = label['for']
+        next if for_id.present? && form.at_css("input[type='radio'][id='#{for_id}']")
+        text = label.text.strip
+        return text if text.present?
+      end
+      container = container.parent
+    end
+    nil
+  end
+
+  def find_input_label(el, form)
+    if el['id'].present?
+      label = form.at_css("label[for='#{el['id']}']")&.text&.strip
+      return label if label.present?
+    end
+
+    container = el.parent
+    while container && container != form
+      local_label = container.at_css('label')
+      if local_label && (local_label['for'].blank? || local_label['for'] == el['id'])
+        return local_label.text.strip
+      end
+
+      prev = container.previous_element
+      while prev
+        if prev.name == 'label'
+          return prev.text.strip
+        elsif (sibling_label = prev.at_css('label'))
+          return sibling_label.text.strip
+        end
+        prev = prev.previous_element
+      end
+
+      container = container.parent
+    end
+    nil
+  end
 
   def parse_section(doc, header_text, name_selector)
     header = doc.at_xpath("//h2[contains(., '#{header_text}')] | //h3[contains(., '#{header_text}')]")
