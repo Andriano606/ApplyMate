@@ -76,7 +76,7 @@ class Apply::Operation::GenerateMarkdownCv < ApplyMate::Operation::Base
 
   def call_ai(apply)
     client = build_client(apply.ai_integration)
-    prompt = build_prompt(apply)
+    prompt = self.class.build_prompt(apply)
     client.ask(prompt)
   end
 
@@ -85,10 +85,10 @@ class Apply::Operation::GenerateMarkdownCv < ApplyMate::Operation::Base
     client_class.new(api_key: ai_integration.api_key, host: ai_integration.host, model: ai_integration.model)
   end
 
-  def build_prompt(apply)
+  def self.build_prompt(apply)
     PROMPT_TEMPLATE
       .sub('PLACEHOLDER_USER_PROFILE', apply.user_profile.cv)
       .sub('PLACEHOLDER_VACANCY_TITLE', apply.vacancy.title.to_s)
-      .sub('PLACEHOLDER_VACANCY_DESCRIPTION', apply.vacancy.description.to_s)
+      .sub('PLACEHOLDER_VACANCY_DESCRIPTION', [ apply.vacancy.description, apply.vacancy.details ].select(&:present?).join("\n\n"))
   end
 end

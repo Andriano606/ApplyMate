@@ -22,6 +22,11 @@ div(class=card_class)
         = accordion(title: I18n.t('apply.show.vacancy_description')) do
           .pt-2.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.prose.prose-sm.max-w-none
             = helpers.simple_format(helpers.strip_tags(@apply.vacancy.description))
+    - if @apply.vacancy.details.present?
+      .mt-1
+        = accordion(title: I18n.t('apply.show.vacancy_details')) do
+          .pt-2.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.prose.prose-sm.max-w-none
+            = helpers.simple_format(helpers.strip_tags(@apply.vacancy.details))
 
   / Profile
   .px-6.py-4
@@ -51,6 +56,12 @@ div(class=card_class)
           class: 'inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 transition-colors' do
         = icon(:paperclip, size: 4)
         = I18n.t('apply.show.download_cv')
+
+  / Prompt
+  .px-6.py-4
+    = accordion(title: I18n.t('apply.show.prompt')) do
+      .pt-2.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.whitespace-pre-wrap.font-mono
+        = Apply::Operation::GenerateMarkdownCv.build_prompt(@apply)
 
   / Error
   - if @apply.error.present?

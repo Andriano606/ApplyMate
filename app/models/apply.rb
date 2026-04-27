@@ -15,14 +15,16 @@ class Apply < ApplicationRecord
     sending_cv: 3,
     completed: 4,
     failed_cv_generation: 5,
-    failed_cv_sending: 6
+    failed_cv_sending: 6,
+    fetching_details: 7,
+    failed_fetching_details: 8
   }
 
   def in_progress?
-    pending? || generating_cv? || cv_generated? || sending_cv?
+    pending? || fetching_details? || generating_cv? || cv_generated? || sending_cv?
   end
 
   def failed?
-    failed_cv_generation? || failed_cv_sending?
+    failed_fetching_details? || failed_cv_generation? || failed_cv_sending?
   end
 end
