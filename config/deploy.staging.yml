@@ -6,8 +6,9 @@ service: apply_mate_staging
 
 image: andriano606/apply_mate
 
-# Multi-arch build: dev machine (amd64) builds its own arch locally,
-# RPi (arm64) is used as a remote native builder — much faster than QEMU emulation.
+# Multi-arch build: dev machine (amd64) builds locally, RPi (arm64) builds remotely.
+# Requires DOCKER_HOST=unix:///home/andrii/.docker/desktop/docker.sock in the shell
+# (Docker Desktop uses a non-standard socket path on Linux).
 builder:
   arch:
     - amd64
@@ -64,7 +65,7 @@ servers:
     env:
       clear:
         DB_HOST: 192.168.31.58
-        DB_PORT: "5433"
+        DB_PORT: "5434"
         SQ_QUEUES: "heavy_processing"
         SQ_POLLING_INTERVAL: "0.1"
         SQ_PROCESSES: "2"
@@ -77,7 +78,7 @@ servers:
     env:
       clear:
         DB_HOST: 192.168.31.58
-        DB_PORT: "5433"
+        DB_PORT: "5434"
         SQ_QUEUES: "default"
         SQ_POLLING_INTERVAL: "0.1"
         SQ_PROCESSES: "2"
@@ -107,16 +108,17 @@ env:
     APP_HOST: gauge-unpredatory-unnormally.ngrok-free.dev
     PRINTER_DEADLINE_HOURS: 24
     # MinIO is reachable at this IP from all machines (RPi containers + PC render_worker).
-    MINIO_ENDPOINT: http://192.168.31.58:9000
-    MINIO_BUCKET: print-mate-staging
+    MINIO_ENDPOINT: http://192.168.31.58:9002
+    MINIO_BUCKET: apply-mate-staging
+    ELASTICSEARCH_URL: http://apply_mate_staging-elasticsearch:9200
 
 accessories:
   db:
     image: postgres:17
     host: 192.168.31.58
     # Bind on all interfaces (not 127.0.0.1) so render_worker on 192.168.50.x can connect.
-    # Protect with UFW: sudo ufw allow from 192.168.50.0/24 to any port 5433
-    port: "5433:5432"
+    # Protect with UFW: sudo ufw allow from 192.168.50.0/24 to any port 5434
+    port: "5434:5432"
     env:
       clear:
         POSTGRES_USER: apply_mate
@@ -129,11 +131,12 @@ accessories:
   minio:
     image: minio/minio
     host: 192.168.31.58
-    # 9000 = S3 API, 9001 = web console (http://192.168.31.58:9001)
+    # 9002 = S3 API, 9003 = web console (http://192.168.31.58:9003)
+    # Offset by 2 from default to avoid conflict with print_mate_staging-minio on 9000/9001.
     options:
       publish:
-        - "9000:9000"
-        - "9001:9001"
+        - "9002:9000"
+        - "9003:9001"
     cmd: server /data --console-address ":9001"
     env:
       secret:
@@ -141,3 +144,18 @@ accessories:
         - MINIO_ROOT_PASSWORD
     directories:
       - data:/data
+
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    host: 192.168.31.58
+    # External port 9201 avoids conflict if another app uses 9200.
+    # App containers reach ES via Docker network on the internal port 9200.
+    port: "9201:9200"
+    env:
+      clear:
+        discovery.type: single-node
+        xpack.security.enabled: "false"
+        # Kept low for RPi — raise to 512m/512m if you have headroom.
+        ES_JAVA_OPTS: "-Xms256m -Xmx256m"
+    directories:
+      - data:/usr/share/elasticsearch/data
