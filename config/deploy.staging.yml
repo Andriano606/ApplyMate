@@ -53,35 +53,6 @@ servers:
         SQ_PROCESSES: "1"
         SQ_THREADS: "1"
 
-  # Primary heavy worker on PC — polls fast so it picks up heavy_processing first.
-  # Deploy only when PC is on: bin/kamal deploy -d staging --roles=render_worker
-  remote_render_worker:
-    hosts:
-      - 192.168.50.37
-    options:
-      gpus: all
-    cmd: bin/jobs
-    env:
-      clear:
-        DB_HOST: 192.168.31.58
-        DB_PORT: "5434"
-        SQ_QUEUES: "heavy_processing"
-        SQ_POLLING_INTERVAL: "0.1"
-        SQ_PROCESSES: "2"
-        SQ_THREADS: "2"
-
-  remote_default_worker:
-    hosts:
-      - 192.168.50.37
-    cmd: bin/jobs
-    env:
-      clear:
-        DB_HOST: 192.168.31.58
-        DB_PORT: "5434"
-        SQ_QUEUES: "default"
-        SQ_POLLING_INTERVAL: "0.1"
-        SQ_PROCESSES: "2"
-        SQ_THREADS: "2"
 
 registry:
   username: andriano606
