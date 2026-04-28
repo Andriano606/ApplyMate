@@ -1,5 +1,13 @@
 # ApplyMate
 
+## Local Development
+
+| Service        | URL                        | Notes                        |
+|----------------|----------------------------|------------------------------|
+| App            | http://localhost:3000      |                              |
+| MinIO API      | http://localhost:9000      | S3-compatible endpoint       |
+| MinIO Console  | http://localhost:9001      | user: minioadmin / minioadmin |
+
 ## Deployment
 
 Deployed via [Kamal](https://kamal-deploy.org/).
