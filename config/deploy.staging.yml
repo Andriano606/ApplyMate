@@ -19,6 +19,7 @@ proxy:
   app_port: 80
   hosts:
     - staging.applymate.local
+    - candy-accepting-small-determine.trycloudflare.com
 
 # SSH user for all servers. Override per-server with "user@host" in hosts list.
 ssh:
@@ -29,29 +30,16 @@ servers:
     hosts:
       - 192.168.31.58
 
-  # Standard worker on RPi — handles default queue continuously.
-  # Fallback worker on RPi — handles all queues, but polls slowly so PC wins the race.
   worker:
     hosts:
       - 192.168.31.58
     cmd: bin/jobs
     env:
       clear:
-        SQ_QUEUES: "default"
+        SQ_QUEUES: "*"
         SQ_POLLING_INTERVAL: "1"
         SQ_PROCESSES: "2"
         SQ_THREADS: "2"
-
-  render_worker:
-    hosts:
-      - 192.168.31.58
-    cmd: bin/jobs
-    env:
-      clear:
-        SQ_QUEUES: "heavy_processing"
-        SQ_POLLING_INTERVAL: "4"
-        SQ_PROCESSES: "1"
-        SQ_THREADS: "1"
 
 
 registry:
@@ -76,8 +64,7 @@ env:
     WEB_CONCURRENCY: 2
     RAILS_MAX_THREADS: 2
     APP_HOST: staging.applymate.local
-    PRINTER_DEADLINE_HOURS: 24
-    # MinIO is reachable at this IP from all machines (RPi containers + PC render_worker).
+    # MinIO endpoint used by all containers via this IP.
     MINIO_ENDPOINT: http://192.168.31.58:9002
     MINIO_BUCKET: apply-mate-staging
     ELASTICSEARCH_URL: http://apply_mate_staging-elasticsearch:9200
@@ -86,8 +73,7 @@ accessories:
   db:
     image: postgres:17
     host: 192.168.31.58
-    # Bind on all interfaces (not 127.0.0.1) so render_worker on 192.168.50.x can connect.
-    # Protect with UFW: sudo ufw allow from 192.168.50.0/24 to any port 5434
+    # External port 5434 avoids conflict with print_mate_staging-db on 5433.
     port: "5434:5432"
     env:
       clear:

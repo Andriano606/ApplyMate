@@ -21,11 +21,10 @@ class Vacancy < ApplicationRecord
       indexes :description,  type: :text, analyzer: :standard do
         indexes :keyword, type: :keyword
       end
-      indexes :created_at, type: :date
     end
   end
 
   def as_indexed_json(_options = {})
-    { title:, company_name:, description:, created_at: created_at.utc.iso8601 }
+    { title:, company_name:, description: }
   end
 end

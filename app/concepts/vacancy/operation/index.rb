@@ -32,7 +32,7 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
     {
       query: { bool: { must:, must_not: } },
-      sort:  [ { created_at: { order: 'desc' } } ],
+      sort:  [ { _id: { order: 'desc' } } ],
       from:  (page - 1) * per_page,
       size:  per_page
     }
