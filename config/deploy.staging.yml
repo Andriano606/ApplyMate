@@ -19,7 +19,6 @@ proxy:
   app_port: 80
   hosts:
     - staging.applymate.local
-    - gauge-unpredatory-unnormally.ngrok-free.dev
 
 # SSH user for all servers. Override per-server with "user@host" in hosts list.
 ssh:
@@ -105,7 +104,7 @@ env:
     RAILS_LOG_LEVEL: info
     WEB_CONCURRENCY: 2
     RAILS_MAX_THREADS: 2
-    APP_HOST: gauge-unpredatory-unnormally.ngrok-free.dev
+    APP_HOST: staging.applymate.local
     PRINTER_DEADLINE_HOURS: 24
     # MinIO is reachable at this IP from all machines (RPi containers + PC render_worker).
     MINIO_ENDPOINT: http://192.168.31.58:9002
