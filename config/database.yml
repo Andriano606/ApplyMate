@@ -106,7 +106,7 @@ staging:
     <<: *default
     database: apply_mate_staging
     username: apply_mate
-    password: <%= ENV["apply_mate_DATABASE_PASSWORD"] %>
+    password: <%= ENV["APPLY_MATE_DATABASE_PASSWORD"] %>
     host: <%= ENV.fetch("DB_HOST", "localhost") %>
     port: <%= ENV.fetch("DB_PORT", 5432) %>
     max_connections: 8
@@ -129,7 +129,7 @@ production:
     <<: *default
     database: apply_mate_production
     username: apply_mate
-    password: <%= ENV["apply_mate_DATABASE_PASSWORD"] %>
+    password: <%= ENV["APPLY_MATE_DATABASE_PASSWORD"] %>
     host: <%= ENV.fetch("DB_HOST", "localhost") %>
   cache:
     <<: *primary_production
