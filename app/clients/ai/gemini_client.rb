@@ -6,16 +6,24 @@ class Ai::GeminiClient < Ai::BaseClient
   def initialize(api_key:, model: 'gemini-2.5-flash', **)
     @client = Gemini.new(
       credentials: { service: 'generative-language-api', api_key: },
-      options: { model:, server_sent_events: true  }
+      options: { model:, server_sent_events: false }
     )
   end
 
   def ask(text)
-    result = @client.generate_content({ contents: [ { parts: [ { text: } ] } ] })
-    result.dig('candidates', 0, 'content', 'parts', 0, 'text')
-  rescue StandardError => e
-    Rails.logger.error "Gemini API failure: #{e.message}"
-    raise e
+    retries = 0
+    begin
+      result = @client.generate_content({ contents: [ { parts: [ { text: } ] } ] })
+      result.dig('candidates', 0, 'content', 'parts', 0, 'text')
+    rescue StandardError => e
+      if retries < 2 && e.message.match?(/503|502|429/)
+        retries += 1
+        sleep(2 ** retries)
+        retry
+      end
+      Rails.logger.error "Gemini API failure: #{e.message}"
+      raise e
+    end
   end
 
   def self.validate_api_key!(api_key:)
