@@ -1,20 +1,91 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # ApplyMate
 
-Rails + Hotwire (Stimulus + Turbo) application using Concepts-based architecture with Operations and Pundit authorization.
+Rails 8 + Hotwire (Stimulus + Turbo) job-application automation app. Users find vacancies via Elasticsearch, then the app automates fetching vacancy details, generating a tailored CV, and submitting the application via browser automation (Ferrum + Chrome).
 
 ## Essential Commands
 
-- Tests: `bundle exec rspec spec/path/to/file_spec.rb`
-- Cucumber: `bundle exec cucumber features/path/to/file.feature`
+```bash
+bin/dev                                          # Start all dev processes (Rails + JS/CSS build + Caddy)
+bundle exec rspec spec/path/to/file_spec.rb      # Run a single spec file
+bundle exec rspec spec/concepts/                 # Run all operation specs
+bundle exec cucumber features/path/to/file.feature
+```
+
+## Architecture: Concepts
+
+All business logic lives in `app/concepts/<resource>/`. Each concept can have:
+
+- **`operation/`** — plain Ruby service objects. Controllers call exactly one operation per action. Operations inherit `ApplyMate::Operation::Base`, implement `perform!(params:, current_user:, **)`, call `authorize!` (Pundit) or `skip_authorize`, and set `self.model =` with the result.
+- **`component/`** — ViewComponent classes (`ApplyMate::Component::Base < ViewComponent::Base`). Templates are `.html.slim` files beside the `.rb` file.
+- **`form_object/`** — `ApplyMate::FormObject::Base` wraps params before syncing to AR models. Use `.property`, `.has_many`, `.has_one`. Call `parse_validate_sync(form_object, model)` inside an operation to validate and sync.
+- **`turbo_handler/`** — real-time broadcast helpers. Inherit `ApplyMate::TurboHandler::Base`; implement `stream_from`, `frame_tag`, and `broadcast` (calls `Turbo::StreamsChannel.broadcast_action_to`).
+- **`job/`** — ActiveJob classes scoped to the concept.
+
+`apply_mate/` holds shared base classes for all of the above.
+
+## Request Flow
+
+Controllers call `endpoint(OperationClass, ComponentClass)` (defined in `OperationsMethods` concern), which:
+1. Calls the operation with `params:` and `current_user:`.
+2. Verifies Pundit authorization was called (raises otherwise).
+3. Dispatches to `ApplyMate::Endpoint::Html` or `ApplyMate::Endpoint::TurboStream` based on `Accept` header.
+4. On success: renders the component or redirects. On failure: re-renders the form component with errors.
+
+```ruby
+# Typical minimal controller
+class AppliesController < ApplicationController
+  def index
+    endpoint Apply::Operation::Index, Apply::Component::Index
+  end
+  def create
+    endpoint Apply::Operation::Create, Apply::Component::NewModal
+  end
+end
+```
+
+Custom success/failure handling: pass a block to `endpoint` and use `m.success` / `m.invalid`.
 
 ## Key Conventions
 
 - Default locale is **Ukrainian (`uk`)** — use `I18n.t()` (full form, NOT `t()`)
-- All UI must be **responsive** (mobile-first)
+- All UI must be **responsive** (mobile-first), styled with Tailwind utility classes in Slim templates
+- IDs in URLs use `hashid` (via `hashid-rails`), never bare integer IDs
+- Operations **must** call `authorize!` or `skip_authorize`; forgetting raises at runtime
+- `notice(I18n.t('...'))` inside an operation sets the flash message returned via result
 
-### Testing
-- `.ai/docs/rspec.md` - RSpec patterns, shared operation context. **Read this before modifying any spec file.**
-- `.ai/docs/cucumber.md` - Feature tests, step definitions, wait_for patterns
+## Key Gems
+
+| Gem | Role |
+|-----|------|
+| `elasticsearch-model` | Full-text vacancy search; `Vacancy` has ES mappings and `as_indexed_json` |
+| `pundit` | Policy-based authorization — one `*_policy.rb` per model |
+| `view_component` | Component rendering |
+| `simple_form` + `slim-rails` | Forms in `.html.slim` templates |
+| `dry-matcher` | `Matcher::MatcherWithDefaults` used by Endpoint for success/invalid dispatch |
+| `ferrum` | Headless Chrome via CDP for scraping/form-filling |
+| `solid_queue` + `solid_cable` + `solid_cache` | Background jobs, ActionCable, caching |
+| `grover` + `redcarpet` | Markdown CV → PDF pipeline |
+| `will_paginate` | Pagination; operations return `WillPaginate::Collection` |
+
+## Stimulus Controllers
+
+All controllers registered in `app/javascript/controllers/index.ts`. Notable ones:
+- `turbo-form` — augments forms for Turbo Stream submission; supports real-time updates on change (AbortController-based)
+- `turbo-modal` — manages modal open/close lifecycle; nested modal support (parent hidden, child removed)
+- `search-tags` — tag-pill input with AND/OR operators (used in vacancy search bar)
+- `select2` — Select2 wrapper for static and AJAX-loaded selects; modal-aware dropdown parent
+
+## Reference Docs
+
+- `.ai/docs/rspec.md` — shared operation context, Elasticsearch test setup, job specs, factory patterns. **Read before modifying any spec file.**
+- `.ai/docs/cucumber.md` — all available Given/When/Then steps, page navigation syntax, Turbo waiting, ES/job support. **Read before writing feature tests.**
+- `.ai/docs/operations.md` — Operation::Base API, authorization methods, error handling, sub-operations, skeleton templates.
+- `.ai/docs/form_objects.md` — FormObject DSL (`property`, `has_many`, `has_one`), sync lifecycle, attachment validation, skeletons.
+- `.ai/docs/i18n.md` — key naming conventions, namespace structure, pluralization, workflow for adding new keys.
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
