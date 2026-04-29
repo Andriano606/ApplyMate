@@ -21,10 +21,11 @@ class Vacancy < ApplicationRecord
       indexes :description,  type: :text, analyzer: :standard do
         indexes :keyword, type: :keyword
       end
+      indexes :vacancy_id, type: :integer
     end
   end
 
   def as_indexed_json(_options = {})
-    { title:, company_name:, description: }
+    { title:, company_name:, description:, vacancy_id: id }
   end
 end

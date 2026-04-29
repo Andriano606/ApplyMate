@@ -9,7 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
   chrome:
-    build: .
+    build: docker/chrome_vnc
     image: chrome-vnc:latest
     container_name: apply-mate-chrome-vnc
     shm_size: "2gb"          # Chrome потребує достатньо shared memory
@@ -22,6 +22,7 @@ services:
       - SCREEN_HEIGHT=1080
       - SCREEN_DEPTH=24
       - VNC_PASSWORD=        # Встанови пароль або залиш порожнім
+      - EXTERNAL_CHROME_HOST=localhost:9222
     volumes:
       - ./scripts:/app/scripts   # Монтуй свої Python скрипти сюди
     security_opt:

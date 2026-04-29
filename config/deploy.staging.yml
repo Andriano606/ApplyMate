@@ -115,3 +115,23 @@ accessories:
         ES_JAVA_OPTS: "-Xms256m -Xmx256m"
     directories:
       - data:/usr/share/elasticsearch/data
+
+  chrome_vnc:
+    image: andriano606/apply_mate_chrome_vnc:latest
+    host: 192.168.31.58
+    options:
+      shm-size: "2gb"
+      security-opt: seccomp:unconfined
+      # network-alias gives the container a valid RFC hostname (no underscores)
+      # so Ruby's URI.join can parse it. Default CHROME_HOST='chrome-vnc' works as-is.
+      network-alias: chrome-vnc
+      publish:
+        - "6081:6080"   # noVNC web UI
+        - "5901:5900"   # VNC (RealVNC / TigerVNC)
+        - "9222:9222"   # Chrome DevTools Protocol
+    env:
+      clear:
+        SCREEN_WIDTH: "1920"
+        SCREEN_HEIGHT: "1080"
+        SCREEN_DEPTH: "24"
+        VNC_PASSWORD: ""
