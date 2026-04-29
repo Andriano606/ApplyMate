@@ -20,7 +20,7 @@ minio_staging:
   access_key_id: <%= ENV["MINIO_ACCESS_KEY_ID"] %>
   secret_access_key: <%= ENV["MINIO_SECRET_ACCESS_KEY"] %>
   region: us-east-1
-  bucket: <%= ENV.fetch("MINIO_BUCKET", "print-mate-staging") %>
+  bucket: <%= ENV.fetch("MINIO_BUCKET", "apply-mate-staging") %>
   endpoint: <%= ENV["MINIO_ENDPOINT"] %>
   force_path_style: true
 

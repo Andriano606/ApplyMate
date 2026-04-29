@@ -85,6 +85,7 @@ Rails.application.configure do
   config.hosts << 'localhost'
   config.hosts << 'staging.applymate.local'
   config.hosts << 'applymate.local'
+  config.hosts << 'applymate.io'
   config.hosts << 'dev.applymate.io'
   config.hosts << ENV['APP_HOST'] if ENV['APP_HOST']
 

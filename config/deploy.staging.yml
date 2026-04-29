@@ -6,8 +6,9 @@ service: apply_mate_staging
 
 image: andriano606/apply_mate
 
-# Multi-arch build: dev machine (amd64) builds its own arch locally,
-# RPi (arm64) is used as a remote native builder — much faster than QEMU emulation.
+# Multi-arch build: dev machine (amd64) builds locally, RPi (arm64) builds remotely.
+# Requires DOCKER_HOST=unix:///home/andrii/.docker/desktop/docker.sock in the shell
+# (Docker Desktop uses a non-standard socket path on Linux).
 builder:
   arch:
     - amd64
@@ -18,7 +19,7 @@ proxy:
   app_port: 80
   hosts:
     - staging.applymate.local
-    - gauge-unpredatory-unnormally.ngrok-free.dev
+    - staging.beapply.xyz
 
 # SSH user for all servers. Override per-server with "user@host" in hosts list.
 ssh:
@@ -29,59 +30,17 @@ servers:
     hosts:
       - 192.168.31.58
 
-  # Standard worker on RPi — handles default queue continuously.
-  # Fallback worker on RPi — handles all queues, but polls slowly so PC wins the race.
   worker:
     hosts:
       - 192.168.31.58
     cmd: bin/jobs
     env:
       clear:
-        SQ_QUEUES: "default"
+        SQ_QUEUES: "*"
         SQ_POLLING_INTERVAL: "1"
         SQ_PROCESSES: "2"
         SQ_THREADS: "2"
 
-  render_worker:
-    hosts:
-      - 192.168.31.58
-    cmd: bin/jobs
-    env:
-      clear:
-        SQ_QUEUES: "heavy_processing"
-        SQ_POLLING_INTERVAL: "4"
-        SQ_PROCESSES: "1"
-        SQ_THREADS: "1"
-
-  # Primary heavy worker on PC — polls fast so it picks up heavy_processing first.
-  # Deploy only when PC is on: bin/kamal deploy -d staging --roles=render_worker
-  remote_render_worker:
-    hosts:
-      - 192.168.50.37
-    options:
-      gpus: all
-    cmd: bin/jobs
-    env:
-      clear:
-        DB_HOST: 192.168.31.58
-        DB_PORT: "5433"
-        SQ_QUEUES: "heavy_processing"
-        SQ_POLLING_INTERVAL: "0.1"
-        SQ_PROCESSES: "2"
-        SQ_THREADS: "2"
-
-  remote_default_worker:
-    hosts:
-      - 192.168.50.37
-    cmd: bin/jobs
-    env:
-      clear:
-        DB_HOST: 192.168.31.58
-        DB_PORT: "5433"
-        SQ_QUEUES: "default"
-        SQ_POLLING_INTERVAL: "0.1"
-        SQ_PROCESSES: "2"
-        SQ_THREADS: "2"
 
 registry:
   username: andriano606
@@ -104,19 +63,18 @@ env:
     RAILS_LOG_LEVEL: info
     WEB_CONCURRENCY: 2
     RAILS_MAX_THREADS: 2
-    APP_HOST: gauge-unpredatory-unnormally.ngrok-free.dev
-    PRINTER_DEADLINE_HOURS: 24
-    # MinIO is reachable at this IP from all machines (RPi containers + PC render_worker).
-    MINIO_ENDPOINT: http://192.168.31.58:9000
-    MINIO_BUCKET: print-mate-staging
+    APP_HOST: staging.beapply.xyz
+    # MinIO endpoint used by all containers via this IP.
+    MINIO_ENDPOINT: http://192.168.31.58:9002
+    MINIO_BUCKET: apply-mate-staging
+    ELASTICSEARCH_URL: http://apply_mate_staging-elasticsearch:9200
 
 accessories:
   db:
     image: postgres:17
     host: 192.168.31.58
-    # Bind on all interfaces (not 127.0.0.1) so render_worker on 192.168.50.x can connect.
-    # Protect with UFW: sudo ufw allow from 192.168.50.0/24 to any port 5433
-    port: "5433:5432"
+    # External port 5434 avoids conflict with print_mate_staging-db on 5433.
+    port: "5434:5432"
     env:
       clear:
         POSTGRES_USER: apply_mate
@@ -129,11 +87,12 @@ accessories:
   minio:
     image: minio/minio
     host: 192.168.31.58
-    # 9000 = S3 API, 9001 = web console (http://192.168.31.58:9001)
+    # 9002 = S3 API, 9003 = web console (http://192.168.31.58:9003)
+    # Offset by 2 from default to avoid conflict with print_mate_staging-minio on 9000/9001.
     options:
       publish:
-        - "9000:9000"
-        - "9001:9001"
+        - "9002:9000"
+        - "9003:9001"
     cmd: server /data --console-address ":9001"
     env:
       secret:
@@ -141,3 +100,38 @@ accessories:
         - MINIO_ROOT_PASSWORD
     directories:
       - data:/data
+
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    host: 192.168.31.58
+    # External port 9201 avoids conflict if another app uses 9200.
+    # App containers reach ES via Docker network on the internal port 9200.
+    port: "9201:9200"
+    env:
+      clear:
+        discovery.type: single-node
+        xpack.security.enabled: "false"
+        # Kept low for RPi — raise to 512m/512m if you have headroom.
+        ES_JAVA_OPTS: "-Xms256m -Xmx256m"
+    directories:
+      - data:/usr/share/elasticsearch/data
+
+  chrome_vnc:
+    image: andriano606/apply_mate_chrome_vnc:latest
+    host: 192.168.31.58
+    options:
+      shm-size: "2gb"
+      security-opt: seccomp:unconfined
+      # network-alias gives the container a valid RFC hostname (no underscores)
+      # so Ruby's URI.join can parse it. Default CHROME_HOST='chrome-vnc' works as-is.
+      network-alias: chrome-vnc
+      publish:
+        - "6081:6080"   # noVNC web UI
+        - "5901:5900"   # VNC (RealVNC / TigerVNC)
+        - "9222:9222"   # Chrome DevTools Protocol
+    env:
+      clear:
+        SCREEN_WIDTH: "1920"
+        SCREEN_HEIGHT: "1080"
+        SCREEN_DEPTH: "24"
+        VNC_PASSWORD: ""

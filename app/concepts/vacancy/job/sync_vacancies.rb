@@ -32,10 +32,7 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
       source.vacancies.where.not(external_id: current_external_ids).destroy_all
     end
 
-    # TODO: reindex
-    Vacancy.__elasticsearch__.delete_index!
-    Vacancy.__elasticsearch__.create_index!
-    Vacancy.import
+    Vacancy.import batch_size: 500
   end
 
   def parse_item(element)
