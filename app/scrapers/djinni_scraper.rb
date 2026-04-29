@@ -11,36 +11,22 @@ class DjinniScraper < BaseScraper
     page = 1
 
     loop do
-      # ПЕРЕВІРКА: чи не прийшов сигнал на зупинку процесу?
       if Thread.main[:solid_queue_terminating]
         Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
         break
       end
 
-      # Формуємо URL для поточної сторінки
-      # Якщо у @source.job_list_url вже є параметри, використовуємо &page=, інакше ?page=
-      separator = @source.job_list_url.include?('?') ? '&' : '?'
+      separator   = @source.job_list_url.include?('?') ? '&' : '?'
       current_url = "#{@source.job_list_url}#{separator}page=#{page}"
 
       Rails.logger.info "Scraping page #{page}: #{current_url}"
 
-      body = @client.fetch_body(current_url)
-      doc = Nokogiri::HTML(body)
+      doc = Nokogiri::HTML(@client.fetch_response(current_url).body)
 
-      # Шукаємо елементи вакансій
       nodes = doc.css('.job-list-item, .job-item')
-
-      # Якщо вакансій на сторінці немає — зупиняємо цикл
       break if nodes.empty?
 
-      page_jobs = nodes.map do |element|
-        extract_job_data(element)
-      end
-
-      all_jobs.concat(page_jobs)
-
-      # Пауза від 1 до 3 секунд після кожного успішного запиту
-      # sleep(rand(1.0..3.0))
+      all_jobs.concat(nodes.map { |el| extract_job_data(el) })
 
       page += 1
     end
@@ -49,8 +35,7 @@ class DjinniScraper < BaseScraper
   end
 
   def fetch_details(url)
-    body = @client.fetch_body(url)
-    doc = Nokogiri::HTML(body)
+    doc = Nokogiri::HTML(@client.fetch_response(url).body)
 
     sections = []
 
@@ -64,18 +49,9 @@ class DjinniScraper < BaseScraper
   end
 
   def fetch_form_data(url, session_id: nil)
-    connection = Faraday.new do |f|
-      f.use Faraday::FollowRedirects::Middleware
-      f.options.timeout = 15
-      f.options.open_timeout = 15
-      f.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      f.headers['Cookie'] = "sessionid=#{session_id}" if session_id.present?
-      f.adapter Faraday.default_adapter
-    end
-
-    response = connection.get(url)
-    doc = Nokogiri::HTML(response.body)
-    form = doc.at_css('form#apply_form')
+    response = session_client(session_id).fetch_response(url)
+    doc      = Nokogiri::HTML(response.body)
+    form     = doc.at_css('form#apply_form')
     return nil unless form
 
     csrf_match = response.headers['set-cookie'].to_s.match(/csrftoken=([^;,\s]+)/)
@@ -96,19 +72,18 @@ class DjinniScraper < BaseScraper
       next if el['name'].blank?
 
       if el['type'] == 'radio'
-        name = el['name']
-        option_label = form.at_css("label[for='#{el['id']}']")&.text&.strip
+        name         = el['name']
+        option_label = form.at_css("label[for='#{el["id"]}']")&.text&.strip
 
         if radio_groups.key?(name)
           data[:inputs][radio_groups[name]][:options] << { label: option_label, value: el['value'] }
         else
-          question_label = find_radio_question_label(el, form)
           entry = {
             id:          nil,
             tag:         'input',
             type:        'radio',
             name:        name,
-            label:       question_label,
+            label:       find_radio_question_label(el, form),
             value:       nil,
             placeholder: nil,
             options:     [ { label: option_label, value: el['value'] } ]
@@ -127,11 +102,8 @@ class DjinniScraper < BaseScraper
         value:       el['value'],
         placeholder: el['placeholder']
       }
-
       input_data[:value] = el.text.strip if el.name == 'textarea'
-
-      label = find_input_label(el, form)
-      input_data[:label] = label if label.present?
+      input_data[:label] = find_input_label(el, form).presence
 
       data[:inputs] << input_data
     end
@@ -140,17 +112,8 @@ class DjinniScraper < BaseScraper
   end
 
   def fetch_applyble(url, session_id:)
-    connection = Faraday.new do |f|
-      f.use Faraday::FollowRedirects::Middleware
-      f.options.timeout = 15
-      f.options.open_timeout = 15
-      f.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      f.headers['Cookie'] = "sessionid=#{session_id}"
-      f.adapter Faraday.default_adapter
-    end
-
-    response = connection.get(url)
-    doc = Nokogiri::HTML(response.body)
+    response = session_client(session_id).fetch_response(url)
+    doc      = Nokogiri::HTML(response.body)
 
     button = doc.at_css('button.js-inbox-toggle-reply-form')
     unless button
@@ -161,6 +124,11 @@ class DjinniScraper < BaseScraper
   end
 
   private
+
+  def session_client(session_id)
+    headers = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
+    HttpClient.new(headers:)
+  end
 
   def find_radio_question_label(el, form)
     container = el.parent
@@ -178,7 +146,7 @@ class DjinniScraper < BaseScraper
 
   def find_input_label(el, form)
     if el['id'].present?
-      label = form.at_css("label[for='#{el['id']}']")&.text&.strip
+      label = form.at_css("label[for='#{el["id"]}']")&.text&.strip
       return label if label.present?
     end
 
@@ -191,11 +159,9 @@ class DjinniScraper < BaseScraper
 
       prev = container.previous_element
       while prev
-        if prev.name == 'label'
-          return prev.text.strip
-        elsif (sibling_label = prev.at_css('label'))
-          return sibling_label.text.strip
-        end
+        return prev.text.strip if prev.name == 'label'
+        sibling_label = prev.at_css('label')
+        return sibling_label.text.strip if sibling_label
         prev = prev.previous_element
       end
 
@@ -208,12 +174,12 @@ class DjinniScraper < BaseScraper
     header = doc.at_xpath("//h2[contains(., '#{header_text}')] | //h3[contains(., '#{header_text}')]")
     return {} unless header
 
-    data = {}
+    data    = {}
     current = header.next_element
     while current && !current.name.match?(/^h[1-6]$/)
       table_rows = current.name == 'table' ? current.css('tr') : current.css('table tr')
       table_rows.each do |row|
-        name = row.at_css(name_selector)&.text&.strip
+        name  = row.at_css(name_selector)&.text&.strip
         value = row.css('td').last&.text&.strip
         data[name] = value if name.present? && value.present?
       end
@@ -228,12 +194,12 @@ class DjinniScraper < BaseScraper
   end
 
   def extract_job_data(element)
-    title = element.at_css('h2.job-item__position')&.text&.strip
-    url = element.at_css('.job-list-item__link, .job_item__header-link, a[href*="/jobs/"]')&.[]('href')
+    title       = element.at_css('h2.job-item__position')&.text&.strip
+    url         = element.at_css(".job-list-item__link, .job_item__header-link, a[href*='/jobs/']")&.[]('href')
     external_id = url.to_s.scan(/\d+/).first
     description_node = element.at_css('.js-original-text') || element.at_css("#job-description-#{external_id}")
-    description = sanitize_html(description_node&.inner_html)
-    company_name = element.at_css('.small.text-gray-800, .job-list-item__company-name')&.text&.strip
+    description      = sanitize_html(description_node&.inner_html)
+    company_name     = element.at_css('.small.text-gray-800, .job-list-item__company-name')&.text&.strip
     company_icon_url = element.at_css('img.userpic-image')&.[]('src')
 
     ApplyMate::Operation::Struct.new(
@@ -256,7 +222,6 @@ class DjinniScraper < BaseScraper
 
   def sanitize_html(html)
     return '' if html.blank?
-
     Html2Text.convert(html)
   end
 end
