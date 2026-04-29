@@ -12,10 +12,11 @@
 
 Deployed via [Kamal](https://kamal-deploy.org/).
 
-| Environment       | URL                            | Port |
-|-------------------|--------------------------------|------|
-| localhost (Caddy) | https://dev.applymate.io       | 443  |
-| Staging           | http://staging.applymate.local | 80   |
+| Environment       | URL                                                         | Notes                          |
+|-------------------|-------------------------------------------------------------|--------------------------------|
+| localhost (Caddy) | https://dev.applymate.io                                    |                                |
+| Staging (public)  | https://staging.beapply.xyz                                 | Via Cloudflare Tunnel, SSL     |
+| Staging (local)   | http://staging.applymate.local                              | Requires `/etc/hosts` entry    |
 
 ### Staging infrastructure
 
@@ -28,7 +29,8 @@ Deployed via [Kamal](https://kamal-deploy.org/).
 
 | Accessory      | URL                                                               | Notes                          |
 |----------------|-------------------------------------------------------------------|--------------------------------|
-| App            | [http://staging.applymate.local](http://staging.applymate.local) | Requires `/etc/hosts` entry    |
+| App (public)   | [https://staging.beapply.xyz](https://staging.beapply.xyz)       | Via Cloudflare Tunnel          |
+| App (local)    | [http://staging.applymate.local](http://staging.applymate.local) | Requires `/etc/hosts` entry    |
 | PostgreSQL     | `192.168.31.58:5434`                                             | No web UI                      |
 | MinIO S3 API   | [http://192.168.31.58:9002](http://192.168.31.58:9002)           | S3-compatible endpoint         |
 | MinIO Console  | [http://192.168.31.58:9003](http://192.168.31.58:9003)           | Web UI for bucket management   |
@@ -42,6 +44,30 @@ Deployed via [Kamal](https://kamal-deploy.org/).
 Add to `/etc/hosts` on your machine (for local access):
 ```
 192.168.31.58 staging.applymate.local
+```
+
+### Cloudflare Tunnel (staging)
+
+Staging is publicly accessible via a named Cloudflare Tunnel — no port forwarding required.
+
+| What               | Value                                              |
+|--------------------|----------------------------------------------------|
+| Domain             | `staging.beapply.xyz` (DNS managed by Cloudflare) |
+| Tunnel name        | `apply-mate-staging`                               |
+| Tunnel credentials | `/home/andrii/.cloudflared/19a80cfc-968d-48cc-9197-9494e6b1071a.json` on RPi |
+| Config             | `/etc/cloudflared/config.yml` on RPi               |
+
+The `cloudflared` daemon runs as a systemd service on the RPi and maintains 4 persistent connections to Cloudflare edge (Warsaw). SSL is handled automatically by Cloudflare.
+
+```bash
+# Status
+ssh andrii@192.168.31.58 "sudo systemctl status cloudflared"
+
+# Restart tunnel
+ssh andrii@192.168.31.58 "sudo systemctl restart cloudflared"
+
+# Logs
+ssh andrii@192.168.31.58 "sudo journalctl -u cloudflared -f"
 ```
 
 ### First deploy (sets up Docker, proxy, database)

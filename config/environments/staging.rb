@@ -6,7 +6,7 @@ Rails.application.configure do
   config.action_controller.default_url_options = { protocol: 'https' }
   config.action_mailer.default_url_options = { host: ENV.fetch('APP_HOST', 'localhost'), protocol: 'https' }
   config.hosts << ENV.fetch('APP_HOST', 'localhost')
-  config.hosts << /.*\.trycloudflare\.com/
+  config.hosts << 'staging.applymate.local'
   config.host_authorization = { exclude: ->(request) { request.path == '/up' } }
 
   config.active_storage.service = :minio_staging

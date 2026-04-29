@@ -19,7 +19,7 @@ proxy:
   app_port: 80
   hosts:
     - staging.applymate.local
-    - candy-accepting-small-determine.trycloudflare.com
+    - staging.beapply.xyz
 
 # SSH user for all servers. Override per-server with "user@host" in hosts list.
 ssh:
@@ -63,7 +63,7 @@ env:
     RAILS_LOG_LEVEL: info
     WEB_CONCURRENCY: 2
     RAILS_MAX_THREADS: 2
-    APP_HOST: staging.applymate.local
+    APP_HOST: staging.beapply.xyz
     # MinIO endpoint used by all containers via this IP.
     MINIO_ENDPOINT: http://192.168.31.58:9002
     MINIO_BUCKET: apply-mate-staging
