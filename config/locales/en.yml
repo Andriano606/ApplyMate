@@ -340,14 +340,19 @@ en:
     card:
       view_original: View original posting
     search:
-      exclude_placeholder: Exclude words...
-      placeholder: Search vacancies...
+      add: Add
+      and: AND
+      clear_filter: Clear filter
+      exclude_label: What to avoid? (e.g. Junior)
+      include_label: What are you looking for?
+      load_default: Load default
+      or: OR
       results_count:
         few: Found %{count} vacancies
         many: Found %{count} vacancies
         one: Found %{count} vacancy
         other: Found %{count} vacancies
-      submit: Search
+      save_as_default: Save as default
     total_vacancies: vacancies
   will_paginate:
     next_label: Next &raquo;

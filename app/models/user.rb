@@ -13,6 +13,12 @@ class User < ApplicationRecord
   has_one_attached :avatar do |attachable|
     attachable.variant :thumb, resize_to_fill: [ 64, 64 ], format: :webp
   end
+
+  jsonb_accessor :default_vacancy_search,
+                 include_tags: [ :string, array: true, default: [] ],
+                 include_ops: [ :string, array: true, default: [] ],
+                 exclude_tags: [ :string, array: true, default: [] ]
+
   validates :email, presence: true
   validates :name, presence: true
   validates :provider, presence: true

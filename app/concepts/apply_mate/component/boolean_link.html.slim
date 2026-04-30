@@ -1,7 +1,8 @@
-label.inline-flex.items-center.gap-1.cursor-pointer(
-  class="text-indigo-600 dark:text-indigo-400 hover:underline transition-colors")
-  = @form.check_box @name, { class: 'sr-only' }.merge(@options)
-  - if @icon
-    = @icon
-  - if @label
-    span = @label
+.relative.inline-flex.items-center
+  = @form.check_box @name, @input_html.merge(id: @id, class: 'sr-only peer')
+
+  label[for=@id class="#{@label_class} inline-flex items-center gap-2"]
+    - if @icon
+      span.flex-shrink-0 = @icon
+    - if @label
+      span = @label
