@@ -13,7 +13,14 @@ class ApplyMate::Component::Button < ApplyMate::Component::Base
           'rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
   }.freeze
 
-  def initialize(label: nil, icon: nil, variant: :secondary, tag: :button, **options)
+  SIZES = {
+    sm: 'px-2.5 py-1.5 text-xs',
+    md: 'px-4 py-2 text-sm',
+    lg: 'px-5 py-2.5 text-base',
+    xl: 'px-6 py-3 text-lg'
+  }.freeze
+
+  def initialize(label: nil, icon: nil, variant: :secondary, size: :md, tag: :button, **options)
     @label = label
     @icon_name = icon
     @tag = tag
@@ -25,7 +32,7 @@ class ApplyMate::Component::Button < ApplyMate::Component::Base
   end
 
   def button_classes
-    VARIANTS[@variant]
+    [ VARIANTS[@variant], SIZES[@size] ].join(' ')
   end
 
   def render_tag

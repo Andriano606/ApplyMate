@@ -340,14 +340,19 @@ uk:
     card:
       view_original: Переглянути оригінал
     search:
-      exclude_placeholder: Виключити слова...
-      placeholder: Пошук вакансій...
+      add: Додати
+      and: і
+      clear_filter: Очистити фільтр
+      exclude_label: Чого уникати? (напр. Junior)
+      include_label: Що шукаємо? (напр. Project manager)
+      load_default: Завантажити збережений фільтр
+      or: або
       results_count:
         few: Знайдено %{count} вакансії
         many: Знайдено %{count} вакансій
         one: Знайдено %{count} вакансію
         other: Знайдено %{count} вакансій
-      submit: Знайти
+      save_as_default: Зберегти фільтр
     total_vacancies: вакансій
   will_paginate:
     next_label: Наступна &raquo;

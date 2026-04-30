@@ -1,7 +1,10 @@
-.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700.flex.flex-col
+.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700.flex.flex-col id=dom_id(@vacancy)
   .flex.items-center.justify-between.pt-4.px-5
     .flex.items-center.gap-3
-      .w-10.h-10.rounded-lg.bg-gray-100.dark:bg-gray-700.shrink-0.flex.items-center.justify-center
+      .w-10.h-10.rounded-lg.bg-gray-100.dark:bg-gray-700.shrink-0.flex.items-center.justify-center [
+        id="company_logo_#{@vacancy.hashid}"
+        data-turbo-permanent="true"
+        ]
         - if valid_icon_url?
           img.max-w-full.max-h-full.object-contain (
               src=@vacancy.company_icon_url alt=@vacancy.company_name \

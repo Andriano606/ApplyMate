@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_27_224239) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_29_190724) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -243,6 +243,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_224239) do
     t.bigint "default_ai_integration_id"
     t.bigint "default_profile_id"
     t.bigint "default_source_profile_id"
+    t.jsonb "default_vacancy_search"
     t.string "email", null: false
     t.string "middle_name"
     t.string "name", null: false

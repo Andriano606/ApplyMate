@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-RSpec.describe ::Vacancy::Operation::Index, type: :operation do
+RSpec.describe Vacancy::Operation::Search, type: :operation do
   include_context "with elasticsearch index"
 
   after do
@@ -28,15 +28,13 @@ RSpec.describe ::Vacancy::Operation::Index, type: :operation do
                      company_name: "Initech", description: "Frontend Rails position")
   end
 
-  # after_commit callbacks do not fire inside RSpec transactions,
-  # so we index manually and refresh before each test.
   before do
     vacancy_rails; vacancy_python; vacancy_frontend
     [ vacancy_rails, vacancy_python, vacancy_frontend ].each { |v| v.__elasticsearch__.index_document }
     Vacancy.__elasticsearch__.refresh_index!
   end
 
-  context "when no query or exclude given" do
+  context "when no include_tags or exclude_tags given" do
     it "returns all vacancies as a WillPaginate collection with correct total" do
       expect(result).to be_success
       expect(model).to be_a(WillPaginate::Collection)
@@ -45,28 +43,28 @@ RSpec.describe ::Vacancy::Operation::Index, type: :operation do
     end
   end
 
-  context "when query matches by title" do
-    let(:params) { { query: "rails" } }
+  context "when include_tags matches by title" do
+    let(:params) { { include_tags: [ 'rails' ] } }
 
-    it "returns only vacancies whose content contains the query term" do
+    it "returns only vacancies whose content contains the tag" do
       expect(result).to be_success
       expect(model.map(&:id)).to contain_exactly(vacancy_rails.id, vacancy_frontend.id)
     end
   end
 
-  context "when exclude filter is given" do
-    let(:params) { { exclude: "python" } }
+  context "when exclude_tags filter is given" do
+    let(:params) { { exclude_tags: [ 'python' ] } }
 
-    it "excludes vacancies matching the excluded term" do
+    it "excludes vacancies matching the excluded tag" do
       expect(result).to be_success
       expect(model.map(&:id)).to contain_exactly(vacancy_rails.id, vacancy_frontend.id)
     end
   end
 
-  context "when both query and exclude are given" do
-    let(:params) { { query: "rails", exclude: "frontend" } }
+  context "when both include_tags and exclude_tags are given" do
+    let(:params) { { include_tags: [ 'rails' ], exclude_tags: [ 'frontend' ] } }
 
-    it "returns vacancies matching query but not exclude" do
+    it "returns vacancies matching include but not exclude" do
       expect(result).to be_success
       expect(model.map(&:id)).to contain_exactly(vacancy_rails.id)
     end
@@ -83,10 +81,10 @@ RSpec.describe ::Vacancy::Operation::Index, type: :operation do
     end
   end
 
-  context "when exclude contains multiple space-separated words each matching different vacancies" do
+  context "when multiple exclude_tags each match different vacancies" do
     let(:vacancy_next) { create(:vacancy, source:, title: "Rails Next",    company_name: "Acme", description: "Next position") }
     let(:vacancy_nexs) { create(:vacancy, source:, title: "Rails Nexs",    company_name: "Beta", description: "Nexs position") }
-    let(:params) { { query: "rails", exclude: "Nexs Next" } }
+    let(:params) { { include_tags: [ 'rails' ], exclude_tags: [ 'Nexs', 'Next' ] } }
 
     before do
       vacancy_next; vacancy_nexs
@@ -94,16 +92,16 @@ RSpec.describe ::Vacancy::Operation::Index, type: :operation do
       Vacancy.__elasticsearch__.refresh_index!
     end
 
-    it "excludes vacancies matching any word from the exclude string" do
+    it "excludes vacancies matching any tag from the exclude list" do
       expect(result).to be_success
       expect(model.map(&:id)).not_to include(vacancy_next.id, vacancy_nexs.id)
     end
   end
 
-  context "when exclude word partially matches a compound term like Next.js" do
+  context "when an exclude tag partially matches a compound term like Next.js" do
     let(:vacancy_nextjs) { create(:vacancy, source:, title: "Rails Next.js Developer", company_name: "Acme", description: "Next.js position") }
     let(:vacancy_nexs)   { create(:vacancy, source:, title: "Rails Nexs",              company_name: "Beta", description: "Nexs position") }
-    let(:params) { { query: "rails", exclude: "Nexs Next" } }
+    let(:params) { { include_tags: [ 'rails' ], exclude_tags: [ 'Nexs', 'Next' ] } }
 
     before do
       vacancy_nextjs; vacancy_nexs
@@ -111,19 +109,63 @@ RSpec.describe ::Vacancy::Operation::Index, type: :operation do
       Vacancy.__elasticsearch__.refresh_index!
     end
 
-    it "excludes vacancies whose title contains a token matching any exclude word" do
+    it "excludes vacancies whose fields contain a token matching any exclude tag" do
       expect(result).to be_success
       expect(model.map(&:id)).not_to include(vacancy_nextjs.id, vacancy_nexs.id)
     end
   end
 
-  context "when query has no matches" do
-    let(:params) { { query: "cobol" } }
+  context "when include_tags has no matches" do
+    let(:params) { { include_tags: [ 'cobol' ] } }
 
     it "returns an empty collection" do
       expect(result).to be_success
       expect(model).to be_empty
       expect(model.total_entries).to eq(0)
+    end
+  end
+
+  context "when two tags are connected with OR" do
+    let(:params) { { include_tags: [ 'Ruby', 'Python' ], include_ops: [ 'or' ] } }
+
+    it "returns vacancies matching either tag" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_rails.id, vacancy_python.id)
+    end
+  end
+
+  context "when two tags are connected with AND" do
+    let(:params) { { include_tags: [ 'Ruby', 'Developer' ], include_ops: [ 'and' ] } }
+
+    it "returns only vacancies containing both tags" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_rails.id)
+    end
+  end
+
+  context "when a single include tag is a multi-word phrase" do
+    let(:params) { { include_tags: [ 'Ruby on Rails' ] } }
+
+    it "returns only vacancies containing the exact phrase" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_rails.id)
+    end
+  end
+
+  context "when 3 tags with mixed operators: (rails AND ruby) OR react" do
+    let(:vacancy_react) do
+      create(:vacancy, source:, title: "React Developer", company_name: "Startup", description: "React.js role")
+    end
+    let(:params) { { include_tags: [ 'rails', 'ruby', 'react' ], include_ops: [ 'and', 'or' ] } }
+
+    before do
+      vacancy_react.__elasticsearch__.index_document
+      Vacancy.__elasticsearch__.refresh_index!
+    end
+
+    it "returns vacancies matching (rails AND ruby) or react" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_rails.id, vacancy_react.id)
     end
   end
 end

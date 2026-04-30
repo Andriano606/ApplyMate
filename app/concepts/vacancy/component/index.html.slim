@@ -1,0 +1,6 @@
+= helpers.turbo_frame_tag 'vacancy-search' do
+  = render Vacancy::Component::SearchBar.new(include_tags: @include_tags,
+          include_ops: @include_ops,
+          exclude_tags: @exclude_tags,
+          count: @vacancies.total_entries)
+  = render Vacancy::Component::List.new(vacancies: @vacancies, applies_by_vacancy: @applies_by_vacancy)

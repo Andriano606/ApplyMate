@@ -2,6 +2,19 @@
 
 All components inherit `ApplyMate::Component::Base < ViewComponent::Base`. Each component is a `.rb` class paired with a `.html.slim` template in the same directory.
 
+## Quotes in templates
+
+Use single quotes in `.html.slim` templates wherever possible — for CSS classes, string arguments, HTML attributes, etc. Only fall back to double quotes when interpolation is needed.
+
+```slim
+/ ✅ correct
+span class='px-2 py-1 text-xs'
+= helpers.link_to I18n.t('...'), helpers.root_path
+
+/ ❌ avoid unless interpolation is required
+span class="px-2 py-1 text-xs"
+```
+
 ## Calling Rails helpers in templates
 
 Inside a ViewComponent `.html.slim`, Rails view helpers are **not** in scope by default. Always call them through `helpers.`:
