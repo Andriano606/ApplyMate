@@ -86,6 +86,9 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/operations.md` — Operation::Base API, authorization methods, error handling, sub-operations, skeleton templates.
 - `.ai/docs/form_objects.md` — FormObject DSL (`property`, `has_many`, `has_one`), sync lifecycle, attachment validation, skeletons.
 - `.ai/docs/i18n.md` — key naming conventions, namespace structure, pluralization, workflow for adding new keys.
+- `.ai/docs/simple_form.md` — `simple_form_for` usage, wrapper types, select/file/hidden inputs, Turbo modal forms, Stimulus integration, skeletons.
+- `.ai/docs/turbo_form_controller.md` — `turbo-form` Stimulus controller: live re-render on field change, dependent selects, submit-button management, custom fetch URL.
+- `.ai/docs/view_component.md` — component decision tree (check helper first, shared vs resource-scoped), base class features, skeleton.
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

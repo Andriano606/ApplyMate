@@ -2,6 +2,22 @@
 
 Operations are plain Ruby service objects in `app/concepts/<resource>/operation/`. Every controller action calls exactly one operation via `endpoint(OperationClass, ComponentClass)`.
 
+## Naming convention
+
+**Operations must be named after the controller action.** Components should also match the action name by default, but may differ when the UI shape warrants it — the most common case is a modal component shared across `new`/`create` and `edit`/`update`.
+
+| Controller action | Operation | Component |
+|-------------------|-----------|-----------|
+| `index` | `Resource::Operation::Index` | `Resource::Component::Index` |
+| `new` / `create` | `Resource::Operation::Create` | `Resource::Component::New` or `Resource::Component::NewModal` |
+| `edit` / `update` | `Resource::Operation::Update` | `Resource::Component::Edit` or `Resource::Component::EditModal` |
+| `show` | `Resource::Operation::Show` | `Resource::Component::Show` |
+| `destroy` | `Resource::Operation::Destroy` | — |
+
+When the same modal form is used for both create and update, name it after the form's purpose rather than the action — e.g. `Resource::Component::FormModal`. Both `create` and `update` actions pass the same component to `endpoint`.
+
+Sub-operations called internally (not directly by a controller) should be named after what they do, not an action name — e.g. `Vacancy::Operation::Search` for the ES query builder called from `Vacancy::Operation::Index`.
+
 ## Lifecycle
 
 ```ruby
