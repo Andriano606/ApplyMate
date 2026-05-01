@@ -10,7 +10,7 @@ class Vacancy::Component::Card < ApplyMate::Component::Base
 
   def description
     sanitized = ActionController::Base.helpers.strip_tags(@vacancy.description)
-    truncate(sanitized, length: 150, separator: ' ')
+    truncate(sanitized, length: 300, separator: ' ')
   end
 
   def valid_icon_url?
