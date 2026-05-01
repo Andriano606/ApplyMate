@@ -10,6 +10,10 @@ class AiIntegration < ApplicationRecord
   attr_accessor :fetch_models
 
   belongs_to :user
+  has_many :users_as_default,
+           class_name: 'User',
+           foreign_key: 'default_ai_integration_id',
+           dependent: :nullify
 
   encrypts :api_key
 
