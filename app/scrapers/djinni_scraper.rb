@@ -39,8 +39,8 @@ class DjinniScraper < BaseScraper
 
       all_jobs.concat(page_jobs)
 
-      # Пауза від 1 до 3 секунд після кожного успішного запиту
-      # sleep(rand(1.0..3.0))
+      # Пауза від 2 до 5 секунд після кожного успішного запиту
+      sleep(rand(2..5))
 
       page += 1
     end
