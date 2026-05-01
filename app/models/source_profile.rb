@@ -11,5 +11,7 @@ class SourceProfile < ApplicationRecord
 
   enum :auth_method, { session_id: 0 }
 
+  encrypts :session_id
+
   validates :name, :auth_method, presence: true
 end
