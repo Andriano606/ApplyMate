@@ -1,3 +1,5 @@
 = header(**header_opts)
 
+.my-4 = alert(type: :notice, text: simple_format(I18n.t('source_profile.index.source_profile.explanation')))
+
 = render SourceProfile::Component::Table.new(source_profiles: @source_profiles)

@@ -132,8 +132,8 @@ en:
         ai_integration: AI інтеграція
         select_integration: Оберіть інтеграцію...
         select_profile: Оберіть профіль...
-        select_source_profile: Select source profile...
-        source_profile: Source profile
+        select_source_profile: Select account
+        source_profile: Account %{source_name}
         user_profile: Профіль
       submit: Відгукнутись
       title: Новий відгук
@@ -254,7 +254,7 @@ en:
     my_profiles: Мої профілі
     sign_in: Sign in
     sign_out: Sign out
-    source_profiles: My Sources
+    source_profiles: My external profiles
     stop_impersonating: Stop impersonating
   payments:
     pay_now: Pay Now
@@ -294,16 +294,22 @@ en:
       session_id_hint: Log in to the platform in your browser. Open DevTools (F12)
         → Application → Cookies, find the session cookie and copy its value.
     index:
+      source_profile:
+        explanation: This table is required so our system can represent you on job
+          boards. We store your access credentials (sessions or logins) to automatically
+          apply on your behalf, saving you from manual routine. All data is securely
+          encrypted using modern security standards, used strictly for automation,
+          and can be deleted at any time.
       table:
         actions: Actions
         auth_method: Method
         name: Name
         source: Source
-      title: My Sources
+      title: My accounts
     new:
       submit: Connect
-      title: Connect source
-    new_link: Connect source
+      title: Connected external accounts
+    new_link: Connect external account
     update:
       success: Source profile updated
   time:

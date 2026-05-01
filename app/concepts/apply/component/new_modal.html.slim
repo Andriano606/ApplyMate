@@ -14,7 +14,7 @@
         label_method: proc { |sp| "#{sp.source.name} (#{sp.name})" }, \
         value_method: :id, \
         include_blank: I18n.t('apply.new.form.select_source_profile'), \
-        label: I18n.t('apply.new.form.source_profile'), \
+        label: I18n.t('apply.new.form.source_profile', source_name: @apply.vacancy&.source.name), \
         with_new_link: { \
           link: helpers.link_to(I18n.t('source_profile.new_link'),
                   helpers.new_source_profile_path(source_profile: { source_id: @apply.vacancy&.source_id }),
