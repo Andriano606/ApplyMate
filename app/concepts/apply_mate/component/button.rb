@@ -20,10 +20,10 @@ class ApplyMate::Component::Button < ApplyMate::Component::Base
     xl: 'px-6 py-3 text-lg'
   }.freeze
 
-  def initialize(label: nil, icon: nil, variant: :secondary, size: :md, tag: :button, **options)
+  def initialize(label: nil, icon: nil, variant: :secondary, size: :md, **options)
     @label = label
     @icon_name = icon
-    @tag = tag
+    @size = size
     raise ArgumentError, "Unknown variant: #{variant}. Valid variants: #{VARIANTS.keys.join(', ')}" unless VARIANTS.key?(variant)
 
     @variant = variant
@@ -40,11 +40,7 @@ class ApplyMate::Component::Button < ApplyMate::Component::Base
     merged_class = [ button_classes, extra_class ].compact.join(' ')
     rest_opts = @options.except(:class)
 
-    if @tag == :button
-      helpers.content_tag(:button, class: merged_class, type: 'button', **rest_opts) { inner_content }
-    else
-      helpers.content_tag(@tag, class: merged_class, **rest_opts) { inner_content }
-    end
+    helpers.content_tag(:button, class: merged_class, type: 'button', **rest_opts) { inner_content }
   end
 
   private

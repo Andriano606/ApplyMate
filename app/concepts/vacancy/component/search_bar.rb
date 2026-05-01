@@ -54,7 +54,7 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
         # Кнопка Add
         concat button(label: I18n.t('vacancy.search.add'),
                       variant: :secondary,
-                      size: :sm,
+                      size: :md,
                       tag: :button,
                       class: 'text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium text-sm px-3 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex-shrink-0',
                       'data-action': 'click->turbo-form#update')

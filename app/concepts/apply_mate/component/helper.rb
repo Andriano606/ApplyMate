@@ -11,8 +11,12 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::BooleanLink.new(form:, name:, label:, icon:, checked:, index:, label_class:, **options))
   end
 
-  def button(label: nil, icon: nil, variant: :secondary, size: :md, tag: :button, **options, &block)
-    render(ApplyMate::Component::Button.new(label:, icon:, variant:, size:, tag:, **options), &block)
+  def button(label: nil, icon: nil, variant: :secondary, size: :md, **options, &block)
+    render(ApplyMate::Component::Button.new(label:, icon:, variant:, size:, **options), &block)
+  end
+
+  def link(url:, label: nil, icon: nil, variant: :secondary, size: :md, **options, &block)
+    render(ApplyMate::Component::Link.new(url:, label:, icon:, variant:, size:, **options), &block)
   end
 
   def file_drop(form:, field:, accept:, hint: nil, formats_label: nil, multiple: false, **options)

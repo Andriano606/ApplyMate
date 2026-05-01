@@ -1,4 +1,9 @@
-= header(**header_opts)
+= header(**header_opts) do |h|
+  - h.with_buttons do
+     = link(label: I18n.t('source_profile.index.new'),
+             url: new_source_profile_path,
+             data: { turbo_stream: true },
+             variant: :primary)
 
 .my-4 = alert(type: :notice, text: simple_format(I18n.t('source_profile.index.source_profile.explanation')))
 

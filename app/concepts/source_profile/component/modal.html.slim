@@ -13,7 +13,8 @@
               attribute: :source_id,
               value: source.id,
               label: source.name,
-              icon_name: :external_link)
+              icon_name: :external_link,
+              input_html: { data: { action: 'change->turbo-form#update' } })
 
   .flex.gap-3.w-full.mt-4
     - SourceProfile.auth_methods.keys.each do |auth_method|

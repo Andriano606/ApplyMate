@@ -294,6 +294,7 @@ en:
       session_id_hint: Log in to the platform in your browser. Open DevTools (F12)
         → Application → Cookies, find the session cookie and copy its value.
     index:
+      new: Connect external account
       source_profile:
         explanation: This table is required so our system can represent you on job
           boards. We store your access credentials (sessions or logins) to automatically
