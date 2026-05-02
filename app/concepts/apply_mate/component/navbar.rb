@@ -20,10 +20,10 @@ class ApplyMate::Component::Navbar < ApplyMate::Component::Base
 
       Item.new(label: I18n.t('navbar.add_new_source'), path: helpers.new_admin_source_path, section: :actions, render: current_user&.admin?, turbo: :stream),
 
-      Item.new(label: I18n.t('navbar.my_profiles'), path: helpers.user_profiles_path, section: :user_menu, render: signed_in? && !impersonating?, icon: :user),
-      Item.new(label: I18n.t('navbar.ai_integrations'), path: helpers.ai_integrations_path, section: :user_menu, render: signed_in? && !impersonating?, icon: :sparkles),
-      Item.new(label: I18n.t('navbar.source_profiles'), path: helpers.source_profiles_path, section: :user_menu, render: signed_in? && !impersonating?, icon: :lock_closed),
-      Item.new(label: I18n.t('navbar.my_applies'), path: helpers.applies_path, section: :user_menu, render: signed_in? && !impersonating?, icon: :clipboard_list),
+      Item.new(label: I18n.t('navbar.my_profiles'), path: helpers.user_profiles_path, section: :user_menu, render: signed_in?, icon: :user),
+      Item.new(label: I18n.t('navbar.ai_integrations'), path: helpers.ai_integrations_path, section: :user_menu, render: signed_in?, icon: :sparkles),
+      Item.new(label: I18n.t('navbar.source_profiles'), path: helpers.source_profiles_path, section: :user_menu, render: signed_in?, icon: :lock_closed),
+      Item.new(label: I18n.t('navbar.my_applies'), path: helpers.applies_path, section: :user_menu, render: signed_in?, icon: :clipboard_list),
       Item.new(label: I18n.t('navbar.stop_impersonating'), path: helpers.admin_impersonation_path, section: :user_menu, render: impersonating?, method: :delete, turbo: false, divider: true),
       Item.new(label: I18n.t('navbar.sign_out'),     path: logout_path,       section: :user_menu, render: signed_in? && !impersonating?, method: :delete, turbo: false, divider: true),
 

@@ -20,26 +20,22 @@ class HttpClient < BaseClient
     end
   end
 
-  def fetch_body(url)
-    response = @connection.get(url)
-    final_url = response.env.url.to_s
+  def fetch_body(url, error_handler: ScraperErrorHandler.new(max_retries: 5, base_delay: 1))
+    error_handler.run do
+      response = @connection.get(url)
+      final_url = response.env.url.to_s
 
-    return if final_url != url
+      if final_url != url
+        Rails.logger.info "[HttpClient] redirecting to an unexpected page: #{url}, #{final_url}"
+        return nil
+      end
 
-    if response.success?
-      response.body
-    else
-      Rails.logger.error "Помилка запиту: #{response.status}"
-      raise "Помилка запиту: #{response.status}"
-      nil
+      if response.success?
+        response.body
+      else
+        # Викидаємо помилку з кодом статусу, щоб error_handler міг її розпізнати
+        raise "[HttpClient] Помилка запиту: #{response.status}"
+      end
     end
-
-  rescue Faraday::TimeoutError, Faraday::ConnectionFailed => e
-    # Ось тут ми перетворюємо помилку сокета на зрозумілу помилку для скрейпера
-    Rails.logger.error "Мережева помилка на URL #{url}: #{e.message}"
-    raise "Виникла помилка мережі: #{e.message}"
-  rescue StandardError => e
-    Rails.logger.error "Непередбачувана помилка: #{e.message}"
-    raise e
   end
 end
