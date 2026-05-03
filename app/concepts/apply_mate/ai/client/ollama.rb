@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Ai::OllamaClient < Ai::BaseClient
+class ApplyMate::Ai::Client::Ollama < ApplyMate::Ai::Client::Base
   TAGS_PATH = '/api/tags'
 
   def initialize(host:, model: nil, **)
@@ -9,7 +9,7 @@ class Ai::OllamaClient < Ai::BaseClient
   end
 
   def ask(text)
-    client = Ollama.new(
+    client = ::Ollama.new(
       credentials: { address: @host },
       options: { model: @model, server_sent_events: true }
     )

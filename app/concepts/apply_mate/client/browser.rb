@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# c = BrowserClient.new
+# c = ApplyMate::Client::Browser.new
 # r = c.fetch_body('https://djinni.co/jobs/')
 
-class BrowserClient < BaseClient
+class ApplyMate::Client::Browser < ApplyMate::Client::Base
   CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
   CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
 
@@ -23,7 +23,7 @@ class BrowserClient < BaseClient
 
     @page.body
   rescue StandardError => e
-    Rails.logger.error "BrowserClient Error: #{e.message}"
+    Rails.logger.error "ApplyMate::Client::Browser Error: #{e.message}"
     raise e
   ensure
     @page&.close

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Source < ApplicationRecord
-  CLIENTS = %w[BrowserClient HttpClient].freeze
+  CLIENTS = %w[ApplyMate::Client::Browser ApplyMate::Client::Http].freeze
 
   has_one_attached :logo
   has_many :vacancies, dependent: :destroy

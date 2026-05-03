@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Ai::BaseClient
+class ApplyMate::Ai::Client::Base
   def ask(text)
     raise NotImplementedError
   end

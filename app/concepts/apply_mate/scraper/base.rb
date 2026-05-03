@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class BaseScraper
+class ApplyMate::Scraper::Base
   def fetch_listing
     raise NotImplementedError
   end

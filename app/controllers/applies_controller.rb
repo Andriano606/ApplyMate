@@ -14,7 +14,13 @@ class AppliesController < ApplicationController
   end
 
   def create
-    endpoint Apply::Operation::Create, Apply::Component::NewModal
+    endpoint Apply::Operation::Create, Apply::Component::NewModal do |m|
+      m.success do |result|
+        turbo_actions = [ send(:turbo_stream).close_active_modal ]
+        turbo_actions << send(:turbo_stream).flash([ [ result.message_level, result.notice[:text] ] ])
+        render turbo_stream: turbo_actions
+      end
+    end
   end
 
   def destroy

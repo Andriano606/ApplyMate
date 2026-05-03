@@ -134,7 +134,7 @@ Call `broadcast` every time the state the component displays changes — includi
   - Show page: `app/concepts/apply/component/show.html.slim` (before the status row)
   - Index table status column: `app/concepts/apply/component/table.rb` (via `safe_join` inside `add_column`)
   - Vacancy card: `app/concepts/vacancy/component/card.slim` (line 26)
-- Broadcast callers: `Apply::Operation::GeneratePdfCv` — called on every status transition (`generating_cv`, `cv_generated`, `failed_cv_generation`)
+- Broadcast callers: `Apply::Operation::Ai::GeneratePdfCv` — called on every status transition (`generating_cv`, `cv_generated`, `failed_cv_generation`)
 
 ---
 

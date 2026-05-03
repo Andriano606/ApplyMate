@@ -1,4 +1,5 @@
-= Apply::TurboHandler::StatusUpdate.frame_tag(@apply, helpers) do
-  span.inline-flex.items-center.gap-2.px-3.py-1.5.rounded-lg.text-sm.font-medium(class=color_class)
-    = icon(status_icon, size: 4)
-    = label
+= Apply::TurboHandler::StatusUpdate.frame_tag(@vacancy, helpers) do
+  = helpers.link_to path, data: { turbo: turbo, turbo_stream: turbo_stream } do
+    span.inline-flex.items-center.gap-2.px-3.py-1.5.rounded-lg.text-sm.font-medium(class=color_class)
+      = icon(status_icon, size: 4)
+      = label

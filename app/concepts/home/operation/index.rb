@@ -5,9 +5,9 @@ class Home::Operation::Index < ApplyMate::Operation::Base
     skip_authorize
 
     if current_user
-      params[:include_tags] = current_user.include_tags
-      params[:include_ops] = current_user.include_ops
-      params[:exclude_tags] = current_user.exclude_tags
+      params[:include_tags] ||= current_user.include_tags
+      params[:include_ops] ||= current_user.include_ops
+      params[:exclude_tags] ||= current_user.exclude_tags
     end
 
     result = run_operation Vacancy::Operation::Search, { params:, current_user: }

@@ -12,7 +12,7 @@ class Apply::Operation::SendApply < ApplyMate::Operation::Base
     return if apply.filled_form_data.blank? || apply.form_data.blank?
 
     apply.update!(status: :sending_cv)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
 
     response = send_request(apply)
 
@@ -34,10 +34,10 @@ class Apply::Operation::SendApply < ApplyMate::Operation::Base
       apply.update!(status: :failed_cv_sending, error: "HTTP #{response.status}: #{response.body[0..500]}")
     end
 
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
   rescue StandardError => e
     apply.update!(status: :failed_cv_sending, error: e.message)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
     raise
   end
 

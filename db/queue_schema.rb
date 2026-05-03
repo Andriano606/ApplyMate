@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_29_190724) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -46,7 +46,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_29_190724) do
     t.text "api_key"
     t.datetime "created_at", null: false
     t.string "host"
-    t.string "model", null: false
+    t.string "model"
     t.string "provider", default: "gemini", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
@@ -57,10 +57,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_29_190724) do
     t.bigint "ai_integration_id", null: false
     t.boolean "applyble"
     t.datetime "created_at", null: false
-    t.text "cv_markdown"
     t.text "error"
     t.jsonb "filled_form_data"
     t.jsonb "form_data"
+    t.text "raw_cv"
     t.bigint "source_profile_id", null: false
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false

@@ -6,11 +6,11 @@ class Apply::Operation::CheckApplyable < ApplyMate::Operation::Base
     self.model = apply
 
     apply.update!(status: :checking_applyble)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
 
     source = apply.vacancy.source
     client = source.client.constantize.new
-    scraper = DjinniScraper.new(source, client)
+    scraper = ApplyMate::Scraper::Djinni.new(source, client)
 
     # TODO
     session_id = apply.source_profile.session_id
@@ -23,10 +23,10 @@ class Apply::Operation::CheckApplyable < ApplyMate::Operation::Base
     end
 
     apply.update!(applyble: true, status: :pending)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
   rescue StandardError => e
     apply.update!(status: :failed_checking_applyble, error: e.message)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
     raise
   end
 end

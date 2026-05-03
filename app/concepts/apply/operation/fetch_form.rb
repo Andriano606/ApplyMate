@@ -8,11 +8,11 @@ class Apply::Operation::FetchForm < ApplyMate::Operation::Base
     return if apply.error.present?
 
     apply.update!(status: :fetching_form)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
 
     source = apply.vacancy.source
     client = source.client.constantize.new
-    scraper = DjinniScraper.new(source, client)
+    scraper = ApplyMate::Scraper::Djinni.new(source, client)
 
     session_id = apply.source_profile&.session_id
 
@@ -25,10 +25,10 @@ class Apply::Operation::FetchForm < ApplyMate::Operation::Base
       raise 'Form not found'
     end
 
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
   rescue StandardError => e
     apply.update!(status: :failed_fetching_form, error: e.message)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
     raise
   end
 end

@@ -8,8 +8,8 @@ class Apply::Job::Apply < ApplicationJob
     Apply::Operation::CheckApplyable.call(apply:)
     Apply::Operation::FetchDetails.call(apply:)
     Apply::Operation::FetchForm.call(apply:)
-    Apply::Operation::FillForm.call(apply:)
-    Apply::Operation::GeneratePdfCv.call(apply_id:)
+    Apply::Operation::Ai::FillForm.call(apply:)
+    Apply::Operation::Ai::GeneratePdfCv.call(apply_id:)
     Apply::Operation::SendApply.call(apply:)
   end
 end

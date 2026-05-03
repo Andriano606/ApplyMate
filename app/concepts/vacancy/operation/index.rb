@@ -41,6 +41,8 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
   private
 
   def normalize_include_params(params)
+    return params if params.fetch(:include_ops, {}).is_a?(Array)
+
     params[:include_ops] =  params.fetch(:include_ops, {}).values.map { |ops| ops.to_b ? 'and' : 'or' }
     if params[:new_include_tag].present?
       params[:include_tags] = [ *params[:include_tags], params[:new_include_tag] ].compact_blank
@@ -49,7 +51,6 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
     delete_tag_index  = params.fetch(:include_delete_tag, {}).values.map(&:to_b).find_index(&:present?)
     if delete_tag_index
-
       if delete_tag_index == 0
         params[:include_ops].delete_at(delete_tag_index)
       elsif delete_tag_index >= params[:include_tags].count
@@ -64,7 +65,7 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
         end
       end
 
-      params[:include_tags].delete_at(delete_tag_index)
+      params[:include_tags].delete_at(delete_tag_index) unless params[:include_tags].nil?
     end
 
     params
@@ -73,10 +74,11 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
   def normalize_exclude_params(params)
     if params[:new_exclude_tag].present?
       params[:exclude_tags] = [ *params[:exclude_tags], params[:new_exclude_tag] ].compact_blank
+      params[:new_exclude_tag] = nil
     end
 
     delete_tag_index  = params.fetch(:exclude_delete_tag, {}).values.map(&:to_b).find_index(&:present?)
-    if delete_tag_index
+    if delete_tag_index && !params[:exclude_tags].nil?
       params[:exclude_tags].delete_at(delete_tag_index)
     end
 

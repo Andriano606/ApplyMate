@@ -2,10 +2,10 @@
 
 div(class=card_class)
   / Status
-  = Apply::TurboHandler::StatusUpdate.stream_from(@apply, helpers)
+  = Apply::TurboHandler::StatusUpdate.stream_from(@apply.vacancy, helpers)
   .px-6.py-4.flex.items-center.justify-between
     span.text-sm.font-medium.text-gray-500.dark:text-gray-400 = I18n.t('apply.show.fields.status')
-    = render Apply::Component::StatusBadge.new(apply: @apply)
+    = render Apply::Component::StatusBadge.new(vacancy: @apply.vacancy)
 
   / Vacancy
   .px-6.py-4
@@ -75,7 +75,7 @@ div(class=card_class)
   .px-6.py-4
     = accordion(title: I18n.t('apply.show.prompt')) do
       .pt-2.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.whitespace-pre-wrap.font-mono
-        = Apply::Operation::GenerateMarkdownCv.build_prompt(@apply)
+        = Apply::Ai::Prompt::Djinni::GenerateCv.call(@apply)
 
   / Error
   - if @apply.error.present?
