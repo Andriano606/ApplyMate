@@ -96,7 +96,7 @@ FactoryBot.define do
   factory :source do
     name     { "Test Source" }
     base_url { "https://example.com" }
-    client   { "HttpClient" }
+    client   { "ApplyMate::Client::Http" }
 
     after(:build) do |source|
       source.logo.attach(

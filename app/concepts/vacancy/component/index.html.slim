@@ -1,4 +1,4 @@
-= helpers.turbo_frame_tag 'vacancy-search' do
+= helpers.turbo_frame_tag 'vacancy-search', data: { turbo_action: 'advance' } do
   = render Vacancy::Component::SearchBar.new(include_tags: @include_tags,
           include_ops: @include_ops,
           exclude_tags: @exclude_tags,

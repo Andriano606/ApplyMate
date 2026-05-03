@@ -2,6 +2,10 @@
 
 class Apply::Component::StatusBadge < ApplyMate::Component::Base
   STATUS_CONFIG = {
+    not_applied: {
+      icon: :send,
+      color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+    },
     pending: {
       color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
       icon: :clock
@@ -64,14 +68,35 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
     }
   }.freeze
 
-  def initialize(apply:)
-    @apply = apply
+  def initialize(vacancy:, **)
+    @apply = vacancy.applies.last
+    @vacancy = vacancy
   end
 
   private
 
+  def path
+    if @apply.nil?
+      helpers.new_apply_path(vacancy_id: @vacancy.hashid)
+    else
+      helpers.apply_path(@apply)
+    end
+  end
+
+  def turbo_stream
+    @apply.nil? ? true : false
+  end
+
+  def turbo
+    @apply.nil? ? true : false
+  end
+
   def config
-    STATUS_CONFIG[@apply.status.to_sym] || STATUS_CONFIG[:pending]
+    if @apply.nil?
+      STATUS_CONFIG[:not_applied]
+    else
+      STATUS_CONFIG[@apply.status.to_sym] || STATUS_CONFIG[:pending]
+    end
   end
 
   def color_class
@@ -83,6 +108,6 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
   end
 
   def label
-    I18n.t("apply.status.#{@apply.status}")
+    @apply.nil? ? I18n.t('apply.new.button') : I18n.t("apply.status.#{@apply.status}")
   end
 end

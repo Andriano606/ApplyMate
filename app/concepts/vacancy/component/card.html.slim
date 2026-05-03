@@ -14,23 +14,15 @@
         - else
           span.text-sm.font-bold.text-gray-500.dark:text-gray-400 = company_initial
       .flex.flex-col.gap-1
-        span.text-sm.font-bold.text-gray-900.dark:text-gray-100 = @vacancy.company_name
+        span.text-sm.font-bold.text-gray-900.dark:text-gray-100.line-clamp-1 = @vacancy.company_name
         .w-fit = badge(label: @vacancy.source.name, color: :green, variant: :pill)
+
     - if signed_in?
-      - if @apply.nil?
-        = helpers.link_to helpers.new_apply_path(vacancy_id: @vacancy.id), \
-            data: { turbo_stream: true }, \
-            class: 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs ' \
-                   'font-medium text-white bg-indigo-600 rounded-lg ' \
-                   'hover:bg-indigo-700 transition-colors shrink-0' do
-          = icon(:send, size: 3)
-          = I18n.t('apply.new.button')
-      - else
-        = Apply::TurboHandler::StatusUpdate.stream_from(@apply, helpers)
-        = helpers.link_to helpers.apply_path(@apply), data: { turbo: false } do
-          = render Apply::Component::StatusBadge.new(apply: @apply)
+      = Apply::TurboHandler::StatusUpdate.stream_from(@vacancy, helpers)
+      = render Apply::Component::StatusBadge.new(vacancy: @vacancy)
+
   .flex.flex-col.gap-3.px-5.pt-3.pb-4.flex-1
-    h3.text-xl.font-extrabold.text-gray-900.dark:text-gray-100.leading-tight.tracking-tight.line-clamp-2
+    h3.text-xl.font-extrabold.text-gray-900.dark:text-gray-100.leading-tight.tracking-tight.line-clamp-1
       = @vacancy.title
     p.text-sm.text-gray-500.dark:text-gray-400.leading-relaxed.line-clamp-5 = description
   - if @vacancy.url.present?

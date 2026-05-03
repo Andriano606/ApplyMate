@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DjinniScraper < BaseScraper
+class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   def initialize(source, client)
     @source = source
     @client = client

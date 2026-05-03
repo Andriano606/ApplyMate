@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class BaseClient
+class ApplyMate::Client::Base
   def fetch_body(url)
     raise NotImplementedError
   end

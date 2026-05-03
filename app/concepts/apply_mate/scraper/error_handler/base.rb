@@ -1,4 +1,6 @@
-class ScraperErrorHandler
+# frozen_string_literal: true
+
+class ApplyMate::Scraper::ErrorHandler::Base
   class AttemptsExhaustedError < StandardError; end
 
   def initialize(max_retries: 3, base_delay: 2)

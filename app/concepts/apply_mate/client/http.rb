@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# c = HttpClient.new
+# c = ApplyMate::Client::Http.new
 # r = c.fetch_body('https://djinni.co/jobs/')
 
-class HttpClient < BaseClient
+class ApplyMate::Client::Http < ApplyMate::Client::Base
   def initialize(timeout: 15)
     @connection = Faraday.new do |f|
       # Дозволяє автоматично переходити за редиректами
@@ -20,13 +20,13 @@ class HttpClient < BaseClient
     end
   end
 
-  def fetch_body(url, error_handler: ScraperErrorHandler.new(max_retries: 5, base_delay: 1))
+  def fetch_body(url, error_handler: ApplyMate::Scraper::ErrorHandler::Base.new(max_retries: 5, base_delay: 1))
     error_handler.run do
       response = @connection.get(url)
       final_url = response.env.url.to_s
 
       if final_url != url
-        Rails.logger.info "[HttpClient] redirecting to an unexpected page: #{url}, #{final_url}"
+        Rails.logger.info "[ApplyMate::Client::Http] redirecting to an unexpected page: #{url}, #{final_url}"
         return nil
       end
 
@@ -34,7 +34,7 @@ class HttpClient < BaseClient
         response.body
       else
         # Викидаємо помилку з кодом статусу, щоб error_handler міг її розпізнати
-        raise "[HttpClient] Помилка запиту: #{response.status}"
+        raise "[ApplyMate::Client::Http] Помилка запиту: #{response.status}"
       end
     end
   end

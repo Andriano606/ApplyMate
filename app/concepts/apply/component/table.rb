@@ -21,13 +21,13 @@ class Apply::Component::Table < ApplyMate::Component::Base
     end
 
     table.add_column(header: I18n.t('apply.index.table.ai_integration')) do |apply|
-      apply.ai_integration.provider.capitalize
+      apply.ai_integration.provider.capitalize.humanize
     end
 
     table.add_column(header: I18n.t('apply.index.table.status')) do |apply|
       helpers.safe_join([
-        Apply::TurboHandler::StatusUpdate.stream_from(apply, helpers),
-        render(Apply::Component::StatusBadge.new(apply:))
+        Apply::TurboHandler::StatusUpdate.stream_from(apply.vacancy, helpers),
+        render(Apply::Component::StatusBadge.new(vacancy: apply.vacancy))
       ])
     end
 

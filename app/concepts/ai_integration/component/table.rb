@@ -9,7 +9,7 @@ class AiIntegration::Component::Table < ApplyMate::Component::Base
     table = ApplyMate::Component::Table.new(rows: @ai_integrations, empty_message: I18n.t('components.table.empty'))
 
     table.add_column(header: I18n.t('ai_integration.index.table.provider')) do |integration|
-      helpers.content_tag(:span, integration.provider.capitalize, class: 'font-medium')
+      helpers.content_tag(:span, integration.provider.capitalize.humanize, class: 'font-medium')
     end
 
     table.add_column(header: I18n.t('ai_integration.index.table.model'), &:model)

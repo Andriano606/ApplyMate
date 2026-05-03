@@ -17,7 +17,7 @@ class Apply::Component::Show < ApplyMate::Component::Base
   end
 
   def ai_integration_label
-    "#{@apply.ai_integration.provider.capitalize} (#{@apply.ai_integration.model})"
+    @apply.ai_integration.label
   end
 
   def error_text_class

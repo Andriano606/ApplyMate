@@ -176,7 +176,7 @@ Dockerfile: `docker/chrome_vnc/Dockerfile`.
 - **Chromium** — браузер з CDP на `127.0.0.1:19222`
 - **nginx** — проксі на порт 9222 → 19222, переписує `Host: localhost` та `webSocketDebuggerUrl` у відповідях, щоб Ferrum міг підключитися з worker-контейнера
 
-Застосунок підключається через `BrowserClient` → `CHROME_HOST=chrome-vnc` (мережевий аліас контейнера) → nginx → Chromium CDP.
+Застосунок підключається через `ApplyMate::Client::Browser` → `CHROME_HOST=chrome-vnc` (мережевий аліас контейнера) → nginx → Chromium CDP.
 
 **Перший запуск:**
 

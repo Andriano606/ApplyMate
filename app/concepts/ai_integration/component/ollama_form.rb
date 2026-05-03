@@ -10,7 +10,7 @@ class AiIntegration::Component::OllamaForm < ApplyMate::Component::Base
 
   def available_models
     return [] unless @ai_integration.host.present?
-    @available_models ||= Ai::OllamaClient.new(host: @ai_integration.host).list_models
+    @available_models ||= ApplyMate::Ai::Client::Ollama.new(host: @ai_integration.host).list_models
   rescue StandardError
     []
   end

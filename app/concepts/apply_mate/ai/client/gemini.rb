@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-class Ai::GeminiClient < Ai::BaseClient
+class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
   MODELS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
 
   def initialize(api_key:, model: 'gemini-2.5-flash', **)
-    @client = Gemini.new(
+    @client = ::Gemini.new(
       credentials: { service: 'generative-language-api', api_key: },
       options: { model:, server_sent_events: false }
     )

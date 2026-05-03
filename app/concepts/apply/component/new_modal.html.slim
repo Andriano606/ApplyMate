@@ -31,7 +31,7 @@
 
     = modal.form.input :ai_integration_id, \
         collection: current_user.ai_integrations, \
-        label_method: proc { |ai| "#{ai.provider.capitalize} (#{ai.model})" }, \
+        label_method: proc { |ai| "#{ai.provider.capitalize.humanize} #{ai.model ? "(#{ai.model})" : ''}" }, \
         value_method: :id, \
         include_blank: I18n.t('apply.new.form.select_integration'), \
         label: I18n.t('apply.new.form.ai_integration')

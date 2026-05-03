@@ -9,7 +9,7 @@ class AiIntegration::Component::GeminiForm < ApplyMate::Component::Base
   private
 
   def available_models
-    @available_models ||= Ai::GeminiClient.new(api_key: @ai_integration.api_key).list_models
+    @available_models ||= ApplyMate::Ai::Client::Gemini.new(api_key: @ai_integration.api_key).list_models
   rescue StandardError
     []
   end
