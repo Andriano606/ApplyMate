@@ -89,6 +89,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/simple_form.md` — `simple_form_for` usage, wrapper types, select/file/hidden inputs, Turbo modal forms, Stimulus integration, skeletons.
 - `.ai/docs/turbo_form_controller.md` — `turbo-form` Stimulus controller: live re-render on field change, dependent selects, submit-button management, custom fetch URL.
 - `.ai/docs/view_component.md` — component decision tree (check helper first, shared vs resource-scoped), base class features, skeleton.
+- `.ai/docs/ai_prompts_and_schemas.md` — Prompt::Base / ResponseSchema::Base API, AiHandler wiring, per-field instructions, JSON vs binary schemas, skeleton for new pairs. **Read before adding or modifying AI prompt/schema objects.**
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
