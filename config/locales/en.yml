@@ -130,6 +130,10 @@ en:
       button: Відгукнутись
       form:
         ai_integration: AI інтеграція
+        fill_form_prompt: Промпт для заповнення форми
+        generate_cv_prompt: Промпт для генерації резюме
+        select_fill_form_prompt: Оберіть промпт для форми...
+        select_generate_cv_prompt: Оберіть промпт для резюме...
         select_integration: Оберіть інтеграцію...
         select_profile: Оберіть профіль...
         select_source_profile: Select account
@@ -252,6 +256,7 @@ en:
     ai_integrations: AI Integrations
     my_applies: Мої відгуки
     my_profiles: Мої профілі
+    prompts: Промпти
     sign_in: Sign in
     sign_out: Sign out
     source_profiles: My external profiles
@@ -259,6 +264,37 @@ en:
   payments:
     pay_now: Pay Now
     redirecting: Redirecting to payment gateway...
+  prompt:
+    create:
+      success: Промпт успішно збережено
+    destroy:
+      confirm: Ви впевнені? Це видалить промпт.
+      success: Промпт видалено
+    edit:
+      submit: Зберегти
+      title: Редагувати промпт
+    errors:
+      missing_placeholders: 'відсутні обов''язкові плейсхолдери: %{placeholders}'
+    form:
+      content: Текст промпту
+      name: Назва
+      required_placeholders_label: 'Обов''язкові плейсхолдери:'
+    index:
+      new: Новий промпт
+      table:
+        actions: Дії
+        content_preview: Попередній перегляд
+        name: Назва
+        prompt_type: Тип
+      title: Мої промпти
+    new:
+      submit: Створити
+      title: Новий промпт
+    types:
+      fill_form: Заповнення форми
+      generate_cv: Генерація резюме
+    update:
+      success: Промпт оновлено
   session:
     auth_modal:
       message: Please sign in to continue

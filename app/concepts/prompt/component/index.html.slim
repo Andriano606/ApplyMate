@@ -1,0 +1,8 @@
+= header(**header_opts) do |h|
+  - h.with_buttons do
+    = link(label: I18n.t('prompt.index.new'),
+            url: new_prompt_path,
+            data: { turbo_stream: true },
+            variant: :primary)
+
+= render Prompt::Component::Table.new(prompts: @prompts)

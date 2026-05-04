@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -58,8 +58,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
     t.boolean "applyble"
     t.datetime "created_at", null: false
     t.text "error"
+    t.bigint "fill_form_prompt_id"
     t.jsonb "filled_form_data"
     t.jsonb "form_data"
+    t.bigint "generate_cv_prompt_id"
     t.text "raw_cv"
     t.bigint "source_profile_id", null: false
     t.integer "status", default: 0, null: false
@@ -68,10 +70,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
     t.bigint "user_profile_id", null: false
     t.bigint "vacancy_id", null: false
     t.index ["ai_integration_id"], name: "index_applies_on_ai_integration_id"
+    t.index ["fill_form_prompt_id"], name: "index_applies_on_fill_form_prompt_id"
+    t.index ["generate_cv_prompt_id"], name: "index_applies_on_generate_cv_prompt_id"
     t.index ["source_profile_id"], name: "index_applies_on_source_profile_id"
     t.index ["user_id"], name: "index_applies_on_user_id"
     t.index ["user_profile_id"], name: "index_applies_on_user_profile_id"
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
+  end
+
+  create_table "prompts", force: :cascade do |t|
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.string "name", default: "", null: false
+    t.integer "prompt_type", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id"], name: "index_prompts_on_user_id"
   end
 
   create_table "solid_cable_messages", force: :cascade do |t|
@@ -241,6 +255,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
     t.string "avatar_url"
     t.datetime "created_at", null: false
     t.bigint "default_ai_integration_id"
+    t.bigint "default_fill_form_prompt_id"
+    t.bigint "default_generate_cv_prompt_id"
     t.bigint "default_profile_id"
     t.bigint "default_source_profile_id"
     t.jsonb "default_vacancy_search"
@@ -250,6 +266,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
     t.string "provider", null: false
     t.string "uid", null: false
     t.datetime "updated_at", null: false
+    t.index ["default_fill_form_prompt_id"], name: "index_users_on_default_fill_form_prompt_id"
+    t.index ["default_generate_cv_prompt_id"], name: "index_users_on_default_generate_cv_prompt_id"
     t.index ["default_source_profile_id"], name: "index_users_on_default_source_profile_id"
     t.index ["email"], name: "index_users_on_email"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
@@ -274,10 +292,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_integrations", "users"
   add_foreign_key "applies", "ai_integrations"
+  add_foreign_key "applies", "prompts", column: "fill_form_prompt_id"
+  add_foreign_key "applies", "prompts", column: "generate_cv_prompt_id"
   add_foreign_key "applies", "source_profiles"
   add_foreign_key "applies", "user_profiles"
   add_foreign_key "applies", "users"
   add_foreign_key "applies", "vacancies"
+  add_foreign_key "prompts", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
@@ -288,6 +309,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_003417) do
   add_foreign_key "source_profiles", "users"
   add_foreign_key "user_profiles", "users"
   add_foreign_key "users", "ai_integrations", column: "default_ai_integration_id"
+  add_foreign_key "users", "prompts", column: "default_fill_form_prompt_id"
+  add_foreign_key "users", "prompts", column: "default_generate_cv_prompt_id"
   add_foreign_key "users", "source_profiles", column: "default_source_profile_id"
   add_foreign_key "users", "user_profiles", column: "default_profile_id"
   add_foreign_key "vacancies", "sources"

@@ -5,10 +5,13 @@ class User < ApplicationRecord
   has_many :ai_integrations, dependent: :destroy
   has_many :applies, dependent: :destroy
   has_many :source_profiles, dependent: :destroy
+  has_many :prompts, dependent: :destroy
 
   belongs_to :default_profile, class_name: 'UserProfile', optional: true
   belongs_to :default_ai_integration, class_name: 'AiIntegration', optional: true
   belongs_to :default_source_profile, class_name: 'SourceProfile', optional: true
+  belongs_to :default_fill_form_prompt, class_name: 'Prompt', optional: true
+  belongs_to :default_generate_cv_prompt, class_name: 'Prompt', optional: true
 
   has_one_attached :avatar do |attachable|
     attachable.variant :thumb, resize_to_fill: [ 64, 64 ], format: :webp
