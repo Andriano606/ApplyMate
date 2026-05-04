@@ -61,9 +61,15 @@ class Apply::Ai::Prompt::Djinni::FillForm < ApplyMate::Ai::Prompt::Base
       line
     end.compact.join("\n")
 
-    PROMPT_TEMPLATE
+    template
       .sub('PLACEHOLDER_VACANCY_CONTEXT', vacancy_context)
       .sub('PLACEHOLDER_USER_EXPERIENCE', user_experience)
       .sub('PLACEHOLDER_FORM_FIELDS', fields_info)
+  end
+
+  private
+
+  def template
+    @apply.fill_form_prompt&.content || PROMPT_TEMPLATE
   end
 end

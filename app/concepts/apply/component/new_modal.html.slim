@@ -35,3 +35,21 @@
         value_method: :id, \
         include_blank: I18n.t('apply.new.form.select_integration'), \
         label: I18n.t('apply.new.form.ai_integration')
+
+    = modal.form.input :fill_form_prompt_id, \
+        as: :select, \
+        wrapper: :select, \
+        collection: current_user.prompts.fill_form, \
+        label_method: :name, \
+        value_method: :id, \
+        include_blank: I18n.t('apply.new.form.select_fill_form_prompt'), \
+        label: I18n.t('apply.new.form.fill_form_prompt')
+
+    = modal.form.input :generate_cv_prompt_id, \
+        as: :select, \
+        wrapper: :select, \
+        collection: current_user.prompts.generate_cv, \
+        label_method: :name, \
+        value_method: :id, \
+        include_blank: I18n.t('apply.new.form.select_generate_cv_prompt'), \
+        label: I18n.t('apply.new.form.generate_cv_prompt')

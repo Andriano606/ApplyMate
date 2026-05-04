@@ -209,6 +209,34 @@ Always call `AiHandler` from an operation, not directly from a controller or job
 
 ---
 
+## DB-backed Prompt Templates
+
+Prompt templates are stored in the `Prompt` model (`app/models/prompt.rb`) so users can customise them without a deploy. Each user has one prompt per type (`fill_form`, `generate_cv`).
+
+**Pattern:** keep the `PROMPT_TEMPLATE` constant as a fallback, add a private `template` method that looks up the user's DB record:
+
+```ruby
+def call
+  template
+    .sub('PLACEHOLDER_FOO', foo_value)
+    .sub('PLACEHOLDER_BAR', bar_value)
+end
+
+private
+
+def template
+  @apply.user.prompts.find_by(prompt_type: :fill_form)&.content || PROMPT_TEMPLATE
+end
+```
+
+Use `@apply.user` (direct FK on `applies.user_id`) — not `@apply.user_profile.user`.
+
+**Validation:** `Prompt::REQUIRED_PLACEHOLDERS` maps each type to the placeholder strings that must appear in the content. The model validates this on save.
+
+**When adding a new prompt type:**
+1. Add the type to `Prompt.enum :prompt_type` and `REQUIRED_PLACEHOLDERS` in `app/models/prompt.rb`.
+2. Add a `template` private method to the prompt class following the pattern above.
+
 ## Adding a New Prompt + Schema Pair
 
 1. Create `app/concepts/<resource>/ai/prompt/<source>/<action>.rb` — subclass `ApplyMate::Ai::Prompt::Base`.

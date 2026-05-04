@@ -103,6 +103,34 @@ For AR associations, pass a scope directly:
     label: I18n.t('widget.form.user_profile')
 ```
 
+## Radio button helper
+
+The `radio_button` helper (from `ApplyMate::Component::Helper`) renders a styled card-style radio button. It is **not** a simple_form input — use it instead of `f.input :field, as: :radio_buttons` when you need the card UI (used in source_profile, ai_integration, prompt forms).
+
+**Always provide `icon_name:`** — the helper requires it.
+
+```slim
+.flex.gap-3.w-full
+  - Prompt.prompt_types.keys.each do |type|
+    = radio_button(form: modal.form,
+            attribute: :prompt_type,
+            value: type,
+            label: I18n.t("prompt.types.#{type}"),
+            icon_name: :external_link,
+            input_html: { data: { action: 'change->turbo-form#update' } })
+```
+
+| Param | Required | Purpose |
+|-------|----------|---------|
+| `form:` | yes | The form builder object |
+| `attribute:` | yes | Model attribute name (symbol) |
+| `value:` | yes | Value for this option |
+| `label:` | yes | Human-readable label text |
+| `icon_name:` | **yes** | Icon name (`:external_link`, `:lock_closed`, etc.) — helper raises without it |
+| `input_html:` | no | HTML attrs on the underlying radio input |
+
+Add `data: { action: 'change->turbo-form#update' }` via `input_html:` when the selection should trigger a form re-render.
+
 ## Turbo form modal
 
 Use the `turbo_form_modal` helper for modal create/edit forms. The `modal.form` accessor is the form object:

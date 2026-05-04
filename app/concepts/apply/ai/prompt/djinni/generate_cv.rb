@@ -18,9 +18,8 @@ class Apply::Ai::Prompt::Djinni::GenerateCv < ApplyMate::Ai::Prompt::Base
     ATS Optimization: Використовуй ключові слова з опису вакансії, але вплітай їх природно. Використовуй стандартні заголовки секцій (Experience, Skills, Education).
     ATS-friendly Структура: Використовуй лише одну колонку. Ніяких іконок, таблиць, графіків чи складного дизайну. Тільки чистий текст, який ідеально конвертується в PDF.
     Дзеркальний метод (Keyword Matching): Проаналізуй текст вакансії. Якщо там вказано "Ruby on Rails 7+", використовуй саме таке формулювання. Не скорочуй і не змінюй назви технологій. Використовуй точні збіги ключових слів.
-    Метрики та Досягнення (Quantifiable Results): Кожен пункт досвіду має містити конкретні цифри (%, $, ms, кількість користувачів). Вигадай правдоподібні досягнення, базуючись на моєму досвіді: наприклад, "зменшив час відгуку на 30%", "збільшив покриття тестами до 100%", "прискорив CI/CD у 2 рази".
-    Проекти як Досвід: Якщо у мене бракує комерційного досвіду в певній технології, що є у вакансії, виділи мої складні проекти (маркетплейси, автоматизації) як повноцінні кейси в розділі "Experience", описуючи їх через бізнес-результати.
-    Achievements (Quantifiable Results): Замість простого опису обов'язків, вигадай та сформулюй досягнення за моделлю Google XYZ Formula: "Виконав [X], що вимірюється через [Y], шляхом впровадження [Z]".
+    Метрики та Досягнення (Quantifiable Results): Кожен пункт досвіду має містити конкретні цифри (%, $, ms, кількість користувачів).
+    Achievements (Quantifiable Results): Замість простого опису обов'язків, сформулюй досягнення за моделлю Google XYZ Formula: "Виконав [X], що вимірюється через [Y], шляхом впровадження [Z]".
     Приклад: "Оптимізував час відгуку API на 40% (Y) шляхом впровадження кешування Redis та рефакторингу важких запитів (Z)".
     High-Impact Verbs: Починай кожне речення з сильних дієслів: Spearheaded, Engineered, Orchestrated, Automated, Scaled.
     Professional Summary: Напиши потужний вступ (3-4 речення), який позиціонує мене як senior-спеціаліста, що вирішує бізнес-проблеми, а не просто пише код.
@@ -39,9 +38,15 @@ class Apply::Ai::Prompt::Djinni::GenerateCv < ApplyMate::Ai::Prompt::Base
   end
 
   def call
-    PROMPT_TEMPLATE
+    template
       .sub('PLACEHOLDER_USER_PROFILE', @apply.user_profile.cv)
       .sub('PLACEHOLDER_VACANCY_TITLE', @apply.vacancy.title.to_s)
       .sub('PLACEHOLDER_VACANCY_DESCRIPTION', [ @apply.vacancy.description, @apply.vacancy.details ].select(&:present?).join("\n\n"))
+  end
+
+  private
+
+  def template
+    @apply.generate_cv_prompt&.content || PROMPT_TEMPLATE
   end
 end

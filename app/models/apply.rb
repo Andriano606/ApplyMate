@@ -6,6 +6,8 @@ class Apply < ApplicationRecord
   belongs_to :user_profile
   belongs_to :ai_integration
   belongs_to :source_profile
+  belongs_to :fill_form_prompt, class_name: 'Prompt', optional: true
+  belongs_to :generate_cv_prompt, class_name: 'Prompt', optional: true
 
   validate :source_must_match
 

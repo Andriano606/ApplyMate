@@ -90,6 +90,8 @@ add_errors(model.errors)                       # bulk-copy from any AR errors ob
 
 Raising `ActiveRecord::RecordInvalid` anywhere inside `perform!` exits the operation cleanly — errors are copied to `result.errors` and `result.failure?` becomes true.
 
+**Only `errors[:base]` is visible in the UI.** `turbo_form_modal` renders `f.object.errors[:base].first` as an alert banner — errors on any other attribute (e.g. `errors[:user_id]`) are silently swallowed. Model-level validations that use `validates :field, uniqueness: ...` add errors to that field, not `:base`. Use a custom `validate` method and `errors.add(:base, ...)` for any cross-field or ownership constraint that must surface to the user. See `.ai/docs/models_and_db.md`.
+
 ## Form Object Integration
 
 ```ruby
@@ -150,7 +152,10 @@ end
 
 ### New (form prep)
 
+The basic skeleton works for simple forms. **If the form contains any field that triggers `turbo-form#update` (radio buttons, dependent selects, etc.), the `New` operation must also read params and sync them to the model.** Without this, every re-render rebuilds a blank model, so radio buttons never appear selected and dependent sections never update.
+
 ```ruby
+# Simple form — no turbo-form re-renders needed
 class Widget::Operation::New < ApplyMate::Operation::Base
   def perform!(params:, current_user:, **)
     self.model = Widget.new
@@ -158,6 +163,24 @@ class Widget::Operation::New < ApplyMate::Operation::Base
   end
 end
 ```
+
+```ruby
+# Form with radio buttons / dependent fields — must sync params on re-render
+class Widget::Operation::New < ApplyMate::Operation::Base
+  def perform!(params:, current_user:, **)
+    self.model = current_user.widgets.build
+
+    if params[:widget].present?
+      form_object = Widget::FormObject::Create.new(params[:widget])
+      form_object.sync_to model
+    end
+
+    authorize! model, :new?
+  end
+end
+```
+
+Use `form_object.some_field ||= default_value` after `sync_to` to pre-select a default on first open (when params are absent).
 
 ### Create
 

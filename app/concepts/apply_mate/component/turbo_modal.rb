@@ -6,6 +6,9 @@ class ApplyMate::Component::TurboModal < ApplyMate::Component::Base
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    half: 'max-w-[50vw]',
     full: 'max-w-full mx-4'
   }.freeze
 

@@ -83,6 +83,15 @@ export default class extends Controller {
     formData.set('action_initiator_name', target.name);
     formData.delete('_method');
 
+    // Collect names of inputs marked data-turbo-form-exclude — omit from GET params
+    const excludedNames = new Set<string>();
+    form
+      .querySelectorAll<HTMLElement>('[data-turbo-form-exclude]')
+      .forEach((el) => {
+        const name = (el as HTMLInputElement).name;
+        if (name) excludedNames.add(name);
+      });
+
     // Parse existing URL to extract base path and existing query parameters
     const [basePath, existingQuery] = this.#formGetAction.split('?');
     const params = new URLSearchParams(existingQuery || '');
@@ -91,15 +100,15 @@ export default class extends Controller {
     // form values. Using append (not set) preserves multi-value fields like material_ids[].
     const formKeys = new Set<string>();
     formData.forEach((value, key) => {
-      if (!(value instanceof File)) formKeys.add(key);
+      if (!(value instanceof File) && !excludedNames.has(key))
+        formKeys.add(key);
     });
     formKeys.forEach((key) => params.delete(key));
 
     // Add form data to params (will override existing params with same key)
     formData.forEach((value, key) => {
-      if (value instanceof File) {
-        // It is not possible to do form update with files, therefore we ignore the file values. If you need the
-        // file to persist between form updates consider adding 'data-turbo-permanent' to your input.
+      if (value instanceof File || excludedNames.has(key)) {
+        // Files can't be serialized; excluded inputs are intentionally omitted from the GET request.
       } else {
         params.append(key, value.toString());
       }

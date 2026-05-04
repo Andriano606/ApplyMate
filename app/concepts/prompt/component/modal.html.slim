@@ -1,0 +1,31 @@
+- action = @prompt.new_record? ? :new : :edit
+= turbo_form_modal( \
+    model: @prompt, \
+    endpoint: @prompt, \
+    header_text: I18n.t("prompt.#{action}.title"), \
+    submit_text: I18n.t("prompt.#{action}.submit"), \
+    size: :half) do |modal|
+
+  .flex.gap-3.w-full.mb-4
+    - Prompt.prompt_types.keys.each do |type|
+      = radio_button(form: modal.form,
+              attribute: :prompt_type,
+              value: type,
+              label: I18n.t("prompt.types.#{type}"),
+              icon_name: PROMPT_TYPE_UI[type][:icon_name],
+              input_html: { data: { action: 'change->turbo-form#update' } })
+
+  = modal.form.input :name, label: I18n.t('prompt.form.name')
+
+  - if required_placeholders.any?
+    .mb-3.p-3.bg-amber-50.rounded-lg.border.border-amber-200
+      p.text-xs.font-semibold.text-amber-800.mb-1 = I18n.t('prompt.form.required_placeholders_label')
+      ul.list-none.flex.flex-wrap.gap-2
+        - required_placeholders.each do |ph|
+          li
+            code.text-xs.bg-amber-100.text-amber-900.px-1.py-0.5.rounded = ph
+
+  = modal.form.input :content,
+      as: :text,
+      label: I18n.t('prompt.form.content'),
+      input_html: { rows: 14, class: 'font-mono text-sm', data: { turbo_form_exclude: true } }

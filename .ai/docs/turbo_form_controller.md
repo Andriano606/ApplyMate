@@ -53,6 +53,20 @@ def perform!(params:, current_user:, **)
 end
 ```
 
+## Excluding inputs from the GET request
+
+Add `data-turbo-form-exclude` to any input that should **not** be serialised into the GET params on `update`. The field value is still submitted normally on the real form POST/PATCH — it is only omitted from live re-render requests.
+
+Typical use: large textarea content that would bloat the URL but doesn't drive any conditional rendering.
+
+```slim
+= f.input :content,
+    as: :text,
+    input_html: { data: { turbo_form_exclude: true } }
+```
+
+Rails renders this as `data-turbo-form-exclude="true"` on the `<textarea>`.
+
 ## Custom fetch URL
 
 If the re-render target differs from the form action (e.g. a search endpoint):
