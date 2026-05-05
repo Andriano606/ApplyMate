@@ -16,13 +16,13 @@ services:
     ports:
       - "6081:6080"          # noVNC web → відкрий http://localhost:6080/vnc.html
       - "5901:5900"          # VNC (для VNC-клієнтів типу RealVNC/TigerVNC)
-      - "9222:9222"          # Chrome DevTools Protocol
+      - "9224:9222"          # Chrome DevTools Protocol
     environment:
       - SCREEN_WIDTH=1920
       - SCREEN_HEIGHT=1080
       - SCREEN_DEPTH=24
       - VNC_PASSWORD=        # Встанови пароль або залиш порожнім
-      - EXTERNAL_CHROME_HOST=localhost:9222
+      - EXTERNAL_CHROME_HOST=localhost:9224
     volumes:
       - ./scripts:/app/scripts   # Монтуй свої Python скрипти сюди
     security_opt:
