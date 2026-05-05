@@ -15,7 +15,7 @@ class Apply::Operation::Ai::FillForm < ApplyMate::Operation::Base
       filled_form_data = merge_form(apply.form_data, filled_form_hash)
       apply.update!(filled_form_data:, status: :pending)
     else
-      apply.update!(status: :failed_filling_form, error: "AI returned empty payload or invalid JSON: #{ai_values_json}")
+      apply.update!(status: :failed_filling_form, error: "AI returned empty payload or invalid JSON: #{filled_form_hash.inspect}")
       raise 'Invalid AI response'
     end
 
