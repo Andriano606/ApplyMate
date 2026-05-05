@@ -1,8 +1,13 @@
 #!/bin/bash
 set -e
 
+# Stale lock from a previous container restart (Docker preserves the writable
+# layer on restart, so /tmp/.X99-lock survives and makes Xvfb die immediately).
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
+
 Xvfb :99 -screen 0 "${SCREEN_WIDTH}x${SCREEN_HEIGHT}x${SCREEN_DEPTH}" &
-sleep 1
+# Wait until the display is actually ready instead of relying on a fixed sleep.
+until xdpyinfo -display :99 >/dev/null 2>&1; do sleep 0.1; done
 DISPLAY=:99 fluxbox &
 
 if [ -n "$VNC_PASSWORD" ]; then
