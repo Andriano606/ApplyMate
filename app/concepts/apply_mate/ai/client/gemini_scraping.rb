@@ -12,34 +12,19 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
     context = @browser.contexts.create
     page = context.create_page
     navigate_to(page, 'https://gemini.google.com/app')
-
-    # Wait for the input field to be available
-    # Using exact class match as requested
     input_selector = 'div.ql-editor[contenteditable="true"]'
     wait_for_selector(page, input_selector, timeout: 20)
-
-    # Typing the text immediately
     input_field = page.at_css(input_selector)
     page.execute('arguments[0].innerText = arguments[1]', input_field, text)
     input_field.type(:Enter)
-
-    # Wait for the button to change state.
-    # From "stop" to "disabled".
-
-    # Selector for exact class match:
-    # stop_selector: selector showing during processing by chat
-    # stop_selector = '.bard-avatar.thinking'
-    # finished_selector: appear when finished
-    finished_selector = '.disabled button.send-button.submit'
-
-    # Then wait for it to finish (finished/disabled class appears)
-    wait_for_selector(page, finished_selector, timeout: 120)
-
-    # Extract content from the last markdown panel
-    # class="markdown markdown-main-panel enable-updated-hr-color"
+    finished_selector1 = '.thinking'
+    wait_for_selector(page, finished_selector1, timeout: 120)
+    finished_selector2 = '.disabled button.send-button.submit'
+    wait_for_selector(page, finished_selector2, timeout: 120)
+    human_scroll(page)
+    sleep(1)
+    human_scroll(page)
     content_selector = '.markdown.markdown-main-panel.enable-updated-hr-color'
-
-    # Extract the last element from the array as requested
     elements = page.css(content_selector)
     if elements.any?
       elements.last.inner_text.strip
@@ -67,11 +52,33 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   def wait_for_selector(page, selector, timeout: 5)
     start_time = Time.now
     loop do
+      human_scroll(page)
+
       return true if page.at_css(selector)
 
       raise Ferrum::TimeoutError if Time.now - start_time > timeout
 
       sleep 0.2
+    end
+  end
+
+  def human_scroll(page)
+    anchor = page.at_css('.user-query-bubble-with-background')
+    if anchor
+      box = page.evaluate('document.querySelector(".user-query-bubble-with-background").getBoundingClientRect().toJSON()')
+      cx = box['x'] + box['width'] / 2
+      cy = box['y'] + box['height'] / 2
+    else
+      cx, cy = 960, 540
+    end
+    page.mouse.move(x: cx, y: cy)
+    8.times do |i|
+      page.mouse.scroll_to(cx, cy + i * rand(80..150))
+      sleep rand(0.03..0.08)
+    end
+    8.times do |i|
+      page.mouse.scroll_to(cx, cy + (7 - i) * rand(80..150))
+      sleep rand(0.03..0.08)
     end
   end
 
