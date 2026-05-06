@@ -12,7 +12,7 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   # CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
   # CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
 
-  def initialize
+  def initialize(**)
     @browser = Ferrum::Browser.new(
       # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
@@ -34,15 +34,27 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
     finished_selector2 = '.disabled button.send-button.submit'
     wait_for_selector(page, finished_selector2, timeout: 120)
     human_scroll(page)
+    human_wheel(page)
     sleep(1)
     human_scroll(page)
+    human_wheel(page)
     content_selector = '.markdown.markdown-main-panel.enable-updated-hr-color'
     elements = page.css(content_selector)
-    if elements.any?
-      elements.last.inner_text.strip
+    result = if elements.any?
+                if elements.last.inner_text.strip == ''
+                  wait_for_selector(page, 'a[mat-icon-button]:not([disabled])', timeout: 120)
+                  page.at_css('a[mat-icon-button]:not([disabled])').click()
+                  wait_for_selector(page, "[data-test-id='cancel-button']", timeout: 120)
+                  page.at_css("[data-test-id='cancel-button']").click()
+                end
+                elements.last.inner_text.strip
     else
-      ''
+                ''
     end
+    if result.blank?
+      raise '[ApplyMate::Ai::Client::GeminiScraping] No results found'
+    end
+    result
   rescue StandardError => e
     Rails.logger.error "[ApplyMate::Ai::Client::GeminiScraping] Error: #{e.message}"
     raise e
@@ -65,13 +77,34 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
     start_time = Time.now
     loop do
       human_scroll(page)
+      human_wheel(page)
 
       return true if page.at_css(selector)
 
-      raise Ferrum::TimeoutError if Time.now - start_time > timeout
+      if Time.now - start_time > timeout
+        raise Ferrum::TimeoutError
+      end
 
       sleep 0.2
     end
+  end
+
+  def human_wheel(page)
+    x = rand(400..1200)
+    y = rand(300..800)
+    delta = rand(100..400)
+
+    page.command(
+      'Input.dispatchMouseEvent',
+      type: 'mouseWheel',
+      x: x,
+      y: y,
+      deltaX: 0,
+      deltaY: delta,
+      pointerType: 'mouse'
+    )
+
+    sleep(rand(0.1..0.4))
   end
 
   def human_scroll(page)
