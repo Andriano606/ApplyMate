@@ -18,7 +18,7 @@
         .w-fit = badge(label: @vacancy.source.name, color: :green, variant: :pill)
 
     - if signed_in?
-      = Apply::TurboHandler::StatusUpdate.stream_from(@vacancy, helpers)
+      = Apply::TurboHandler::StatusUpdate.stream_from(@vacancy, current_user, helpers)
       = render Apply::Component::StatusBadge.new(vacancy: @vacancy)
 
   .flex.flex-col.gap-3.px-5.pt-3.pb-4.flex-1

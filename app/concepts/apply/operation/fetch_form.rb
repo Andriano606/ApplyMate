@@ -8,7 +8,7 @@ class Apply::Operation::FetchForm < ApplyMate::Operation::Base
     return if apply.error.present?
 
     apply.update!(status: :fetching_form)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
 
     source = apply.vacancy.source
     client = source.client.constantize.new
@@ -25,10 +25,10 @@ class Apply::Operation::FetchForm < ApplyMate::Operation::Base
       raise 'Form not found'
     end
 
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
   rescue StandardError => e
     apply.update!(status: :failed_fetching_form, error: e.message)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
     raise
   end
 end

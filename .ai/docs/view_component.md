@@ -118,7 +118,56 @@ end
 | `ApplyMate::Component::IconHelper` | `icon(:name, size:)` |
 | `ApplyMate::Component::TableHelper` | `edit_table_button`, `delete_table_button`, etc. |
 | `ApplyMate::Component::AdminMethodsHelper` | `available_for :admin` class macro + `render?` guard |
-| `current_user` | Current signed-in user |
+| `current_user` | Current signed-in user — **not available in `initialize`** |
+
+## `current_user` and `before_render`
+
+`current_user` uses `view_context`, which is only available during rendering — **not during `initialize`**. Do not call it in `initialize`.
+
+For logic that needs `current_user` (e.g. scoping a DB query), use `before_render`:
+
+```ruby
+def initialize(vacancy:, **)
+  @vacancy = vacancy
+end
+
+def before_render
+  @apply = @vacancy.applies.where(user: current_user).last
+end
+```
+
+### Components rendered via `ApplicationController.renderer` (broadcasts)
+
+`ApplicationController.renderer.render_to_string(MyComponent.new(...))` has **no request context** — `current_user` returns `nil`. Components rendered this way must not rely on `current_user`.
+
+**Pattern:** accept the record directly as a keyword argument (bypassing the lookup), and derive the user from it:
+
+```ruby
+LAZY = :lazy
+
+def initialize(vacancy:, apply: LAZY, **)
+  @vacancy = vacancy
+  @apply_preset = apply
+end
+
+def before_render
+  # In a normal request, look up by current_user.
+  # In a broadcast (ApplicationController.renderer), apply: is passed directly.
+  @apply = (@apply_preset == LAZY) ? @vacancy.applies.where(user: current_user).last : @apply_preset
+end
+
+private
+
+def frame_user
+  # @apply.user avoids calling current_user when apply is known (e.g. during broadcast)
+  @apply.nil? ? current_user : @apply.user
+end
+```
+
+Broadcast call passes the record explicitly:
+```ruby
+Apply::Component::StatusBadge.new(vacancy: vacancy, apply: apply)  # no current_user needed
+```
 
 ## Slots
 

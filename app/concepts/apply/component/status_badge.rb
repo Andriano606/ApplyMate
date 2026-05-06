@@ -68,9 +68,15 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
     }
   }.freeze
 
-  def initialize(vacancy:, **)
-    @apply = vacancy.applies.last
+  LAZY = :lazy
+
+  def initialize(vacancy:, apply: LAZY, **)
     @vacancy = vacancy
+    @apply_preset = apply
+  end
+
+  def before_render
+    @apply = (@apply_preset == LAZY) ? @vacancy.applies.where(user: current_user).last : @apply_preset
   end
 
   private
@@ -109,5 +115,9 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
 
   def label
     @apply.nil? ? I18n.t('apply.new.button') : I18n.t("apply.status.#{@apply.status}")
+  end
+
+  def frame_user
+    @apply.nil? ? current_user : @apply.user
   end
 end

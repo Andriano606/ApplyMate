@@ -46,6 +46,6 @@ class Apply::Operation::Ai::GeneratePdfCv < ApplyMate::Operation::Base
   end
 
   def broadcast
-    Apply::TurboHandler::StatusUpdate.broadcast(model.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(model)
   end
 end

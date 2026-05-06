@@ -26,8 +26,8 @@ class Apply::Component::Table < ApplyMate::Component::Base
 
     table.add_column(header: I18n.t('apply.index.table.status')) do |apply|
       helpers.safe_join([
-        Apply::TurboHandler::StatusUpdate.stream_from(apply.vacancy, helpers),
-        render(Apply::Component::StatusBadge.new(vacancy: apply.vacancy))
+        Apply::TurboHandler::StatusUpdate.stream_from(apply.vacancy, current_user, helpers),
+        render(Apply::Component::StatusBadge.new(vacancy: apply.vacancy, apply: apply))
       ])
     end
 

@@ -7,7 +7,7 @@ class Apply::Operation::Ai::FillForm < ApplyMate::Operation::Base
     return if apply.error.present? || apply.form_data.blank?
 
     apply.update!(status: :filling_form)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
 
     filled_form_hash = call_ai(apply)
 
@@ -19,10 +19,10 @@ class Apply::Operation::Ai::FillForm < ApplyMate::Operation::Base
       raise 'Invalid AI response'
     end
 
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
   rescue StandardError => e
     apply.update!(status: :failed_filling_form, error: e.message)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
     raise
   end
 

@@ -6,7 +6,7 @@ class Apply::Operation::CheckApplyable < ApplyMate::Operation::Base
     self.model = apply
 
     apply.update!(status: :checking_applyble)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
 
     source = apply.vacancy.source
     client = source.client.constantize.new
@@ -23,10 +23,10 @@ class Apply::Operation::CheckApplyable < ApplyMate::Operation::Base
     end
 
     apply.update!(applyble: true, status: :pending)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
   rescue StandardError => e
     apply.update!(status: :failed_checking_applyble, error: e.message)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply.vacancy)
+    Apply::TurboHandler::StatusUpdate.broadcast(apply)
     raise
   end
 end
