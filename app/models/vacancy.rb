@@ -10,7 +10,7 @@ class Vacancy < ApplicationRecord
 
   index_name "vacancies_#{Rails.env}"
 
-  settings index: { number_of_shards: 1, number_of_replicas: 0 } do
+  settings index: { number_of_shards: 1, number_of_replicas: 0, max_result_window: 50_000 } do
     mappings dynamic: false do
       indexes :title,        type: :text, analyzer: :standard do
         indexes :keyword, type: :keyword

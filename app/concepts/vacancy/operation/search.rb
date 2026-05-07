@@ -40,10 +40,11 @@ class Vacancy::Operation::Search < ApplyMate::Operation::Base
 
   def build_body(include_tags:, include_ops:, exclude_tags:, page:, per_page:)
     {
-      query: { bool: { must: [ build_include(include_tags, include_ops) ], must_not: build_excludes(exclude_tags) } },
-      sort:  [ { vacancy_id: { order: 'desc' } } ],
-      from:  (page - 1) * per_page,
-      size:  per_page
+      query:            { bool: { must: [ build_include(include_tags, include_ops) ], must_not: build_excludes(exclude_tags) } },
+      sort:             [ { vacancy_id: { order: 'desc' } } ],
+      from:             (page - 1) * per_page,
+      size:             per_page,
+      track_total_hits: true
     }
   end
 
