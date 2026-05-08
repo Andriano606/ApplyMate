@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Apply::Ai::Prompt::Djinni::GenerateCv < ApplyMate::Ai::Prompt::Base
+class Apply::Ai::Prompt::GenerateCv < ApplyMate::Ai::Prompt::Base
   PROMPT_TEMPLATE = <<~PROMPT
     Роль: Ти — професійний Technical Resume Writer з 15-річним досвідом у наймі для Big Tech компаній (Google, Meta, Amazon). Твоє завдання — створити ідеальне, оптимізоване під ATS резюме, яке гарантовано пройде автоматичні фільтри та отримає 95+ match score.
 

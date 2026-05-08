@@ -23,19 +23,23 @@ Operation
 ```
 app/concepts/
   apply_mate/ai/
-    prompt/base.rb             # ApplyMate::Ai::Prompt::Base
-    response_schema/base.rb   # ApplyMate::Ai::ResponseSchema::Base
-    ai_handler.rb             # ApplyMate::Ai::AiHandler
+    prompt/base.rb                          # ApplyMate::Ai::Prompt::Base
+    response_schema/base.rb                # ApplyMate::Ai::ResponseSchema::Base
+    ai_handler.rb                          # ApplyMate::Ai::AiHandler
   apply/ai/
-    prompt/djinni/
-      fill_form.rb            # Apply::Ai::Prompt::Djinni::FillForm
-      generate_cv.rb          # Apply::Ai::Prompt::Djinni::GenerateCv
-    response_schema/djinni/
-      fill_form.rb            # Apply::Ai::ResponseSchema::Djinni::FillForm
-      generate_cv.rb          # Apply::Ai::ResponseSchema::Djinni::GenerateCv
+    prompt/
+      fill_form.rb                         # Apply::Ai::Prompt::FillForm        (shared)
+      generate_cv.rb                       # Apply::Ai::Prompt::GenerateCv      (shared)
+      check_form_page.rb                   # Apply::Ai::Prompt::CheckFormPage   (shared)
+      browser/check_submit_result.rb       # Apply::Ai::Prompt::Browser::CheckSubmitResult
+    response_schema/
+      fill_form.rb                         # Apply::Ai::ResponseSchema::FillForm
+      generate_cv.rb                       # Apply::Ai::ResponseSchema::GenerateCv
+      check_form_page.rb                   # Apply::Ai::ResponseSchema::CheckFormPage
+      browser/check_submit_result.rb       # Apply::Ai::ResponseSchema::Browser::CheckSubmitResult
 ```
 
-Namespace convention: `<Resource>::Ai::Prompt::<Source>::<Action>` and `<Resource>::Ai::ResponseSchema::<Source>::<Action>`, where `<Source>` is the job board (e.g. `Djinni`).
+Namespace convention: prompts and schemas shared across job boards live directly at `Apply::Ai::Prompt::<Action>` — **no source namespace**. Only add a source sub-namespace (e.g. `Apply::Ai::Prompt::Djinni::`) when the logic is genuinely source-specific and will never be reused.
 
 ---
 
@@ -239,16 +243,17 @@ Use `@apply.user` (direct FK on `applies.user_id`) — not `@apply.user_profile.
 
 ## Adding a New Prompt + Schema Pair
 
-1. Create `app/concepts/<resource>/ai/prompt/<source>/<action>.rb` — subclass `ApplyMate::Ai::Prompt::Base`.
-2. Create `app/concepts/<resource>/ai/response_schema/<source>/<action>.rb` — subclass `ApplyMate::Ai::ResponseSchema::Base`, implement both class methods.
-3. Call `ApplyMate::Ai::AiHandler.call(...)` from the operation, passing the new prompt and schema.
-4. The operation receives whatever `extract` returns — handle accordingly.
+1. Decide namespace: shared across sources → `Apply::Ai::Prompt::<Action>`; source-specific → `Apply::Ai::Prompt::<Source>::<Action>`.
+2. Create the prompt file — subclass `ApplyMate::Ai::Prompt::Base`.
+3. Create the response schema file — subclass `ApplyMate::Ai::ResponseSchema::Base`, implement both class methods.
+4. Call `ApplyMate::Ai::AiHandler.call(...)` from the operation, passing the new prompt and schema.
+5. The operation receives whatever `extract` returns — handle accordingly.
 
 ## Skeleton
 
 ```ruby
-# app/concepts/<resource>/ai/prompt/<source>/<action>.rb
-class <Resource>::Ai::Prompt::<Source>::<Action> < ApplyMate::Ai::Prompt::Base
+# app/concepts/<resource>/ai/prompt/<action>.rb  (shared) or prompt/<source>/<action>.rb (source-specific)
+class <Resource>::Ai::Prompt::<Action> < ApplyMate::Ai::Prompt::Base
   PROMPT_TEMPLATE = <<~PROMPT
     ...
     PLACEHOLDER_FOO
@@ -266,8 +271,8 @@ class <Resource>::Ai::Prompt::<Source>::<Action> < ApplyMate::Ai::Prompt::Base
   end
 end
 
-# app/concepts/<resource>/ai/response_schema/<source>/<action>.rb
-class <Resource>::Ai::ResponseSchema::<Source>::<Action> < ApplyMate::Ai::ResponseSchema::Base
+# app/concepts/<resource>/ai/response_schema/<action>.rb  (shared) or response_schema/<source>/<action>.rb
+class <Resource>::Ai::ResponseSchema::<Action> < ApplyMate::Ai::ResponseSchema::Base
   def self.format_instructions
     # Tell the AI how to format its output
   end

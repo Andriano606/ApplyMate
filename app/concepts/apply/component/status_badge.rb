@@ -6,17 +6,9 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
       icon: :send,
       color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
     },
-    pending: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :clock
-    },
     generating_cv: {
       color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
       icon: :sparkles
-    },
-    cv_generated: {
-      color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-      icon: :check
     },
     sending_cv: {
       color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
@@ -26,11 +18,11 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
       color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
       icon: :check_circle
     },
-    failed_cv_generation: {
+    failed_generating_cv: {
       color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
       icon: :x_circle
     },
-    failed_cv_sending: {
+    failed_sending_cv: {
       color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
       icon: :x_circle
     },
@@ -47,6 +39,14 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
       icon: :magnifying_glass
     },
     failed_checking_applyble: {
+      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      icon: :x_circle
+    },
+    fetching_apply_type: {
+      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+      icon: :magnifying_glass
+    },
+    failed_fetching_apply_type: {
       color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
       icon: :x_circle
     },
@@ -101,7 +101,7 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
     if @apply.nil?
       STATUS_CONFIG[:not_applied]
     else
-      STATUS_CONFIG[@apply.status.to_sym] || STATUS_CONFIG[:pending]
+      STATUS_CONFIG[@apply.status&.to_sym] || { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', icon: :clock }
     end
   end
 
@@ -114,7 +114,9 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
   end
 
   def label
-    @apply.nil? ? I18n.t('apply.new.button') : I18n.t("apply.status.#{@apply.status}")
+    return I18n.t('apply.new.button') if @apply.nil?
+
+    I18n.t("apply.status.#{@apply.status}", default: '')
   end
 
   def frame_user

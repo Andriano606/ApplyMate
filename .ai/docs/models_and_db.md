@@ -52,3 +52,76 @@ end
 ```
 
 `errors[:base]` is displayed by `turbo_form_modal` via `alert(text: f.object.errors[:base].first, type: :error)`.
+
+## jsonb_accessor — setup and key naming rules
+
+Use `jsonb_accessor` to declare typed accessors for jsonb columns. It resolves types via `ActiveRecord::Type`, not `ActiveModel::Type`.
+
+**Registering a passthrough type for arrays/hashes** — jsonb_accessor 1.4.2 only knows primitive types (`:string`, `:integer`, etc.). For unstructured values (arrays of hashes) register `:value` in an initializer:
+
+```ruby
+# config/initializers/jsonb_accessor_types.rb
+ActiveRecord::Type.register(:value, ActiveModel::Type::Value)
+```
+
+Then use it in the model:
+
+```ruby
+jsonb_accessor :form_data,
+  action:           :string,
+  http_method:      :string,   # see naming rules below
+  submit_selector:  :string,
+  external_url:     :string,
+  trigger_selector: :string,
+  cookies:          :string,
+  inputs:           :value     # Array of hashes — passthrough type
+
+jsonb_accessor :filled_form_data,
+  filled_inputs: :value        # different name avoids clash with form_data.inputs
+```
+
+**Naming rules:**
+- Avoid `method` — it shadows `Object#method` which Rails uses internally. Use `http_method` and rename the JSON key in a migration.
+- When two jsonb columns share the same logical key (e.g. both store `inputs`), give the second column a distinct accessor name (`filled_inputs`). The accessor name IS the JSON key, so a migration is required to rename the existing data.
+
+**Migration to rename a JSON key inside a jsonb column:**
+
+```ruby
+# Rename form_data['method'] → form_data['http_method']
+execute <<~SQL
+  UPDATE applies
+  SET form_data = jsonb_set(form_data - 'method', '{http_method}', form_data->'method')
+  WHERE form_data ? 'method';
+SQL
+```
+
+## Per-resource default (one default per parent per user)
+
+When a user can have multiple records of type X but only one default per source/context, use a boolean column with a partial unique index — **not** a FK column on the user.
+
+```ruby
+# migration
+add_column :source_profiles, :is_default, :boolean, default: false, null: false
+add_index  :source_profiles, [:user_id, :source_id],
+           unique: true,
+           where:  '"is_default" = true',
+           name:   'index_source_profiles_on_user_source_default'
+```
+
+```ruby
+# model
+def self.default_for(user, source)
+  find_by(user: user, source: source, is_default: true)
+end
+
+def set_as_default!
+  SourceProfile.transaction do
+    SourceProfile.where(user: user, source: source, is_default: true)
+                 .where.not(id: id)
+                 .update_all(is_default: false)
+    update!(is_default: true)
+  end
+end
+```
+
+The partial unique index enforces the constraint at the DB level — only one row per `(user_id, source_id)` can have `is_default = true`. Rows with `is_default = false` are unconstrained.

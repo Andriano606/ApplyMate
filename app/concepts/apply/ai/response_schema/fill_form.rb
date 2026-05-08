@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Apply::Ai::ResponseSchema::Djinni::FillForm < ApplyMate::Ai::ResponseSchema::Base
+class Apply::Ai::ResponseSchema::FillForm < ApplyMate::Ai::ResponseSchema::Base
   def self.format_instructions
     <<~INSTRUCTIONS
       Вимоги до формату відповіді:
@@ -12,19 +12,15 @@ class Apply::Ai::ResponseSchema::Djinni::FillForm < ApplyMate::Ai::ResponseSchem
   def self.extract(raw_response)
     return {} if raw_response.blank?
 
-    # Try to find JSON block in markdown
-    match = raw_response.match(/```json\s+(.*?)\s+```/m)
+    match    = raw_response.match(/```json\s+(.*?)\s+```/m)
     json_str = match ? match[1] : raw_response
 
-    # Extract everything from the first { to the last }
     json_match = json_str.match(/(\{.*\}|\[.*\])/m)
-    json_str = json_match ? json_match[0] : json_str
+    json_str   = json_match ? json_match[0] : json_str
 
-    begin
-      JSON.parse(json_str).with_indifferent_access
-    rescue StandardError => e
-      Rails.logger.error("Failed to parse AI response: #{e.message}")
-      raise "Failed to parse AI response: #{e.message}"
-    end
+    JSON.parse(json_str).with_indifferent_access
+  rescue StandardError => e
+    Rails.logger.error("FillForm schema parse error: #{e.message}")
+    raise "Failed to parse AI FillForm response: #{e.message}"
   end
 end

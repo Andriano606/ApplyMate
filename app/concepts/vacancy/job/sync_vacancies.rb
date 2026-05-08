@@ -5,8 +5,7 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
 
   def perform
     Source.all.each do |source|
-      client = source.client.constantize.new
-      vacancies_data = ApplyMate::Scraper::Djinni.new(source, client).fetch_listing
+      vacancies_data = source.scraper.constantize.new(source, ApplyMate::Client::Http.new).fetch_listing
       sync_vacancies(vacancies_data, source)
     end
   end
@@ -20,7 +19,6 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
     current_external_ids = data.map { |d| d[:external_id] }
 
     Vacancy.transaction do
-      # Оновлюємо/створюємо
       Vacancy.upsert_all(
         data.map(&:to_h),
         unique_by: [ :source_id, :external_id ],
@@ -28,30 +26,9 @@ class Vacancy::Job::SyncVacancies < ApplicationJob
         record_timestamps: true
       )
 
-      # Видаляємо старі
       source.vacancies.where.not(external_id: current_external_ids).destroy_all
     end
 
     Vacancy.import batch_size: 500
-  end
-
-  def parse_item(element)
-    header_el = element.at_css('h2.job-item__position')
-    raw_link  = element.at_css('.job-list-item__link, .job_item__header-link')&.[]('href')
-    link      = full_url(raw_link)
-
-    return nil if header_el.blank? || link.blank?
-
-    {
-      source_id:        @source.id,
-      title:            header_el.text.strip,
-      url:              link,
-      description:      sanitize_html(element.at_css('.js-original-text')&.inner_html),
-      company_name:     element.at_css('.small.text-gray-800')&.text&.strip,
-      company_icon_url: element.at_css('img.userpic-image')&.[]('src'),
-      external_id:      link.scan(/\d+/)&.first,
-      created_at:       Time.current, # Потрібно для upsert_all
-      updated_at:       Time.current
-    }
   end
 end

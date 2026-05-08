@@ -57,6 +57,18 @@ div(class=card_class)
         = icon(:paperclip, size: 4)
         = I18n.t('apply.show.download_cv')
 
+  / Submit screenshot
+  - if @apply.screenshot.attached?
+    .px-6.py-4
+      p.text-sm.font-medium.text-gray-500.dark:text-gray-400.mb-3 = I18n.t('apply.show.fields.screenshot')
+      = helpers.link_to helpers.rails_blob_path(@apply.screenshot, disposition: 'inline'),
+              target: '_blank',
+              rel: 'noopener noreferrer' do
+        = helpers.image_tag helpers.rails_blob_path(@apply.screenshot, disposition: 'inline'), \
+            class: 'w-full rounded-lg border border-gray-200 dark:border-gray-600 \
+              shadow-sm hover:opacity-90 transition-opacity', \
+            alt: I18n.t('apply.show.fields.screenshot')
+
   / Form Data
   - if @apply.form_data.present?
     .px-6.py-4
@@ -75,7 +87,7 @@ div(class=card_class)
   .px-6.py-4
     = accordion(title: I18n.t('apply.show.prompt')) do
       .pt-2.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.whitespace-pre-wrap.font-mono
-        = Apply::Ai::Prompt::Djinni::GenerateCv.call(@apply)
+        = Apply::Ai::Prompt::GenerateCv.call(@apply)
 
   / Error
   - if @apply.error.present?
