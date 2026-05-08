@@ -21,6 +21,7 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
 
       body = @client.fetch_body(current_url)
       doc = Nokogiri::HTML(body)
+      body = nil
 
       # Шукаємо елементи вакансій
       nodes = doc.css('.job-list-item, .job-item')
@@ -31,12 +32,16 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
       page_jobs = nodes.map do |element|
         extract_job_data(element)
       end
+      doc = nil
+      nodes = nil
 
       on_batch.call(page_jobs)
       result.concat(Array(format_result.call(page_jobs)))
+      page_jobs = nil
 
       # Пауза від 2 до 5 секунд після кожного успішного запиту
       sleep(rand(2..5))
+      GC.start
 
       page += 1
     end

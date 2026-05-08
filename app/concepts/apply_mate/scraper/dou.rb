@@ -60,10 +60,12 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
       break if body.blank?
 
       data = JSON.parse(body)
+      body = nil
       nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
       break if nodes.empty?
 
       jobs = nodes.map { |el| extract_job_data(el) }.compact
+      nodes = nil
       total_jobs_on_the_page = jobs.count
       jobs.each_with_index do |job, index|
         check_termination!
@@ -76,11 +78,14 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
 
       on_batch.call(jobs)
       result.concat(Array(format_result.call(jobs)))
+      jobs = nil
 
       break if data['last'] == true
 
-      count += (data['num'] || nodes.size)
+      count += (data['num'] || 0)
+      data = nil
       sleep(rand(2..5))
+      GC.start
     end
 
     result
