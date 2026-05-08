@@ -1,13 +1,29 @@
 # frozen_string_literal: true
 
+require 'async'
+
 class Vacancy::Job::SyncVacancies < ApplicationJob
   queue_as :default
 
   def perform
-    Source.all.each do |source|
-      vacancies_data = source.scraper.constantize.new(source, ApplyMate::Client::Http.new).fetch_listing
-      sync_vacancies(vacancies_data, source)
+    started_at = Time.current
+
+    Async do
+      tasks = Source.all.map do |source|
+        Async do
+          client = ApplyMate::Client::AsyncHttp.new
+          begin
+            vacancies_data = source.scraper.constantize.new(source, client).fetch_listing
+            sync_vacancies(vacancies_data, source)
+          ensure
+            client.close
+          end
+        end
+      end
+      tasks.each(&:wait)
     end
+
+    Rails.logger.info "[SyncVacancies] Total time: #{(Time.current - started_at).round(1)}s"
   end
 
   private

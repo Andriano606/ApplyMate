@@ -15,6 +15,20 @@ span class='px-2 py-1 text-xs'
 span class="px-2 py-1 text-xs"
 ```
 
+## Slim dot-shorthand limits with Tailwind
+
+In Slim, the dot-shorthand (`.class-name`) breaks on `/` — Slim treats it as a comment delimiter. Any Tailwind class containing `/` (opacity modifiers, arbitrary fractions) must use an explicit `class=` attribute instead.
+
+```slim
+/ ❌ breaks — Slim stops parsing the tag at the first /
+.bg-gray-800\/50.px-6.py-4
+
+/ ✅ correct — use explicit attribute when any class contains /
+div(class='bg-gray-800/50 px-6 py-4')
+```
+
+Common Tailwind classes that trigger this: `bg-*/50`, `text-black/70`, `ring-white/10`, `from-indigo-500/20`, etc. When in doubt, use `div(class='...')` for any container that mixes opacity-modifier classes with others.
+
 ## Calling Rails helpers in templates
 
 Inside a ViewComponent `.html.slim`, Rails view helpers are **not** in scope by default. Always call them through `helpers.`:

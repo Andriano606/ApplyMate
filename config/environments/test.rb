@@ -58,7 +58,8 @@ Rails.application.configure do
   config.action_controller.raise_on_missing_callback_actions = true
 
   # config.active_record.strict_loading_by_default = true
-  config.active_job.queue_adapter = :async
+  config.active_job.queue_adapter = :test
+  config.active_storage.analyzers = []
 
   # Encryption configuration for tests
   config.active_record.encryption.primary_key = 'test_primary_key_32_chars_long_!'
