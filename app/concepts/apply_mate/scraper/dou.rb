@@ -108,11 +108,11 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   def extract_job_data(element)
     link_el = element.at_css('a.vt')
     title = link_el&.text&.strip
-    path = link_el&.[]('href')
+    path = link_el&.[]('href')&.split('?')&.first
     external_id = path.to_s.match(/\/vacancies\/(\d+)/)&.[](1)
 
     company_el = element.at_css('a.company')
-    company_name = company_el&.children&.select(&:text?)&.map(&:text)&.join&.strip
+    company_name = company_el&.children&.select(&:text?)&.map(&:text)&.join&.squish
 
     ApplyMate::Operation::Struct.new(
       source_id:        @source.id,

@@ -21,12 +21,12 @@ class ApplyMate::Scraper::Base
     raise NotImplementedError
   end
 
-  class TerminationError < StandardError; end
+  class TerminationError < Exception; end
 
   private
 
   def check_termination!
-    return unless Thread.main[:solid_queue_terminating]
+    return unless Thread.main.thread_variable_get(:solid_queue_terminating)
 
     Rails.logger.info 'Termination signal received. Raising error...'
     raise TerminationError, 'Scraper terminated by system'

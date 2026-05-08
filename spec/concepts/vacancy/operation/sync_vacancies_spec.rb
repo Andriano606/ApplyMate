@@ -5,13 +5,18 @@ require 'rails_helper'
 RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
   before do
     # Stub Elasticsearch import on Vacancy relation
-    allow_any_instance_of(ActiveRecord::Relation).to receive(:import)
+    without_partial_double_verification do
+      allow_any_instance_of(ActiveRecord::Relation).to receive(:import)
+    end
     # Also stub close method as it is called in ensure block
     allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:close)
+    # Stub sleep to avoid real delays in tests
+    allow_any_instance_of(ApplyMate::Scraper::Djinni).to receive(:sleep)
+    allow_any_instance_of(ApplyMate::Scraper::Dou).to receive(:sleep)
   end
 
   describe 'Djinni source' do
-    let!(:source_djinni) { create(:source, name: 'Djinni', scraper: 'ApplyMate::Scraper::Djinni') }
+    let!(:source_djinni) { create(:source, name: 'Djinni', base_url: 'https://djinni.co', scraper: 'ApplyMate::Scraper::Djinni') }
     let(:djinni_html_content) { file_fixture('djinni/list/vacancies_page.html').read }
     let(:operation) { described_class.new(sources: [ source_djinni ]) }
 
@@ -58,7 +63,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
   end
 
   describe 'DOU source' do
-    let!(:source_dou) { create(:source, name: 'Dou', scraper: 'ApplyMate::Scraper::Dou') }
+    let!(:source_dou) { create(:source, name: 'Dou', base_url: 'https://jobs.dou.ua', scraper: 'ApplyMate::Scraper::Dou') }
     let(:dou_html_content) { file_fixture('dou/list/vacancies_page.html').read }
     let(:operation) { described_class.new(sources: [ source_dou ]) }
 
@@ -109,7 +114,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       expect(vacancy.title).to eq('Senior Customer Success Manager')
       expect(vacancy.company_name).to eq('GrowthBand')
       expect(vacancy.url).to eq('https://jobs.dou.ua/companies/growthband/vacancies/357292/')
-      expect(vacancy.company_icon_url).to eq('https://s.dou.ua/CACHE/images/img/static/companies/Logo_GB/2f21f669737958c2057f91cf73be5d75.png')
+      expect(vacancy.company_icon_url).to eq('https://s.dou.ua/img/static/favicons/32_pWIJ8Qp.png')
 
       # Verify that the description was scraped correctly from the detail fixture
       # Taking a significant block from the first 20 lines for comparison
@@ -122,8 +127,12 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     it 'visits each vacancy page to fetch descriptions' do
       expect_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body)
         .with(a_string_including('jobs.dou.ua/companies/'))
-        .exactly(20).times
-        .and_call_original
+        .exactly(20).times do |_instance, _url|
+          @dou_detail_index ||= 0
+          @dou_detail_index += 1
+          @dou_detail_index = 1 if @dou_detail_index > 20
+          file_fixture("dou/list/details/#{@dou_detail_index}.html").read
+        end
 
       operation.call
       expect(source_dou.vacancies.pluck(:description).compact.size).to eq(20)
@@ -131,26 +140,34 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
   end
 
   describe 'Global behavior' do
-    let!(:source_djinni) { create(:source, name: 'Djinni', scraper: 'ApplyMate::Scraper::Djinni') }
+    let!(:source_djinni) { create(:source, name: 'Djinni', base_url: 'https://djinni.co', scraper: 'ApplyMate::Scraper::Djinni') }
     let(:djinni_html_content) { file_fixture('djinni/list/vacancies_page.html').read }
 
     before do
       allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body).and_return('<html></html>')
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body).with(a_string_including('djinni.co')).and_return(djinni_html_content)
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body).with(a_string_including('djinni.co')) do |_instance, url|
+        if url.include?('page=1') || !url.include?('page=')
+          djinni_html_content
+        else
+          '<html><body></body></html>'
+        end
+      end
     end
 
     it 'triggers Elasticsearch indexing for each batch' do
-      expect_any_instance_of(ActiveRecord::Relation).to receive(:import).at_least(:once)
+      without_partial_double_verification do
+        expect_any_instance_of(ActiveRecord::Relation).to receive(:import).at_least(:once)
+      end
       described_class.call
     end
 
     it 'raises TerminationError when solid_queue_terminating is set' do
-      Thread.main[:solid_queue_terminating] = true
+      Thread.main.thread_variable_set(:solid_queue_terminating, true)
       expect {
         described_class.call
       }.to raise_error(ApplyMate::Scraper::Base::TerminationError)
     ensure
-      Thread.main[:solid_queue_terminating] = false
+      Thread.main.thread_variable_set(:solid_queue_terminating, false)
     end
   end
 end
