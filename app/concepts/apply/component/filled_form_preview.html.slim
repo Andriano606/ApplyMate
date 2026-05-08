@@ -1,0 +1,37 @@
+- if visible_inputs.empty?
+  p.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.show.filled_form_no_fields')
+- else
+  .space-y-4
+    - visible_inputs.each do |field|
+      div
+        label.mb-1.block.text-xs.font-medium.text-gray-500.dark:text-gray-400
+          = label_for(field)
+
+        - if file?(field)
+          input type='file' class='block w-full text-sm text-gray-500 dark:text-gray-400'
+
+        - elsif textarea?(field)
+          textarea(
+            rows=8
+            placeholder=field['placeholder'].presence
+            class=[ 'block w-full rounded-lg border border-gray-200 dark:border-gray-600',
+                  'bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900',
+                  'dark:text-gray-100 resize-none' ]
+          )
+            = value_for(field)
+
+        - elsif select?(field)
+          select(
+            class=[ 'block w-full rounded-lg border border-gray-200 dark:border-gray-600',
+                  'bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100' ]
+          )
+            option selected=true = value_for(field)
+
+        - else
+          input(
+            type='text'
+            value=value_for(field)
+            placeholder=field['placeholder'].presence
+            class=[ 'block w-full rounded-lg border border-gray-200 dark:border-gray-600',
+                  'bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100' ]
+          )

@@ -102,6 +102,10 @@ en:
     update:
       success: AI integration updated
   apply:
+    apply_type:
+      external: External
+      internal: Internal
+      unknown: Unknown
     create:
       success: Відгук створено
     destroy:
@@ -134,23 +138,24 @@ en:
       title: Новий відгук
     show:
       back: До відгуків
+      cv_tab_preview: Preview
+      cv_tab_prompt: Prompt
       download_cv: Завантажити резюме
       fields:
-        ai_integration: AI інтеграція
-        created_at: Дата
-        cv: Резюме
-        error: Помилка
-        profile: Профіль
+        ai_integration: AI Integration
+        apply_type: Type
+        created_at: Date
+        cv: Resume
+        error: Error
+        profile: Profile
         screenshot: Submit screenshot
-        status: Статус
-        vacancy: Вакансія
+        source: Source
+        source_profile: Account
       filled_form_data: Filled Form Data
-      form_data: Form Data
-      profile_cv: Резюме профілю
-      prompt: Prompt
+      filled_form_no_fields: No fields to display
+      filled_form_tab_fields: Fields
+      no_data: No data yet
       title: Відгук
-      vacancy_description: Опис вакансії
-      vacancy_details: Деталі вакансії
     status:
       checking_applyble: Перевірка доступності
       completed: Завершено
