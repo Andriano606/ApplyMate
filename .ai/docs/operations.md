@@ -209,3 +209,89 @@ class Widget::Operation::Destroy < ApplyMate::Operation::Base
   end
 end
 ```
+
+## Logging in background jobs — log in the operation, not the job
+
+When a job delegates to an operation, summary logs about what the operation fetched/produced belong in `perform!`, not in the job's `perform`. The job only knows about validation/persistence; the operation knows what it actually fetched.
+
+```ruby
+# ✅ in the operation
+def perform!(**)
+  proxies, meta = fetch_proxy_candidates_from_sources
+  Rails.logger.info "[FetchProxies] Parsed #{proxies.uniq { |p| [p[:host], p[:port]] }.size}/#{proxies.size} candidates ..."
+  self.model = [proxies, meta]
+end
+
+# ❌ in the job — the job shouldn't re-explain what the operation did
+def perform
+  result = MyOperation.call
+  Rails.logger.info "Fetched #{result.model.size} records"  # belongs in operation
+end
+```
+
+## Colored terminal logging — ApplyMate::Logging
+
+`app/concepts/apply_mate/logging.rb` provides a `log` helper for any job or operation. Include it instead of calling `Rails.logger` directly.
+
+```ruby
+class MyJob::FetchThings < ApplicationJob
+  include ApplyMate::Logging
+  # ...
+  log("testing #{url}")                              # yellow  info  — tag auto = "FetchThings"
+  log("valid #{url} (#{n}/#{target})", color: :green)  # green   info
+  log("failed", level: :warn, color: :red)           # red     warn
+  log("done in #{t}s", level: :debug)                # yellow  debug
+end
+```
+
+Available colors: `:yellow` (default), `:green`, `:red`, `:cyan`.  
+The `[Tag]` prefix is the **full class name** (`self.class.name`) — e.g. `[Proxy::Operation::ValidateCandidates]`.  
+**Do not inline `YELLOW`/`GREEN` constants or define a local `log` method** — always `include ApplyMate::Logging`.
+
+## Job as pure orchestrator — split complex jobs into operations
+
+When a job has multiple distinct phases (fetch → validate → persist), each phase becomes its own operation. The job only calls them in sequence.
+
+```ruby
+# ✅ job is 4 lines — each step is testable and renameable independently
+class Proxy::Job::FetchProxies < ApplicationJob
+  def perform
+    candidates = Proxy::Operation::FetchCandidates.call.model
+    valid      = Proxy::Operation::ValidateCandidates.call(candidates: candidates).model
+    Proxy::Operation::PersistProxies.call(proxies: valid)
+  end
+end
+```
+
+Operations called from jobs (not controllers) receive keyword params directly and skip authorization:
+
+```ruby
+class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
+  include ApplyMate::Logging
+
+  def perform!(candidates:, **)   # params passed via .call(candidates: ...)
+    # no authorize! needed — called from a job, not a controller
+    self.model = validate(candidates)
+  end
+end
+```
+
+## Solid Queue — scheduling recurring jobs
+
+Add entries to `config/recurring.yml`:
+
+```yaml
+fetch_proxies:
+  class: Proxy::Job::FetchProxies
+  schedule: every day at 1am
+
+sync_vacancies:
+  class: Vacancy::Job::SyncVacancies
+  schedule: every day at 5am
+
+clear_finished_jobs:
+  command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+  schedule: every hour at minute 12
+```
+
+Format: `every <N> <unit>`, `every day at <time>`, `every hour at minute <N>`.

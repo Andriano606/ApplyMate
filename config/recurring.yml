@@ -9,6 +9,9 @@
 #     priority: 2
 #     schedule: at 5am every day
 
+fetch_proxies:
+  class: Proxy::Job::FetchProxies
+  schedule: every day at 1am
 sync_vacancies:
   class: Vacancy::Job::SyncVacancies
   schedule: every day at 5am

@@ -97,6 +97,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/apply_handlers.md` — Apply::Handler `add_step` DSL, pipeline declaration, handler resolution, adding a new source. **Read before modifying the apply flow or adding a new job board.**
 - `.ai/docs/models_and_db.md` — nullable FK patterns, inverse associations for multiple FKs to the same table, uniqueness errors on `:base`.
 - `.ai/docs/ruby_style.md` — project Ruby style rules (no endless methods, etc.).
+- `.ai/docs/proxy.md` — proxy protocol normalization (`https`→`http` gotcha), two-phase validation pattern, VALIDATION_CONCURRENCY tuning. **Read before modifying `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, `Proxy::Operation::ValidateCandidates`, or `Proxy::Operation::PersistProxies`.**
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

@@ -125,3 +125,22 @@ end
 ```
 
 The partial unique index enforces the constraint at the DB level — only one row per `(user_id, source_id)` can have `is_default = true`. Rows with `is_default = false` are unconstrained.
+
+## upsert_all — deduplicate before calling
+
+`upsert_all` with `ON CONFLICT DO UPDATE` raises `PG::CardinalityViolation` if the array contains two rows that conflict on the same unique key — PostgreSQL forbids updating the same row twice in one statement.
+
+Always `.uniq` by the same columns as `unique_by:` before calling:
+
+```ruby
+# ❌ raises PG::CardinalityViolation when records contain e.g. both
+#    {protocol: 'http', host: '1.2.3.4', port: 8080} and
+#    {protocol: 'socks5', host: '1.2.3.4', port: 8080}
+Proxy.upsert_all(records, unique_by: %i[host port], update_only: %i[active])
+
+# ✅ deduplicate by the same key first
+records = raw.uniq { |r| [r[:host], r[:port]] }
+Proxy.upsert_all(records, unique_by: %i[host port], update_only: %i[active])
+```
+
+Root cause is usually upstream dedup using a superset of columns (e.g. `protocol:host:port`) while the DB constraint covers a subset (`host:port`).
