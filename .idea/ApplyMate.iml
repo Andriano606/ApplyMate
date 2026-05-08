@@ -60,6 +60,7 @@
     <orderEntry type="library" scope="TEST" name="capybara (v3.40.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="concurrent-ruby (v1.3.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="connection_pool (v3.0.2, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="crack (v1.0.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="crass (v1.0.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="cssbundling-rails (v1.4.3, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="cucumber (v10.2.0, asdf: 3.4.8) [gem]" level="application" />
@@ -76,6 +77,7 @@
     <orderEntry type="library" scope="PROVIDED" name="date (v3.5.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="debug (v1.11.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="diff-lcs (v1.6.2, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="domain_name (v0.6.20240107, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="dotenv (v3.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="TEST" name="dotenv-rails (v3.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="drb (v2.2.3, asdf: 3.4.8) [gem]" level="application" />
@@ -95,10 +97,13 @@
     <orderEntry type="library" scope="PROVIDED" name="factory_bot (v6.5.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="TEST" name="factory_bot_rails (v6.5.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday (v2.14.1, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="faraday-cookie_jar (v0.0.8, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-follow_redirects (v0.5.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-multipart (v1.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-net_http (v3.4.2, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="faraday-retry (v2.4.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="faraday-typhoeus (v1.1.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="feedjira (v4.0.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ferrum (v0.17.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ffi (v1.17.4, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="fugit (v1.12.1, asdf: 3.4.8) [gem]" level="application" />
@@ -108,11 +113,13 @@
     <orderEntry type="library" scope="PROVIDED" name="google-logging-utils (v0.2.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="googleauth (v1.16.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="grover (v1.2.10, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="hashdiff (v1.2.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="hashid-rails (v1.4.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="hashids (v1.0.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="hashie (v5.1.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="highline (v3.1.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="html2text (v0.4.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="http-cookie (v1.1.6, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="i18n (v1.14.8, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="TEST" name="i18n-tasks (v1.1.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="image_processing (v1.14.0, asdf: 3.4.8) [gem]" level="application" />
@@ -208,6 +215,7 @@
     <orderEntry type="library" scope="PROVIDED" name="ruby-progressbar (v1.13.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ruby-vips (v2.3.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="rubyzip (v3.2.2, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="sax-machine (v1.3.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="securerandom (v0.4.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="TEST" name="selenium-webdriver (v4.43.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="signet (v0.21.0, asdf: 3.4.8) [gem]" level="application" />
@@ -241,6 +249,7 @@
     <orderEntry type="library" scope="PROVIDED" name="view_component (v4.8.0, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="wannabe_bool (v0.7.1, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="web-console (v4.3.0, asdf: 3.4.8) [gem]" level="application" />
+    <orderEntry type="library" scope="TEST" name="webmock (v3.26.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="webrick (v1.9.2, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="websocket (v1.2.11, asdf: 3.4.8) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="websocket-driver (v0.8.0, asdf: 3.4.8) [gem]" level="application" />

@@ -4,7 +4,7 @@ FactoryBot.define do
   factory :source do
     name     { "Test Source" }
     base_url { "https://example.com" }
-    client   { "ApplyMate::Client::Http" }
+    scraper  { "ApplyMate::Scraper::Djinni" }
 
     after(:build) do |source|
       source.logo.attach(

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_08_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -55,6 +55,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
 
   create_table "applies", force: :cascade do |t|
     t.bigint "ai_integration_id", null: false
+    t.integer "apply_type", default: 0, null: false
     t.boolean "applyble"
     t.datetime "created_at", null: false
     t.text "error"
@@ -64,7 +65,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
     t.bigint "generate_cv_prompt_id"
     t.text "raw_cv"
     t.bigint "source_profile_id", null: false
-    t.integer "status", default: 0, null: false
+    t.integer "status"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "user_profile_id", null: false
@@ -222,23 +223,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
   create_table "source_profiles", force: :cascade do |t|
     t.integer "auth_method", default: 0, null: false
     t.datetime "created_at", null: false
+    t.boolean "is_default", default: false, null: false
     t.string "name", null: false
     t.string "session_id"
     t.bigint "source_id", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.index ["source_id"], name: "index_source_profiles_on_source_id"
+    t.index ["user_id", "source_id"], name: "index_source_profiles_on_user_source_default", unique: true, where: "(is_default = true)"
     t.index ["user_id"], name: "index_source_profiles_on_user_id"
   end
 
   create_table "sources", force: :cascade do |t|
     t.string "base_url", null: false
-    t.string "client"
     t.datetime "created_at", null: false
     t.string "name", null: false
-    t.jsonb "selectors", default: {}
+    t.string "scraper"
     t.datetime "updated_at", null: false
-    t.jsonb "urls", default: {}
   end
 
   create_table "user_profiles", force: :cascade do |t|
@@ -258,7 +259,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
     t.bigint "default_fill_form_prompt_id"
     t.bigint "default_generate_cv_prompt_id"
     t.bigint "default_profile_id"
-    t.bigint "default_source_profile_id"
     t.jsonb "default_vacancy_search"
     t.string "email", null: false
     t.string "middle_name"
@@ -268,7 +268,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
     t.datetime "updated_at", null: false
     t.index ["default_fill_form_prompt_id"], name: "index_users_on_default_fill_form_prompt_id"
     t.index ["default_generate_cv_prompt_id"], name: "index_users_on_default_generate_cv_prompt_id"
-    t.index ["default_source_profile_id"], name: "index_users_on_default_source_profile_id"
     t.index ["email"], name: "index_users_on_email"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
   end
@@ -280,6 +279,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
     t.text "description"
     t.text "details"
     t.string "external_id"
+    t.string "external_url"
     t.bigint "source_id", null: false
     t.string "title"
     t.datetime "updated_at", null: false
@@ -311,7 +311,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_03_150000) do
   add_foreign_key "users", "ai_integrations", column: "default_ai_integration_id"
   add_foreign_key "users", "prompts", column: "default_fill_form_prompt_id"
   add_foreign_key "users", "prompts", column: "default_generate_cv_prompt_id"
-  add_foreign_key "users", "source_profiles", column: "default_source_profile_id"
   add_foreign_key "users", "user_profiles", column: "default_profile_id"
   add_foreign_key "vacancies", "sources"
 end

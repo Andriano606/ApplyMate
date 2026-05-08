@@ -34,22 +34,13 @@ uk:
         confirm: Ви впевнені?
         success: Джерело видалено
       form:
-        client: Тип клієнта
         logo: Логотип
         name: Назва
-        pagination:
-          title: Пагінація
-          url_template: Шаблон URL
-        selectors:
-          listings: Список вакансій
-          title: Селектори
-          url: Посилання на вакансію
+        scraper: Клас скрейпера
         target_url: Цільове посилання
-        urls:
-          start_url: Стартова URL
-          title: URL-адреси
       index:
         empty: Джереле не додані
+        new: Додати джерело
         table:
           actions: Дії
           name: Назва
@@ -150,6 +141,7 @@ uk:
         cv: Резюме
         error: Помилка
         profile: Профіль
+        screenshot: Скріншот після відправки
         status: Статус
         vacancy: Вакансія
       filled_form_data: Заповнені дані форми
@@ -162,18 +154,18 @@ uk:
     status:
       checking_applyble: Перевірка доступності
       completed: Завершено
-      cv_generated: Резюме готове
       failed_checking_applyble: Помилка перевірки доступності
-      failed_cv_generation: Помилка генерації резюме
-      failed_cv_sending: Помилка надсилання
+      failed_fetching_apply_type: Помилка визначення типу відгуку
       failed_fetching_details: Помилка отримання деталей
       failed_fetching_form: Помилка отримання форми
       failed_filling_form: Помилка заповнення форми
+      failed_generating_cv: Помилка генерації резюме
+      failed_sending_cv: Помилка надсилання
+      fetching_apply_type: Визначення типу відгуку
       fetching_details: Отримання деталей
       fetching_form: Отримання форми
       filling_form: Заповнення форми
       generating_cv: Генерація резюме
-      pending: В процесі
       sending_cv: Надсилання
   components:
     debug_button:
@@ -252,7 +244,6 @@ uk:
     index:
       no_vacancy: Немає жодної вакансії
   navbar:
-    add_new_source: Додати джерело
     ai_integrations: AI Інтеграції
     my_applies: Мої відгуки
     my_profiles: Мої профілі

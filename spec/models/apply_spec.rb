@@ -18,7 +18,7 @@ RSpec.describe Apply, type: :model do
       source_profile: source_profile,
       user_profile: user_profile,
       ai_integration: ai_integration,
-      status: :pending
+      status: :generating_cv
     )
   end
 

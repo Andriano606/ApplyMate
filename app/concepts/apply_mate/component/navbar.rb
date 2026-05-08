@@ -18,8 +18,6 @@ class ApplyMate::Component::Navbar < ApplyMate::Component::Base
       #-- Logo --
       Item.new(label: 'ApplyMate', path: root_path, section: :logo),
 
-      Item.new(label: I18n.t('navbar.add_new_source'), path: helpers.new_admin_source_path, section: :actions, render: current_user&.admin?, turbo: :stream),
-
       Item.new(label: I18n.t('navbar.my_profiles'), path: helpers.user_profiles_path, section: :user_menu, render: signed_in?, icon: :user),
       Item.new(label: I18n.t('navbar.ai_integrations'), path: helpers.ai_integrations_path, section: :user_menu, render: signed_in?, icon: :sparkles),
       Item.new(label: I18n.t('navbar.source_profiles'), path: helpers.source_profiles_path, section: :user_menu, render: signed_in?, icon: :lock_closed),

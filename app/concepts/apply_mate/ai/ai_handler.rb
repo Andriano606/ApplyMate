@@ -2,21 +2,15 @@
 
 class ApplyMate::Ai::AiHandler
   def self.call(prompt_instance:, response_schema_class:, ai_integration:)
-    # 1. Initialize Client
     client = build_client(ai_integration)
 
-    # 2. Combine Prompt + Schema Instructions
     full_prompt = <<~TEXT
       #{prompt_instance.call}
 
       #{response_schema_class.format_instructions}
     TEXT
 
-    # 3. Request
-    raw_response = client.ask(full_prompt)
-
-    # 4. Parse via Schema
-    response_schema_class.extract(raw_response)
+    response_schema_class.extract(client.ask(full_prompt))
   end
 
   private

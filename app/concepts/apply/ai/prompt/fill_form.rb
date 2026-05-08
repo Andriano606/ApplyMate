@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Apply::Ai::Prompt::Djinni::FillForm < ApplyMate::Ai::Prompt::Base
+class Apply::Ai::Prompt::FillForm < ApplyMate::Ai::Prompt::Base
   PROMPT_TEMPLATE = <<~PROMPT
     Роль: Ти — професійний кар'єрний консультант та експерт з написання супровідних листів.
 
@@ -24,14 +24,14 @@ class Apply::Ai::Prompt::Djinni::FillForm < ApplyMate::Ai::Prompt::Base
     vacancy_context = [ @apply.vacancy.description, @apply.vacancy.details ].select(&:present?).join("\n\n")
     user_experience = @apply.user_profile.cv
 
-    inputs = @apply.form_data['inputs'] || @apply.form_data[:inputs]
+    inputs = @apply.inputs
     return if inputs.blank?
 
-    fields_info = inputs.map do |input|
+    fields_info = inputs.filter_map do |input|
       input = input.with_indifferent_access
       next if input['type'] == 'file'
 
-      line = "- #{input['name']} (#{input['tag']}#{ " type=#{input['type']}" if input['type']})"
+      line = "- #{input['name']} (#{input['tag']}#{ " type=#{input['type']}" if input['type'].present? })"
       line += ": #{input['label']}" if input['label'].present?
       line += " (Placeholder: #{input['placeholder']})" if input['placeholder'].present?
       line += ". Current value: #{input['value']}" if input['value'].present?
@@ -41,7 +41,11 @@ class Apply::Ai::Prompt::Djinni::FillForm < ApplyMate::Ai::Prompt::Base
         line += ". Options: #{options_str}. INSTRUCTION: Return the value (not label) of your chosen option."
       end
 
-      # Add specific instructions for known fields
+      if input['tag'] == 'select' && input['options'].present?
+        options_str = input['options'].map { |o| "#{o['label']}=#{o['value']}" }.join(', ')
+        line += ". Options: #{options_str}. INSTRUCTION: Return the value (not label) of your chosen option."
+      end
+
       case input['name']
       when 'message'
         line += '. INSTRUCTION: Мотиваційний лист. Має бути лаконічним (до 1000 символів), підкреслювати мій релевантний досвід саме для цієї вакансії.'
@@ -58,8 +62,11 @@ class Apply::Ai::Prompt::Djinni::FillForm < ApplyMate::Ai::Prompt::Base
       when 'csrfmiddlewaretoken'
         line += '. INSTRUCTION: Keep current value.'
       end
+
       line
-    end.compact.join("\n")
+    end.join("\n")
+
+    return if fields_info.blank?
 
     template
       .sub('PLACEHOLDER_VACANCY_CONTEXT', vacancy_context)

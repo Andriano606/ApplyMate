@@ -25,7 +25,10 @@ gem 'elasticsearch', '~> 8'
 gem 'elasticsearch-model', '~> 8'
 gem 'elasticsearch-rails', '~> 8'
 gem 'jsonb_accessor'
+gem 'faraday-retry'
+gem 'feedjira'
 gem 'faraday' # MIT-License
+gem 'faraday-cookie_jar'
 gem 'faraday-multipart' # MIT-License
 gem 'faraday-follow_redirects'
 gem 'nokogiri'
@@ -128,6 +131,7 @@ end
 
 group :test do
   gem 'factory_bot_rails'
+  gem 'webmock'
 
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem 'capybara'

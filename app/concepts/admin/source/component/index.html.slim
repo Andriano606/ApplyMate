@@ -1,3 +1,8 @@
-= header(**header_opts)
+= header(**header_opts) do |h|
+  - h.with_buttons do
+    = link(label: I18n.t('admin.source.index.new'),
+            url: helpers.new_admin_source_path,
+            data: { turbo_stream: true },
+            variant: :primary)
 
 = render Admin::Source::Component::Table.new(sources: @sources)

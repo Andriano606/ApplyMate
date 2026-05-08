@@ -34,22 +34,13 @@ en:
         confirm: Are you sure?
         success: Source destroyed
       form:
-        client: Тип клієнта
         logo: Логотип
         name: Назва
-        pagination:
-          title: Pagination
-          url_template: URL template
-        selectors:
-          listings: Job listings selector
-          title: Selectors
-          url: Job URL selector
+        scraper: Scraper class
         target_url: Цільове посилання
-        urls:
-          start_url: Start URL
-          title: URLs
       index:
         empty: No data
+        new: Add source
         table:
           actions: Actions
           name: Name
@@ -150,6 +141,7 @@ en:
         cv: Резюме
         error: Помилка
         profile: Профіль
+        screenshot: Submit screenshot
         status: Статус
         vacancy: Вакансія
       filled_form_data: Filled Form Data
@@ -162,18 +154,18 @@ en:
     status:
       checking_applyble: Перевірка доступності
       completed: Завершено
-      cv_generated: Резюме готове
       failed_checking_applyble: Помилка перевірки доступності
-      failed_cv_generation: Помилка генерації резюме
-      failed_cv_sending: Помилка надсилання
+      failed_fetching_apply_type: Помилка визначення типу відгуку
       failed_fetching_details: Помилка отримання деталей
-      failed_fetching_form: Failed fetching form
-      failed_filling_form: Failed filling form
+      failed_fetching_form: Помилка отримання форми
+      failed_filling_form: Помилка заповнення форми
+      failed_generating_cv: Помилка генерації резюме
+      failed_sending_cv: Помилка надсилання
+      fetching_apply_type: Визначення типу відгуку
       fetching_details: Отримання деталей
-      fetching_form: Fetching form
-      filling_form: Filling form
+      fetching_form: Отримання форми
+      filling_form: Заповнення форми
       generating_cv: Генерація резюме
-      pending: Очікує
       sending_cv: Надсилання
   components:
     debug_button:
@@ -252,7 +244,6 @@ en:
     index:
       no_vacancy: No vacancies fetched
   navbar:
-    add_new_source: Додати джерело
     ai_integrations: AI Integrations
     my_applies: Мої відгуки
     my_profiles: Мої профілі

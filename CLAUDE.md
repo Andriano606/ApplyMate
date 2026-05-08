@@ -91,6 +91,11 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/view_component.md` — component decision tree (check helper first, shared vs resource-scoped), base class features, `before_render` / `current_user` pitfalls, broadcast-safe sentinel pattern.
 - `.ai/docs/turbo_handler.md` — TurboHandler class API, user-scoped broadcasts (`[user, record]` channels), `ApplicationController.renderer` limitations, how to pass user context to components in broadcasts.
 - `.ai/docs/ai_prompts_and_schemas.md` — Prompt::Base / ResponseSchema::Base API, AiHandler wiring, per-field instructions, JSON vs binary schemas, skeleton for new pairs. **Read before adding or modifying AI prompt/schema objects.**
+- `.ai/docs/architecture.md` — Module boundary table (Client/Scraper/Handler/Operation), enforced rules, how to add a new job board end-to-end. **Read before modifying any pipeline module.**
+- `.ai/docs/scrapers.md` — Scraper base interface, vacancy struct shape, `ApplyMate::Client::Http` API, CSRF session init pattern, graceful termination, adding a new scraper. **Read before adding or modifying scrapers.**
+- `.ai/docs/apply_handlers.md` — Apply::Handler `add_step` DSL, pipeline declaration, handler resolution, adding a new source. **Read before modifying the apply flow or adding a new job board.**
+- `.ai/docs/models_and_db.md` — nullable FK patterns, inverse associations for multiple FKs to the same table, uniqueness errors on `:base`.
+- `.ai/docs/ruby_style.md` — project Ruby style rules (no endless methods, etc.).
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

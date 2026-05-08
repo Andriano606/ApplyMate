@@ -8,10 +8,10 @@ class Apply::Operation::Create < ApplyMate::Operation::Base
     parse_validate_sync(form_object, model)
     ApplicationRecord.transaction do
       model.save!
+      model.source_profile.set_as_default!
       current_user.update!(
         default_profile_id: model.user_profile_id,
         default_ai_integration_id: model.ai_integration_id,
-        default_source_profile_id: model.source_profile_id,
         default_fill_form_prompt_id: model.fill_form_prompt_id,
         default_generate_cv_prompt_id: model.generate_cv_prompt_id
       )

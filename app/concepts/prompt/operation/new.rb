@@ -9,9 +9,9 @@ class Prompt::Operation::New < ApplyMate::Operation::Base
       form_object.sync_to model
 
       form_object.content = if model.prompt_type_changed? && model.fill_form?
-                              Apply::Ai::Prompt::Djinni::FillForm::PROMPT_TEMPLATE
+                              Apply::Ai::Prompt::FillForm::PROMPT_TEMPLATE
       else
-                              Apply::Ai::Prompt::Djinni::GenerateCv::PROMPT_TEMPLATE
+                              Apply::Ai::Prompt::GenerateCv::PROMPT_TEMPLATE
       end
       form_object.sync_to model
     end

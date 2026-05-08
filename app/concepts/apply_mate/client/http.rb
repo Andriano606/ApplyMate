@@ -1,41 +1,82 @@
 # frozen_string_literal: true
 
-# c = ApplyMate::Client::Http.new
-# r = c.fetch_body('https://djinni.co/jobs/')
-
 class ApplyMate::Client::Http < ApplyMate::Client::Base
-  def initialize(timeout: 15)
-    @connection = Faraday.new do |f|
-      # Дозволяє автоматично переходити за редиректами
-      f.use Faraday::FollowRedirects::Middleware
+  Response = Struct.new(:body, :headers, :status) do
+    def success?
+      (200..299).include?(status)
+    end
+  end
 
-      # Налаштування таймаутів, щоб запит не "зависав"
+  USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+  def initialize(timeout: 15)
+    @timeout = timeout
+    @connection = Faraday.new do |f|
+      f.use Faraday::FollowRedirects::Middleware
       f.options.timeout = timeout
       f.options.open_timeout = timeout
-
-      # Додаємо стандартний User-Agent, щоб сайт не блокував запит як бот
-      f.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-
+      f.headers['User-Agent'] = USER_AGENT
       f.adapter Faraday.default_adapter
     end
   end
 
-  def fetch_body(url, error_handler: ApplyMate::Scraper::ErrorHandler::Base.new(max_retries: 5, base_delay: 1))
+  def get(url, headers: {}, follow_redirects: false, error_handler: default_error_handler)
     error_handler.run do
-      response = @connection.get(url)
+      response = @connection.get(url, nil, headers)
       final_url = response.env.url.to_s
 
-      if final_url != url
+      if !follow_redirects && final_url != url
         Rails.logger.info "[ApplyMate::Client::Http] redirecting to an unexpected page: #{url}, #{final_url}"
-        return nil
+        next Response.new(nil, response.headers, response.status)
       end
 
       if response.success?
-        response.body
+        Response.new(response.body, response.headers, response.status)
       else
-        # Викидаємо помилку з кодом статусу, щоб error_handler міг її розпізнати
         raise "[ApplyMate::Client::Http] Помилка запиту: #{response.status}"
       end
     end
+  end
+
+  def post(url, body:, headers: {}, error_handler: default_error_handler)
+    error_handler.run do
+      response = @connection.post(url, body, headers)
+      if response.success?
+        Response.new(response.body, response.headers, response.status)
+      else
+        raise "[ApplyMate::Client::Http] POST error: #{response.status}"
+      end
+    end
+  end
+
+  def fetch_body(url, error_handler: default_error_handler)
+    get(url, error_handler: error_handler)&.body
+  end
+
+  def post_xhr(url, body, headers = {}, error_handler: default_error_handler)
+    post(url, body: body, headers: headers, error_handler: error_handler)&.body
+  end
+
+  # Sends a multipart POST without following redirects, so the caller can
+  # inspect 3xx responses directly (e.g. to detect a successful form submission).
+  def post_multipart(url, payload:, headers: {})
+    connection = Faraday.new do |f|
+      f.request :multipart
+      f.request :url_encoded
+      f.options.timeout      = @timeout
+      f.options.open_timeout = @timeout
+      headers.each { |k, v| f.headers[k] = v }
+      f.headers['User-Agent'] = USER_AGENT
+      f.adapter Faraday.default_adapter
+    end
+
+    response = connection.post(url, payload)
+    Response.new(response.body, response.headers, response.status)
+  end
+
+  private
+
+  def default_error_handler
+    ApplyMate::Client::ErrorHandler.new(max_retries: 5, base_delay: 1)
   end
 end
