@@ -8,15 +8,12 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     @client = client
   end
 
-  def fetch_listing
-    all_jobs = []
+  def fetch_listing(on_batch:, format_result:)
+    result = []
     page = 1
 
     loop do
-      if Thread.main[:solid_queue_terminating]
-        Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
-        break
-      end
+      check_termination!
 
       current_url = "#{JOB_LIST_URL}?page=#{page}"
 
@@ -35,7 +32,8 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
         extract_job_data(element)
       end
 
-      all_jobs.concat(page_jobs)
+      on_batch.call(page_jobs)
+      result.concat(Array(format_result.call(page_jobs)))
 
       # Пауза від 2 до 5 секунд після кожного успішного запиту
       sleep(rand(2..5))
@@ -43,7 +41,7 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
       page += 1
     end
 
-    all_jobs
+    result
   end
 
   def fetch_details(url)

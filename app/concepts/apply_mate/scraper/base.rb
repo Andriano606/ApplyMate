@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class ApplyMate::Scraper::Base
-  def fetch_listing
+  def fetch_listing(on_batch:, format_result:)
     raise NotImplementedError
   end
 
@@ -21,7 +21,16 @@ class ApplyMate::Scraper::Base
     raise NotImplementedError
   end
 
+  class TerminationError < StandardError; end
+
   private
+
+  def check_termination!
+    return unless Thread.main[:solid_queue_terminating]
+
+    Rails.logger.info 'Termination signal received. Raising error...'
+    raise TerminationError, 'Scraper terminated by system'
+  end
 
   def full_url(path)
     return nil if path.blank?
