@@ -192,6 +192,32 @@ expect(browser).to have_received(:click).with('#trigger').ordered
 expect(browser).to have_received(:click).with('button[type="submit"]', text: 'Apply').ordered
 ```
 
+## Spec File Naming Convention
+
+Spec files must be named after the **class under test**, not after the company/fixture. The path mirrors the class hierarchy:
+
+| Class | Spec file |
+|-------|-----------|
+| `Apply::Operation::FetchInternalForm` | `spec/concepts/apply/operation/fetch_internal_form_spec.rb` |
+| `Apply::Operation::SendApply::Http` | `spec/concepts/apply/operation/send_apply/http_spec.rb` |
+| `Apply::Handler::Dou` | `spec/concepts/apply/handler/dou_spec.rb` |
+
+When multiple company fixtures test the **same class**, wrap each in a `context` block inside one file — do not create `honeytech_spec.rb`, `coidea_spec.rb`, etc. If the file already has `include_context` at the top-level `RSpec.describe`, move the existing content into a context block and keep shared helpers (e.g. `http_response`) at the describe level:
+
+```ruby
+RSpec.describe Apply::Operation::FetchInternalForm do
+  context 'Djinni internal apply (Art of Spin)' do
+    include_context 'art of spin djinni'
+    # stubs + examples
+  end
+
+  context 'DOU internal apply (Coidea Agency)' do
+    include_context 'coidea dou'
+    # stubs + examples
+  end
+end
+```
+
 ## Shared Contexts for Multi-Operation Specs
 
 When testing several operations against the same company fixture, put common setup in a named shared context. Keep constants in a companion module to avoid Ruby's constant-hoisting problem (constants inside `RSpec.describe` blocks are silently promoted to `Object` and clash across files):
@@ -220,6 +246,14 @@ end
 ```
 
 Each spec `include_context 'honeytech dou'` and adds only what it owns — its HTTP stubs and AI response sequence.
+
+**Always define `filled_inputs` and `raw_inputs` in every shared context**, even if the first spec written doesn't use them. `SendApply` and `FillForm` specs will need them, and omitting them forces a retroactive edit. `raw_inputs` is always derived:
+
+```ruby
+let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
+```
+
+Include only the fields relevant to filling and submission — hidden/checkbox ancillaries (e.g. `save_msg_template`) can be omitted.
 
 **Full-pipeline handler spec** stubs all four Gemini calls in order; uses shared `let`s for first and last:
 
