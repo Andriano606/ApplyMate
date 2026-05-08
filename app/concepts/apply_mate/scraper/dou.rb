@@ -66,7 +66,21 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
       nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
       break if nodes.empty?
 
-      all_jobs.concat(nodes.map { |el| extract_job_data(el) }.compact)
+      jobs = nodes.map { |el| extract_job_data(el) }.compact
+      total_jobs_on_the_page = jobs.count
+      jobs.each_with_index do |job, index|
+        if Thread.main[:solid_queue_terminating]
+          Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
+          all_jobs.concat(jobs)
+          return all_jobs
+        end
+
+        Rails.logger.info "Scraping DOU vacancy details: #{index+1}/#{total_jobs_on_the_page}"
+        details = fetch_details(job.url)
+        job.description = details if details.present?
+        sleep(rand(1..2))
+      end
+      all_jobs.concat(jobs)
 
       break if data['last'] == true
 

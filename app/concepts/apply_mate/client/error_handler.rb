@@ -3,6 +3,18 @@
 class ApplyMate::Client::ErrorHandler
   class AttemptsExhaustedError < StandardError; end
 
+  # Network-level errors that always warrant a retry, regardless of message content.
+  # Covers both Faraday (Http) and async-http (AsyncHttp) transports.
+  RETRYABLE_EXCEPTIONS = [
+    Faraday::TimeoutError,
+    Faraday::ConnectionFailed,
+    Errno::ECONNREFUSED,
+    Errno::ECONNRESET,
+    Errno::ETIMEDOUT,
+    IO::TimeoutError,
+    EOFError
+  ].freeze
+
   def initialize(max_retries: 3, base_delay: 2)
     @max_retries = max_retries
     @base_delay  = base_delay
@@ -13,7 +25,7 @@ class ApplyMate::Client::ErrorHandler
 
     begin
       yield
-    rescue Faraday::TimeoutError, Faraday::ConnectionFailed => e
+    rescue *RETRYABLE_EXCEPTIONS => e
       handle_retry(e, attempts += 1)
       retry
     rescue StandardError => e

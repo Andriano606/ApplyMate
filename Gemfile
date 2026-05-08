@@ -31,6 +31,8 @@ gem 'faraday' # MIT-License
 gem 'faraday-cookie_jar'
 gem 'faraday-multipart' # MIT-License
 gem 'faraday-follow_redirects'
+gem 'async'      # Fiber-based concurrency for per-source parallelism
+gem 'async-http' # Fiber-aware HTTP client used by SyncVacancies
 gem 'nokogiri'
 gem 'html2text'
 gem 'gemini-ai'
