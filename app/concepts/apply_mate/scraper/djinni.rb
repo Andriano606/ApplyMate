@@ -8,15 +8,12 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     @client = client
   end
 
-  def fetch_listing
-    all_jobs = []
+  def fetch_listing(on_batch:, format_result:)
+    result = []
     page = 1
 
     loop do
-      if Thread.main[:solid_queue_terminating]
-        Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
-        break
-      end
+      check_termination!
 
       current_url = "#{JOB_LIST_URL}?page=#{page}"
 
@@ -24,6 +21,7 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
 
       body = @client.fetch_body(current_url)
       doc = Nokogiri::HTML(body)
+      body = nil
 
       # Шукаємо елементи вакансій
       nodes = doc.css('.job-list-item, .job-item')
@@ -34,16 +32,21 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
       page_jobs = nodes.map do |element|
         extract_job_data(element)
       end
+      doc = nil
+      nodes = nil
 
-      all_jobs.concat(page_jobs)
+      on_batch.call(page_jobs)
+      result.concat(Array(format_result.call(page_jobs)))
+      page_jobs = nil
 
       # Пауза від 2 до 5 секунд після кожного успішного запиту
       sleep(rand(2..5))
+      GC.start
 
       page += 1
     end
 
-    all_jobs
+    result
   end
 
   def fetch_details(url)

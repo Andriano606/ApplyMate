@@ -46,16 +46,13 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     end
   end
 
-  def fetch_listing
+  def fetch_listing(on_batch:, format_result:)
     initialize_session
-    all_jobs = []
+    result = []
     count = 0
 
     loop do
-      if Thread.main[:solid_queue_terminating]
-        Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
-        break
-      end
+      check_termination!
 
       Rails.logger.info "Scraping DOU vacancies, offset: #{count}"
 
@@ -63,32 +60,35 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
       break if body.blank?
 
       data = JSON.parse(body)
+      body = nil
       nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
       break if nodes.empty?
 
       jobs = nodes.map { |el| extract_job_data(el) }.compact
+      nodes = nil
       total_jobs_on_the_page = jobs.count
       jobs.each_with_index do |job, index|
-        if Thread.main[:solid_queue_terminating]
-          Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
-          all_jobs.concat(jobs)
-          return all_jobs
-        end
+        check_termination!
 
         Rails.logger.info "Scraping DOU vacancy details: #{index+1}/#{total_jobs_on_the_page}"
         details = fetch_details(job.url)
         job.description = details if details.present?
         sleep(rand(1..2))
       end
-      all_jobs.concat(jobs)
+
+      on_batch.call(jobs)
+      result.concat(Array(format_result.call(jobs)))
+      jobs = nil
 
       break if data['last'] == true
 
-      count += (data['num'] || nodes.size)
+      count += (data['num'] || 0)
+      data = nil
       sleep(rand(2..5))
+      GC.start
     end
 
-    all_jobs
+    result
   end
 
   private
@@ -113,11 +113,11 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   def extract_job_data(element)
     link_el = element.at_css('a.vt')
     title = link_el&.text&.strip
-    path = link_el&.[]('href')
+    path = link_el&.[]('href')&.split('?')&.first
     external_id = path.to_s.match(/\/vacancies\/(\d+)/)&.[](1)
 
     company_el = element.at_css('a.company')
-    company_name = company_el&.children&.select(&:text?)&.map(&:text)&.join&.strip
+    company_name = company_el&.children&.select(&:text?)&.map(&:text)&.join&.squish
 
     ApplyMate::Operation::Struct.new(
       source_id:        @source.id,
