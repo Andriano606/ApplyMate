@@ -89,6 +89,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_08_000003) do
     t.index ["user_id"], name: "index_prompts_on_user_id"
   end
 
+  create_table "proxies", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "failed_at"
+    t.string "host", null: false
+    t.datetime "last_used_at"
+    t.integer "port", null: false
+    t.string "protocol", default: "http", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_proxies_on_active"
+    t.index ["host", "port"], name: "index_proxies_on_host_and_port", unique: true
+  end
+
   create_table "solid_cable_messages", force: :cascade do |t|
     t.binary "channel", null: false
     t.bigint "channel_hash", null: false
