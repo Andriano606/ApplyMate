@@ -29,11 +29,17 @@ servers:
   web:
     hosts:
       - 192.168.31.58
+    options:
+      ulimit:
+        - "nofile=65536:65536"
 
   worker:
     hosts:
       - 192.168.31.58
     cmd: bin/jobs
+    options:
+      ulimit:
+        - "nofile=65536:65536"
     env:
       clear:
         SQ_QUEUES: "*"

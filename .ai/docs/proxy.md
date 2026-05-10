@@ -55,7 +55,7 @@ Phase 1 (fast, eliminates ~95% of candidates):
 
 Phase 2 (real-content check):
 - Open tunnel to actual source URL (e.g. `dou.ua:443`, `djinni.co:443`)
-- Wrap in TLS via `OpenSSL::SSL::SSLSocket` (fiber-safe in Ruby 3 — see `async.md`)
+- Wrap in TLS via `OpenSSL::SSL::SSLSocket` using `ssl_connect` helper (connect_nonblock + IO.select loop — never call `ssl.connect` directly; see `async.md`)
 - Send `GET /`, check 2xx/3xx response
 
 Load source URIs once in `perform` before the `Async` block and pass into `validate` — never query `Source` inside a fiber:
@@ -69,7 +69,7 @@ valid = validate(candidates, source_uris)
 
 This job is pure I/O-bound. CPU core count is irrelevant. The main constraints:
 
-- **File descriptors** — check `ulimit -n` (each fiber holds 1–2 FDs during a probe)
+- **File descriptors** — the critical one. Each fiber holds 1–2 FDs during a probe. Docker's default soft limit is 1024, which is far too low. Fibers that can't open sockets (`Errno::EMFILE`) return nil immediately with no yield point, and a single fiber can monopolize the reactor thread while draining the entire candidate queue. Fix: add `ulimit: ["nofile=65536:65536"]` under each server role's `options:` in `deploy.staging.yml`.
 - **Network throughput** — the real ceiling; stop increasing concurrency when `wall_clock` stops improving
 - With `VALIDATION_TIMEOUT=3`, throughput ceiling ≈ `CONCURRENCY / 3` probes/sec
 

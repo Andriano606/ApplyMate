@@ -161,9 +161,31 @@ Async::HTTP::Client.open(proxy_endpoint) do |client|
 end
 ```
 
-## OpenSSL::SSL::SSLSocket is fiber-safe in Ruby 3
+## OpenSSL::SSL::SSLSocket — use connect_nonblock, not connect
 
-`OpenSSL::SSL::SSLSocket#connect` internally loops over `connect_nonblock` with `IO.select`. In Ruby 3.1+, `IO.select` goes through the fiber scheduler, so TLS handshakes yield to other fibers automatically — no `Fiber.blocking` needed.
+`OpenSSL::SSL::SSLSocket#connect` internally loops over `connect_nonblock` with `IO.select`. In theory, `IO.select` goes through the fiber scheduler in Ruby 3.1+. In practice, on some Ruby/io-event/platform combinations (observed on ARM64/RPI5) it does not — `ssl.connect` blocks the reactor thread and `with_timeout` cannot fire.
+
+**Always use `connect_nonblock` + explicit `IO.select` with a deadline.** This is correct in both cases: when the scheduler intercepts `IO.select`, the fiber yields during wait; when it does not, the OS-level `select(2)` enforces the timeout.
+
+```ruby
+def ssl_connect(ssl)
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + TIMEOUT
+  loop do
+    ssl.connect_nonblock
+    return true
+  rescue IO::WaitReadable
+    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    return false if remaining <= 0
+    IO.select([ssl.to_io], nil, nil, remaining) or return false
+  rescue IO::WaitWritable
+    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    return false if remaining <= 0
+    IO.select(nil, [ssl.to_io], nil, remaining) or return false
+  rescue StandardError
+    return false
+  end
+end
+```
 
 To do TLS over a raw tunnel socket inside an Async fiber:
 
@@ -172,7 +194,7 @@ sock = TCPSocket.new(host, port.to_s)      # fiber-aware
 ssl  = OpenSSL::SSL::SSLSocket.new(sock)
 ssl.hostname   = host                       # SNI
 ssl.sync_close = true                       # ssl.close also closes sock
-ssl.connect                                 # fiber-yields during handshake
+ssl_connect(ssl)                            # safe on all platforms
 ssl.write("GET / HTTP/1.0\r\nHost: #{host}\r\n\r\n")
 raw = ssl.read(4096)
 ssl.close                                   # closes sock too
