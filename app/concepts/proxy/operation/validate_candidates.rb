@@ -8,7 +8,7 @@ class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
 
   SOCKS_TEST_HOST        = 'www.google.com'
   SOCKS_TEST_PORT        = 443
-  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '9000'))
+  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '3000'))
   VALIDATION_TIMEOUT     = 3
 
   HTTP_PROXY_PROTOCOLS  = %w[http https].freeze
