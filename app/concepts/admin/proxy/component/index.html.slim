@@ -1,0 +1,14 @@
+= header(**header_opts) do |h|
+  - h.with_buttons do
+    .flex.items-center.gap-2
+      span[class=badge_css(:green)]
+        span.w-2.h-2.rounded-full.bg-green-500
+        = counts[:green]
+      span[class=badge_css(:yellow)]
+        span.w-2.h-2.rounded-full.bg-yellow-500
+        = counts[:yellow]
+      span[class=badge_css(:red)]
+        span.w-2.h-2.rounded-full.bg-red-500
+        = counts[:red]
+
+= render Admin::Proxy::Component::Table.new(proxies: @proxies)

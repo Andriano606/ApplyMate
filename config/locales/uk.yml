@@ -17,6 +17,8 @@ uk:
         back_to_site: На сайт
         jobs: Черга задач
         jobs_description: Моніторинг фонових завдань
+        proxies: Проксі
+        proxies_description: Список валідних проксі-серверів
         sources: Джерела
         sources_description: Джерела
         title: Панель адміністратора
@@ -27,6 +29,20 @@ uk:
         success: Ви увійшли як іншого користувача
       destroy:
         success: Ви повернулися до свого облікового запису
+    proxy:
+      index:
+        empty: Проксі не знайдено
+        table:
+          actions: Дії
+          created_at: Додано
+          fail_count: Помилки
+          failed_at: Остання помилка
+          recent_success_count: Успіхи (5 хв)
+          url: URL
+        title: Проксі
+      show:
+        copy: Скопіювати команду
+        title: 'curl: %{url}'
     source:
       create:
         success: Джерело успішно додано

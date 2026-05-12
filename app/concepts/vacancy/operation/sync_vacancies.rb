@@ -7,7 +7,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   NoProxiesError = Class.new(StandardError)
 
-  WORKERS_PER_SOURCE      = 200
+  WORKERS_PER_SOURCE      = 500
   MAX_PAGES               = 2000
   LAST_PAGE_CONFIRMATIONS = 50
 

@@ -18,3 +18,9 @@
       description: I18n.t('admin.dashboard.index.sources_description'),
       turbo: false)
     = icon(:globe_alt, size: 6, class: 'text-green-600')
+  = dashboard_card(path: admin_proxies_path,
+      icon_bg: 'bg-purple-100',
+      title: I18n.t('admin.dashboard.index.proxies'),
+      description: I18n.t('admin.dashboard.index.proxies_description'),
+      turbo: false)
+    = icon(:lock_closed, size: 6, class: 'text-purple-600')

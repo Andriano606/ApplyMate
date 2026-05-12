@@ -7,6 +7,9 @@ import { application } from './application';
 import AccordionController from './accordion_controller';
 application.register('accordion', AccordionController);
 
+import ClipboardController from './clipboard_controller';
+application.register('clipboard', ClipboardController);
+
 import ChatInputController from './chat_input_controller';
 application.register('chat-input', ChatInputController);
 

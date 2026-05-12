@@ -17,6 +17,8 @@ en:
         back_to_site: To site
         jobs: Job queue
         jobs_description: Monitor background vacancy
+        proxies: Проксі
+        proxies_description: Список валідних проксі-серверів
         sources: Sources
         sources_description: Sources
         title: Admin dashboard
@@ -27,6 +29,20 @@ en:
         success: You are now logged in as another user
       destroy:
         success: You have returned to your account
+    proxy:
+      index:
+        empty: Проксі не знайдено
+        table:
+          actions: Дії
+          created_at: Додано
+          fail_count: Помилки
+          failed_at: Остання помилка
+          recent_success_count: Успіхи (5 хв)
+          url: URL
+        title: Проксі
+      show:
+        copy: Скопіювати команду
+        title: 'curl: %{url}'
     source:
       create:
         success: Source created
