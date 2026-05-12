@@ -392,6 +392,8 @@ en:
         one: Found %{count} vacancy
         other: Found %{count} vacancies
       save_as_default: Save as default
+    sync:
+      no_proxies: No proxies available — sync stopped
     total_vacancies: vacancies
   will_paginate:
     next_label: Next &raquo;

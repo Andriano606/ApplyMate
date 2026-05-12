@@ -1,5 +1,42 @@
 # Proxy Validation
 
+## Proxy model — fail tracking
+
+`Proxy` tracks how many consecutive times a proxy has failed. When the count reaches `MAX_FAIL_COUNT` the proxy is deleted automatically.
+
+```ruby
+proxy.increment_fail!   # on DeadProxyError — increments or destroys
+proxy.reset_fail!       # on success — zeroes counter (no-op if already 0)
+```
+
+`reset_fail!` only issues a DB write when `fail_count > 0`, so calling it on every successful request is cheap.
+
+### Call order matters
+
+`increment_fail!` must be called **before** `release_proxy` and before setting `proxy = nil`. After those two steps the reference is gone or the record may be destroyed:
+
+```ruby
+rescue ApplyMate::Client::Base::DeadProxyError
+  proxy&.increment_fail!          # ← while proxy reference is still live
+  release_proxy(proxy, in_use_proxy_ids)
+  proxy = nil
+  retry
+```
+
+### Guard `mark_used!` against destroyed records
+
+`increment_fail!` may destroy the proxy row. Any code that calls `mark_used!` afterward must check `proxy.destroyed?` first:
+
+```ruby
+def release_proxy(proxy, in_use_proxy_ids)
+  return unless proxy
+  in_use_proxy_ids.delete(proxy.id)
+  proxy.mark_used! unless proxy.destroyed?
+end
+```
+
+Without the guard, `update_column` on a destroyed record raises `ActiveRecord::RecordNotFound`.
+
 ## Class structure
 
 | Class | Responsibility |
@@ -48,15 +85,24 @@ sep    = raw.index("\r\n\r\n")
 (300..399).cover?(status) || (status == 200 && sep && raw.length > sep + 4)
 ```
 
-## Two-phase validation
+## Validation
 
-Phase 1 (fast, eliminates ~95% of candidates):
-- TCP CONNECT/SOCKS handshake to `www.google.com:443` — confirms proxy is alive
+Uses `ApplyMate::Client::AsyncHttp` with its default timeout — one client instance per candidate, constructed inside the fiber.
 
-Phase 2 (real-content check):
-- Open tunnel to actual source URL (e.g. `dou.ua:443`, `djinni.co:443`)
-- Wrap in TLS via `OpenSSL::SSL::SSLSocket` using `ssl_connect` helper (connect_nonblock + IO.select loop — never call `ssl.connect` directly; see `async.md`)
-- Send `GET /`, check 2xx/3xx response
+A proxy is accepted if **at least one of `VALIDATION_ATTEMPTS` (20) attempts passes**. Each attempt requires both:
+1. `PHASE1_URL` (google.com) is reachable — confirms basic internet access
+2. At least one source URI is reachable
+
+`any?` short-circuits on the first successful attempt.
+
+```ruby
+VALIDATION_ATTEMPTS.times.any? do
+  reachable?(client, PHASE1_URL) &&
+    source_uris.map(&:to_s).any? { |url| reachable?(client, url) }
+end
+```
+
+Accept any 2xx/3xx response. `AsyncHttp` raises `DeadProxyError` on any tunnel or I/O failure — rescue it in `reachable?` and return `false`.
 
 Load source URIs once in `perform` before the `Async` block and pass into `validate` — never query `Source` inside a fiber:
 

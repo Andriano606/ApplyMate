@@ -11,9 +11,9 @@ class Proxy::Operation::PersistProxies < ApplyMate::Operation::Base
 
     now     = Time.current
     records = proxies.uniq { |p| [ p[:host], p[:port] ] }
-                     .map { |p| p.merge(active: true, failed_at: nil, created_at: now, updated_at: now) }
+                     .map { |p| p.merge(fail_count: 0, failed_at: nil, created_at: now, updated_at: now) }
 
-    Proxy.upsert_all(records, unique_by: %i[host port], update_only: %i[active failed_at])
+    Proxy.upsert_all(records, unique_by: %i[host port], update_only: %i[fail_count failed_at])
     log("Persisted #{records.size} proxies", color: :green)
     self.model = records.size
   end

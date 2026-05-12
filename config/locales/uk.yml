@@ -393,6 +393,8 @@ uk:
         one: Знайдено %{count} вакансію
         other: Знайдено %{count} вакансій
       save_as_default: Зберегти фільтр
+    sync:
+      no_proxies: Немає доступних проксі — синхронізацію зупинено
     total_vacancies: вакансій
   will_paginate:
     next_label: Наступна &raquo;

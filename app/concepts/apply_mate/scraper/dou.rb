@@ -9,7 +9,7 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     @client = client
   end
 
-  def fetch_details(url)
+  def fetch_description(url)
     html = @client.fetch_body(url)
     return nil if html.blank?
 
@@ -18,6 +18,9 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     return nil if node.nil?
 
     sanitize_html(node.inner_html, compact: true)
+  end
+
+  def fetch_details(url)
   end
 
   def form_selector
@@ -46,58 +49,34 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     end
   end
 
-  def fetch_listing(on_batch:, format_result:)
+  def fetch_listing(page:)
     initialize_session
-    result = []
-    count = 0
+    check_termination!
 
-    loop do
-      check_termination!
+    count = (page - 1) * (@items_per_page || 40)
+    body  = @client.post_xhr(XHR_URL, URI.encode_www_form(count:), xhr_headers)
+    return if body.blank?
 
-      Rails.logger.info "Scraping DOU vacancies, offset: #{count}"
-
-      body = @client.post_xhr(XHR_URL, URI.encode_www_form(count: count), xhr_headers)
-      break if body.blank?
-
+    begin
       data = JSON.parse(body)
-      body = nil
-      nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
-      break if nodes.empty?
-
-      jobs = nodes.map { |el| extract_job_data(el) }.compact
-      nodes = nil
-      total_jobs_on_the_page = jobs.count
-      jobs.each_with_index do |job, index|
-        check_termination!
-
-        Rails.logger.info "Scraping DOU vacancy details: #{index+1}/#{total_jobs_on_the_page}"
-        details = fetch_details(job.url)
-        job.description = details if details.present?
-        sleep(rand(1..2))
-      end
-
-      on_batch.call(jobs)
-      result.concat(Array(format_result.call(jobs)))
-      jobs = nil
-
-      break if data['last'] == true
-
-      count += (data['num'] || 0)
-      data = nil
-      sleep(rand(2..5))
-      GC.start
+    rescue JSON::ParserError
+      raise ApplyMate::Client::Base::DeadProxyError, 'non-JSON response (proxy blocked)'
     end
 
-    result
+    nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
+    return if nodes.empty? || data['last'] == true
+
+    @items_per_page ||= data['num']
+    nodes.map { |el| extract_job_data(el) }.compact
   end
 
   private
 
   def initialize_session
-    response = @client.get(VACANCIES_URL)
+    response   = @client.get(VACANCIES_URL)
     csrf_match = response&.headers&.[]('set-cookie').to_s.match(/csrftoken=([^;,\s]+)/)
     @csrf_token = csrf_match&.[](1)
-    Rails.logger.warn '[DOU] Could not extract CSRF token from session' if @csrf_token.blank?
+    raise ApplyMate::Client::Base::DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
   end
 
   def xhr_headers

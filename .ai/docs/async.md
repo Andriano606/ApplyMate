@@ -32,15 +32,67 @@ end
 
 ## AsyncHttp client
 
-`ApplyMate::Client::AsyncHttp` wraps `Async::HTTP::Internet` with the same interface as `Http` (`get`, `fetch_body`, `post`, `post_xhr`). Use it instead of `Http` inside Async fibers — `Http` uses Faraday/Net::HTTP which blocks the entire thread.
+`ApplyMate::Client::AsyncHttp` sends HTTP/HTTPS requests through a SOCKS5 or HTTP-CONNECT proxy using raw `TCPSocket` — no `Async::HTTP::Internet` involved. It exposes the same interface as `Http` (`get`, `fetch_body`, `post`, `post_xhr`) so scrapers can swap clients transparently. Use it instead of `Http` inside Async fibers — `Http` uses Faraday/Net::HTTP which blocks the entire thread.
 
 ```ruby
-client = ApplyMate::Client::AsyncHttp.new
-# must call inside Async block; close when done:
-client.close
+# proxy: is required
+client = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url)
+# no close method — each request manages its own socket
 ```
 
-### `Protocol::HTTP::Headers` gotchas
+### Constructor
+
+```ruby
+ApplyMate::Client::AsyncHttp.new(timeout: 30, proxy:)
+# timeout: overall request deadline in seconds (default 30)
+# proxy:   proxy URL string — supports http://, https://, socks5://, socks5h://
+```
+
+The client must be called inside an `Async` block (uses `Async::Task.current.with_timeout`).
+
+### Proxy protocols
+
+| Scheme | Tunnel method |
+|--------|--------------|
+| `http`, `https` | HTTP CONNECT |
+| `socks5`, `socks5h` | SOCKS5 domain-name mode (address type 0x03) |
+
+The proxy URL scheme selects only the tunnel method. TLS to the *target* is layered separately by `SSLSocket` — an `https://` proxy URL still opens a plain TCP connection to the proxy host.
+
+### Timeouts
+
+| | Default | Controls |
+|---|---|---|
+| `CONNECT_TIMEOUT` | 5 s | `Socket.tcp` connect to the proxy host |
+| `timeout:` | 30 s | `Async::Task.current.with_timeout` — entire request |
+
+### Request / Response
+
+All requests use HTTP/1.0 (server closes after response, no chunked-encoding parsing needed). `get` and `post` return a `Response` with `.body` (String), `.headers` (plain Hash, keys downcased), and `.status` (Integer). `fetch_body` and `post_xhr` unwrap to the body String.
+
+```ruby
+response = client.get(url)     # Response or raises DeadProxyError
+response.body    # String
+response.status  # Integer
+response.headers # plain Hash — lowercase string keys
+
+body = client.fetch_body(url)  # String or raises DeadProxyError
+```
+
+### Failure behavior
+
+Any tunnel or I/O failure returns `nil` internally. `get` and `post` raise `DeadProxyError` on `nil` — callers rescue it to mark the proxy dead and retry with another proxy. The `error_handler:` keyword is accepted on all public methods for interface compatibility with `Http` but is **not used internally** — proxy failures always fail fast rather than retrying.
+
+```ruby
+rescue ApplyMate::Client::DeadProxyError
+  release_proxy(proxy, in_use_proxy_ids)
+  proxy = nil
+  retry
+```
+
+### `Protocol::HTTP::Headers` gotchas (Async::HTTP::Internet only)
+
+This does **not** apply to `AsyncHttp` — it returns plain Ruby hashes. It applies only if you use `Async::HTTP::Internet` directly elsewhere:
 
 `response.headers` returns `Protocol::HTTP::Headers`, **not** a Hash. It does **not** include `Enumerable` — methods like `each_with_object`, `map`, `select` are unavailable. Use plain `each`:
 
@@ -51,15 +103,6 @@ headers.each { |k, v| result[k.to_s.downcase] ||= v.to_s }
 
 # ❌ fails — NoMethodError
 headers.each_with_object({}) { |(k, v), h| h[k] = v }
-```
-
-### Making requests
-
-```ruby
-# headers must be array of [key, value] pairs, not a hash
-response = @internet.get(url, [["User-Agent", "..."]])
-body     = response.read      # String — consumes and closes body stream
-status   = response.status    # Integer
 ```
 
 ## sleep is fiber-aware
@@ -80,6 +123,136 @@ This means scraper polite-delay sleeps automatically interleave across sources.
 | CPU-bound | ❌ no gain | ✅ |
 | Race conditions | none (single-thread) | need mutexes |
 | ActiveRecord | safe — DB calls block fiber but don't interleave | need connection pool config |
+
+## Pattern: proxy rotation with concurrent fiber workers
+
+`SyncVacancies` runs `WORKERS_PER_SOURCE` fibers per source. Each fiber loops over a shared `pages_queue`, acquires a proxy, and releases it in `ensure`. Key rules:
+
+### Shared data structures
+
+```ruby
+pages_queue      = (1..MAX_PAGES).to_a   # plain Array — safe, fibers don't truly interleave
+in_use_proxy_ids = Set.new               # tracks which proxies are held right now
+external_ids     = Concurrent::Array.new # written from N fibers concurrently
+```
+
+`Array`/`Set` are safe for `pages_queue` and `in_use_proxy_ids` because Async fibers are single-threaded — switching only happens at I/O yields. Use `Concurrent::Array` only for collections written from truly parallel workers.
+
+### Proxy acquire / release
+
+```ruby
+def acquire_proxy(in_use_proxy_ids)
+  ActiveRecord::Base.connection_pool.with_connection do
+    Proxy.transaction do
+      proxy = Proxy.ready_for_use
+                   .where.not(id: in_use_proxy_ids.to_a)
+                   .lock('FOR UPDATE SKIP LOCKED')
+                   .first
+      if proxy
+        in_use_proxy_ids << proxy.id
+        proxy.mark_used!
+      end
+      proxy
+    end
+  end
+end
+
+def release_proxy(proxy, in_use_proxy_ids)
+  return unless proxy
+  in_use_proxy_ids.delete(proxy.id)
+  proxy.mark_used!
+end
+```
+
+`FOR UPDATE SKIP LOCKED` prevents two fibers from grabbing the same proxy row even if both hit the DB in the same reactor tick (DB calls block the fiber but two fibers can both be waiting for connection pool slots).
+
+### ensure + retry — proxy release rules
+
+`ensure` runs **once** when the `begin` block exits — it does **not** run on `retry`. Use this to avoid double-release:
+
+```ruby
+loop do
+  begin
+    client = nil   # reset on each begin, including after retry
+    proxy  = nil
+    page   = pages_queue.shift
+    break unless page
+
+    proxy  = acquire_proxy(in_use_proxy_ids)
+    client = Client::AsyncHttp.new(proxy: proxy.url)
+    # ...
+  rescue DeadProxyError
+    release_proxy(proxy, in_use_proxy_ids)
+    proxy = nil          # ← ensure sees nil, skips double-release
+    pages_queue.unshift(page)
+    retry                # ← ensure does NOT run here
+  rescue StandardError
+    pages_queue.unshift(page)
+    break                # ← ensure runs once here with current proxy ✓
+  ensure
+    release_proxy(proxy, in_use_proxy_ids)   # no-op if proxy is nil
+    client&.close
+  end
+end
+```
+
+Initializing `client = nil; proxy = nil` **inside** `begin` (not before it) ensures they reset on `retry` without any explicit reset at the loop top.
+
+### Stop signal — confirmed last page
+
+Don't clear the queue on the first empty result: some sites return empty pages sporadically to foil scrapers. Use a confirmation counter instead:
+
+```ruby
+last_page = { counts: Hash.new(0), boundary: nil }
+```
+
+On empty result:
+```ruby
+last_page[:counts][page] += 1
+if last_page[:counts][page] >= LAST_PAGE_CONFIRMATIONS
+  last_page[:boundary] = [last_page[:boundary], page].compact.min
+  break
+else
+  pages_queue.unshift(page)   # retry — no break, loop continues naturally
+end
+```
+
+On each shift:
+```ruby
+break if last_page[:boundary] && page >= last_page[:boundary]
+```
+
+`[last_page[:boundary], page].compact.min` means later confirmations can only lower the boundary — if pages 500, 502, 504 all confirm, the boundary lands at 500. Workers that have already shifted pages ≥ boundary exit immediately without an HTTP call.
+
+### Progress counter
+
+Share a one-element array as a mutable counter across fibers:
+
+```ruby
+total = vacancies_queue.size
+done  = [0]
+
+# in worker, after each item is processed:
+done[0] += 1
+log("#{ctx(...)} #{done[0] * 100 / total}% (#{done[0]}/#{total})", color: :green)
+```
+
+Plain `[0]` is safe here — fibers are single-threaded so no true race. Use `Concurrent::AtomicFixnum` only if you ever move to real threads.
+
+### Structured logging for concurrent fibers
+
+When N fibers write to the same log, prefix every message with a `ctx` tag so lines can be correlated:
+
+```ruby
+def ctx(source, label, proxy = nil)
+  fiber_id = Fiber.current.object_id.to_s.last(4)
+  "[#{source.name}|#{label}|#{proxy&.host || '—'}|f#{fiber_id}]"
+end
+
+# usage — use "p#{page}" for page workers, vacancy.external_id for description workers
+log("#{ctx(source, "p#{page}", proxy)} #{listing.size} items", color: :green)
+# → [Djinni|p5|1.2.3.4|f7890] 20 items
+```
 
 ## Async::Queue — nil-sentinel drain pattern
 

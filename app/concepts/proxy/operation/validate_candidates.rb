@@ -1,22 +1,18 @@
 # frozen_string_literal: true
 
 require 'async'
-require 'resolv'
 
 class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
-  SOCKS_TEST_HOST        = 'www.google.com'
-  SOCKS_TEST_PORT        = 443
-  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '10000'))
-  VALIDATION_TIMEOUT     = 3
-
-  HTTP_PROXY_PROTOCOLS  = %w[http https].freeze
-  SOCKS_PROXY_PROTOCOLS = %w[socks4 socks4a socks5 socks5h].freeze
+  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '20000'))
+  VALID_PROTOCOLS        = %w[http https socks5 socks5h].freeze
+  VALIDATION_ATTEMPTS = 20
 
   def perform!(candidates:, **)
     filtered = candidates.uniq { |p| "#{p[:protocol]}:#{p[:host]}:#{p[:port]}" }
                          .select { |p| p[:host].match?(/\A(\d{1,3}\.){3}\d{1,3}\z/) }
+                         .select { |p| VALID_PROTOCOLS.include?(p[:protocol]) }
                          .shuffle
 
     source_uris = Source.all.filter_map { |s| URI.parse(s.base_url) rescue nil }
@@ -41,17 +37,6 @@ class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
     total       = candidates.size
     started_at  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-    # Pre-resolve hostnames used in SOCKS4 probes BEFORE entering the Async block.
-    # Resolv.getaddress is not fiber-aware in the Async scheduler — calling it inside
-    # a fiber blocks the entire reactor thread until DNS responds.
-    @resolved_ips = ([ SOCKS_TEST_HOST ] + source_uris.map(&:host)).uniq.each_with_object({}) do |h, map|
-      map[h] = Resolv.getaddress(h) rescue nil
-    end
-
-    # Shared SSL context — set_params loads the CA bundle; reusing it avoids
-    # repeated file I/O (which also blocks the reactor) per validated proxy.
-    @ssl_ctx = OpenSSL::SSL::SSLContext.new.tap(&:set_params)
-
     Async do
       workers = VALIDATION_CONCURRENCY.times.map do |idx|
         Async do
@@ -60,16 +45,14 @@ class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
             candidate = queue.dequeue
             break unless candidate
 
-            reachable  = reachable_via_proxy?(candidate) &&
-                         source_reachable_via_proxy?(candidate, source_uris)
+            reachable  = valid_proxy?(candidate, source_uris)
             tested    += 1
-
-            if reachable
-              valid   << candidate
-              elapsed  = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
-              pct      = (tested * 100.0 / total).round(1)
-              log("fiber=#{fiber_n} #{'valid'.ljust(7)} #{candidate[:protocol]}://#{candidate[:host]}:#{candidate[:port]} (valid=#{valid.size} tested=#{tested}/#{total} #{pct}% elapsed=#{elapsed.round(1)}s)", color: :green)
-            end
+            elapsed    = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+            pct        = (tested * 100.0 / total).round(1)
+            status     = reachable ? 'valid' : 'invalid'
+            color      = reachable ? :green : :yellow
+            valid << candidate if reachable
+            log("fiber=#{fiber_n} #{status.ljust(7)} #{candidate[:protocol]}://#{candidate[:host]}:#{candidate[:port]} (valid=#{valid.size} tested=#{tested}/#{total} #{pct}% elapsed=#{elapsed.round(1)}s)", color: color)
           end
         end
       end
@@ -80,227 +63,28 @@ class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
     valid
   end
 
-  def reachable_via_proxy?(candidate)
-    case candidate[:protocol]
-    when *HTTP_PROXY_PROTOCOLS  then http_proxy_reachable?(candidate)
-    when *SOCKS_PROXY_PROTOCOLS then socks_proxy_reachable?(candidate)
-    else false
-    end
-  end
+  def valid_proxy?(candidate, source_uris)
+    proxy_url = "#{candidate[:protocol]}://#{candidate[:host]}:#{candidate[:port]}"
+    client    = ApplyMate::Client::AsyncHttp.new(proxy: proxy_url)
+    unconfirmed = source_uris.map(&:to_s)
 
-  def source_reachable_via_proxy?(candidate, source_uris)
-    source_uris.shuffle.all? { |uri| proxy_fetch_ok?(candidate, uri) }
-  end
-
-  # HTTP/HTTPS proxy validation via a plain CONNECT handshake over TCPSocket.
-  # TCPSocket.new is fiber-aware under Ruby 3's Async scheduler — no Async::HTTP::Client,
-  # no connection pool, no pool-drain warning.
-  def http_proxy_reachable?(candidate)
-    Async::Task.current.with_timeout(VALIDATION_TIMEOUT) do
-      sock = tcp_socket(candidate[:host], candidate[:port])
-      return false unless sock
-      begin
-        sock.write("CONNECT #{SOCKS_TEST_HOST}:#{SOCKS_TEST_PORT} HTTP/1.1\r\n" \
-                   "Host: #{SOCKS_TEST_HOST}:#{SOCKS_TEST_PORT}\r\n\r\n")
-        status_line = sock.gets
-        status_line&.split(' ', 3)&.at(1).to_i == 200
-      ensure
-        sock.close rescue nil
+    VALIDATION_ATTEMPTS.times do |i|
+      sleep(0) if i > 0
+      url = unconfirmed.sample
+      if reachable?(client, url)
+        unconfirmed.delete(url)
+        return true if unconfirmed.empty?
+        sleep(60)
       end
     end
-  rescue StandardError
+
     false
   end
 
-  # Pure-fiber SOCKS probe: TCPSocket.new is fiber-aware under Ruby 3's Async scheduler,
-  # so all four SOCKS variants run concurrently without threads or Fiber.blocking.
-  # We only verify the tunnel handshake reaches SOCKS_TEST_HOST:SOCKS_TEST_PORT — no
-  # TLS or HTTP required, which keeps probes fast and avoids TLS cert issues on bad proxies.
-  def socks_proxy_reachable?(candidate)
-    Async::Task.current.with_timeout(VALIDATION_TIMEOUT) do
-      sock = tcp_socket(candidate[:host], candidate[:port])
-      return false unless sock
-      begin
-        case candidate[:protocol]
-        when 'socks5', 'socks5h' then socks5_tunnel_open?(sock)
-        when 'socks4a'           then socks4a_tunnel_open?(sock)
-        when 'socks4'            then socks4_tunnel_open?(sock)
-        else false
-        end
-      ensure
-        sock.close rescue nil
-      end
-    end
-  rescue StandardError
-    false
-  end
-
-  # Opens a tunnel to host:port through the proxy and performs a real HTTP GET,
-  # confirming status 200/3xx and a non-empty body. TLS handshake uses ssl_connect
-  # (connect_nonblock + IO.select loop) rather than ssl.connect directly, since
-  # ssl.connect can block the reactor on some Ruby/io-event/platform combinations.
-  def proxy_fetch_ok?(candidate, uri)
-    Async::Task.current.with_timeout(VALIDATION_TIMEOUT) do
-      host = uri.host
-      port = uri.port || (uri.scheme == 'https' ? 443 : 80)
-      sock = open_tunnel(candidate, host, port)
-      return false unless sock
-
-      ssl = nil
-      begin
-        if uri.scheme == 'https'
-          ssl = OpenSSL::SSL::SSLSocket.new(sock, @ssl_ctx)
-          ssl.hostname   = host
-          ssl.sync_close = true
-          return false unless ssl_connect(ssl)
-        end
-        io = ssl || sock
-        io.write("GET #{uri.path.presence || '/'} HTTP/1.0\r\nHost: #{host}\r\nConnection: close\r\n\r\n")
-        raw    = io.read(4096).to_s
-        status = raw.split("\r\n", 2).first&.split(' ', 3)&.at(1).to_i
-        sep    = raw.index("\r\n\r\n")
-        # 3xx redirects have empty bodies but prove the proxy reaches the target site.
-        # 2xx require a non-empty body to rule out transparent interception.
-        (300..399).cover?(status) || (status == 200 && sep && raw.length > sep + 4)
-      rescue StandardError
-        false
-      ensure
-        ssl&.close rescue nil
-        sock.close rescue nil
-      end
-    end
-  rescue StandardError
-    false
-  end
-
-  def open_tunnel(candidate, host, port)
-    case candidate[:protocol]
-    when *HTTP_PROXY_PROTOCOLS  then http_open_tunnel(candidate, host, port)
-    when *SOCKS_PROXY_PROTOCOLS then socks_open_tunnel(candidate, host, port)
-    end
-  end
-
-  def http_open_tunnel(candidate, host, port)
-    sock = tcp_socket(candidate[:host], candidate[:port])
-    return nil unless sock
-    sock.write("CONNECT #{host}:#{port} HTTP/1.1\r\nHost: #{host}:#{port}\r\n\r\n")
-    return sock if sock.gets&.split(' ', 3)&.at(1).to_i == 200
-    sock.close rescue nil
-    nil
-  rescue StandardError
-    sock&.close rescue nil
-    nil
-  end
-
-  def socks_open_tunnel(candidate, host, port)
-    sock = tcp_socket(candidate[:host], candidate[:port])
-    return nil unless sock
-    ok   = case candidate[:protocol]
-    when 'socks5', 'socks5h' then socks5_tunnel_open?(sock, host, port)
-    when 'socks4a'           then socks4a_tunnel_open?(sock, host, port)
-    when 'socks4'            then socks4_tunnel_open?(sock, host, port)
-    else false
-    end
-    return sock if ok
-    sock.close rescue nil
-    nil
-  rescue StandardError
-    sock&.close rescue nil
-    nil
-  end
-
-  # SOCKS5 RFC 1928: no-auth negotiation then CONNECT by domain name.
-  def socks5_tunnel_open?(sock, host = SOCKS_TEST_HOST, port = SOCKS_TEST_PORT)
-    sock.write("\x05\x01\x00")
-    return false unless sock.read(2) == "\x05\x00"
-
-    host_b  = host.b
-    request = [ 0x05, 0x01, 0x00, 0x03, host_b.bytesize ].pack('C5') +
-              host_b +
-              [ port ].pack('n')
-    sock.write(request)
-
-    head = sock.read(4)
-    return false unless head&.length == 4 && head.getbyte(0) == 0x05 && head.getbyte(1) == 0x00
-
-    # Consume bound-address so the socket is left clean.
-    case head.getbyte(3)
-    when 0x01 then sock.read(6)                      # IPv4 (4) + port (2)
-    when 0x03 then sock.read(sock.read(1).ord + 2)   # 1-byte len + domain + port (2)
-    when 0x04 then sock.read(18)                     # IPv6 (16) + port (2)
-    end
-
-    true
-  rescue StandardError
-    false
-  end
-
-  # SOCKS4a: IP=0.0.0.1 signals that a null-terminated hostname follows the userid field.
-  def socks4a_tunnel_open?(sock, host = SOCKS_TEST_HOST, port = SOCKS_TEST_PORT)
-    request = "\x04\x01" +
-              [ port ].pack('n') +
-              "\x00\x00\x00\x01" +   # special IP → proxy resolves hostname
-              "\x00" +                # empty userid
-              host +
-              "\x00"
-    sock.write(request)
-
-    reply = sock.read(8)
-    reply&.length == 8 && reply.getbyte(0) == 0x00 && reply.getbyte(1) == 0x5a
-  rescue StandardError
-    false
-  end
-
-  # ssl.connect internally loops over connect_nonblock + IO.select, but on some
-  # Ruby/io-event/platform combinations that IO.select does not go through the fiber
-  # scheduler — the handshake blocks the reactor thread and with_timeout cannot fire.
-  # Using connect_nonblock + explicit IO.select with a deadline ensures: (a) fibers
-  # yield during the wait when the scheduler intercepts IO.select, and (b) a hard
-  # wall-clock cap via OS-level select when it does not.
-  def ssl_connect(ssl)
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + VALIDATION_TIMEOUT
-    loop do
-      ssl.connect_nonblock
-      return true
-    rescue IO::WaitReadable
-      remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      return false if remaining <= 0
-      IO.select([ ssl.to_io ], nil, nil, remaining) or return false
-    rescue IO::WaitWritable
-      remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      return false if remaining <= 0
-      IO.select(nil, [ ssl.to_io ], nil, remaining) or return false
-    rescue StandardError
-      return false
-    end
-  end
-
-  # Socket.tcp with connect_timeout: bounds the TCP SYN wait at the OS level so
-  # that a non-responding proxy does not block the fiber beyond VALIDATION_TIMEOUT
-  # even when the fiber scheduler does not intercept the connect syscall.
-  def tcp_socket(host, port)
-    Socket.tcp(host, port.to_i, connect_timeout: VALIDATION_TIMEOUT)
-  rescue Errno::EMFILE, Errno::ENFILE
-    # FD limit hit — yield so other fibers can close their sockets before we give up.
-    # Without this, a fiber that can't open sockets loops at CPU speed with no yield
-    # points and monopolizes the reactor thread, starving all other workers.
-    sleep(0)
-    nil
-  rescue StandardError
-    nil
-  end
-
-  # SOCKS4: must send a resolved IPv4 address. IP is looked up from @resolved_ips
-  # (pre-resolved before the Async block) to avoid blocking the reactor thread.
-  def socks4_tunnel_open?(sock, host = SOCKS_TEST_HOST, port = SOCKS_TEST_PORT)
-    ip_str   = @resolved_ips&.fetch(host, nil) || Resolv.getaddress(host)
-    ip_bytes = ip_str.split('.').map(&:to_i).pack('C4')
-    request  = "\x04\x01" + [ port ].pack('n') + ip_bytes + "\x00"
-    sock.write(request)
-
-    reply = sock.read(8)
-    reply&.length == 8 && reply.getbyte(0) == 0x00 && reply.getbyte(1) == 0x5a
-  rescue StandardError
+  def reachable?(client, url)
+    response = client.get(url)
+    (200..399).cover?(response.status)
+  rescue ApplyMate::Client::Base::DeadProxyError
     false
   end
 end
