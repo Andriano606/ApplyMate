@@ -20,6 +20,7 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   end
 
   def fetch_description(url)
+    'SKIPP'
   end
 
   def fetch_details(url)

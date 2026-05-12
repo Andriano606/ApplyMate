@@ -14,9 +14,9 @@ class Admin::Proxy::Component::Table < ApplyMate::Component::Base
       helpers.content_tag(:span, proxy.url, class: 'font-mono text-sm')
     end
 
-    table.add_column(header: I18n.t('admin.proxy.index.table.recent_success_count')) do |proxy|
-      css = proxy.recent_success_count.to_i > 0 ? 'text-green-600 font-medium' : 'text-gray-400'
-      helpers.content_tag(:span, proxy.recent_success_count.to_i, class: css)
+    table.add_column(header: I18n.t('admin.proxy.index.table.success_count')) do |proxy|
+      css = proxy.success_count.to_i > 0 ? 'text-green-600 font-medium' : 'text-gray-400'
+      helpers.content_tag(:span, proxy.success_count.to_i, class: css)
     end
 
     table.add_column(header: I18n.t('admin.proxy.index.table.fail_count')) do |proxy|
@@ -26,6 +26,14 @@ class Admin::Proxy::Component::Table < ApplyMate::Component::Base
       else            'text-red-600 font-medium'
       end
       helpers.content_tag(:span, proxy.fail_count, class: css)
+    end
+
+    table.add_column(header: I18n.t('admin.proxy.index.table.ratio')) do |proxy|
+      total = proxy.success_count + proxy.fail_count
+      ratio = total > 0 ? proxy.success_count.to_f / total : 1.0
+      pct   = (ratio * 100).round
+      css   = pct >= 75 ? 'text-green-600 font-medium' : (pct >= 40 ? 'text-yellow-600' : 'text-red-600 font-medium')
+      helpers.content_tag(:span, "#{pct}%", class: css)
     end
 
     table.add_column(header: I18n.t('admin.proxy.index.table.failed_at')) do |proxy|

@@ -102,7 +102,7 @@ div(class=card_class)
               = Apply::Ai::Prompt::GenerateCv.call(@apply)
           - else
             iframe.w-full.rounded-lg.border.border-gray-200.dark:border-gray-700(
-              src=helpers.rails_blob_path(@apply.cv, disposition: 'inline')
+              src="#{helpers.rails_blob_path(@apply.cv, disposition: 'inline')}#toolbar=0"
               style='height:600px'
             )
       - else

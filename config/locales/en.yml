@@ -37,7 +37,8 @@ en:
           created_at: Додано
           fail_count: Помилки
           failed_at: Остання помилка
-          recent_success_count: Успіхи (5 хв)
+          ratio: Надійність
+          success_count: Успіхи
           url: URL
         title: Проксі
       show:
