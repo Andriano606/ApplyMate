@@ -7,7 +7,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   NoProxiesError = Class.new(StandardError)
 
-  WORKERS_PER_SOURCE      = 500
+  WORKERS_PER_SOURCE      = 200
   MAX_PAGES               = 2000
   LAST_PAGE_CONFIRMATIONS = 50
 
@@ -84,7 +84,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
         proxy = acquire_proxy(in_use_proxy_ids)
         unless proxy
-          if Proxy.ready_for_use.count.zero?
+          if with_db { Proxy.count.zero? }
             stop[0] = true
             log("#{ctx(source, vacancy.external_id)} #{I18n.t('vacancy.sync.no_proxies')}", color: :red)
             vacancies_queue.unshift(vacancy)
@@ -100,16 +100,18 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         description = scraper.fetch_description(vacancy.url)
 
         if description.present?
-          proxy.reset_fail!
-          vacancy.update_column(:description, description)
+          with_db do
+            proxy.increment_succeeded!
+            vacancy.update_column(:description, description)
+          end
           updated_ids << vacancy.id
           done[0] += 1
           log("#{ctx(source, vacancy.external_id, proxy)} #{done[0] * 100 / total}% (#{done[0]}/#{total})", color: :green)
         else
-          vacancies_queue.unshift(vacancy)
+          log("#{ctx(source, vacancy.external_id, proxy)} no description, skipping", color: :yellow)
         end
       rescue ApplyMate::Client::Base::DeadProxyError
-        proxy&.increment_fail!
+        with_db { proxy&.increment_fail! }
         release_proxy(proxy, in_use_proxy_ids)
         proxy = nil
         vacancies_queue.unshift(vacancy)
@@ -139,7 +141,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
         proxy = acquire_proxy(in_use_proxy_ids)
         unless proxy
-          if Proxy.ready_for_use.count.zero?
+          if with_db { Proxy.count.zero? }
             stop[0] = true
             log("#{ctx(source, "p#{page}")} #{I18n.t('vacancy.sync.no_proxies')}", color: :red)
             pages_queue.unshift(page)
@@ -155,9 +157,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         listing = scraper.fetch_listing(page: page)
 
         if listing&.any?
-          proxy.reset_fail!
+          with_db do
+            proxy.increment_succeeded!
+            sync_vacancies_batch(listing, source)
+          end
           log("#{ctx(source, "p#{page}", proxy)} #{listing.size} items", color: :green)
-          sync_vacancies_batch(listing, source)
           external_ids.concat(listing.map(&:external_id))
         else
           last_page[:counts][page] += 1
@@ -166,14 +170,13 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           if count >= LAST_PAGE_CONFIRMATIONS
             last_page[:boundary] = [ last_page[:boundary], page ].compact.min
             log("#{ctx(source, "p#{page}", proxy)} confirmed last page (#{count} empty hits)", color: :yellow)
-            break
-          else
-            # log("#{ctx(source, "p#{page}", proxy)} empty (#{count}/#{LAST_PAGE_CONFIRMATIONS}), retrying...", color: :yellow)
-            pages_queue.unshift(page)
+            next
+          elsif count == 1
+            (LAST_PAGE_CONFIRMATIONS - 1).times { pages_queue.unshift(page) }
           end
         end
       rescue ApplyMate::Client::Base::DeadProxyError
-        proxy&.increment_fail!
+        with_db { proxy&.increment_fail! }
         release_proxy(proxy, in_use_proxy_ids)
         proxy = nil
         pages_queue.unshift(page)
@@ -209,7 +212,12 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   def release_proxy(proxy, in_use_proxy_ids)
     return unless proxy
     in_use_proxy_ids.delete(proxy.id)
-    proxy.mark_used! unless proxy.destroyed?
+    return if proxy.destroyed?
+    with_db { proxy.mark_used! }
+  end
+
+  def with_db(&block)
+    ActiveRecord::Base.connection_pool.with_connection(&block)
   end
 
   def ctx(source, label, proxy = nil)

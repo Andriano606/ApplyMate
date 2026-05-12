@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_12_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_12_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -97,6 +97,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_12_000002) do
     t.datetime "last_used_at"
     t.integer "port", null: false
     t.string "protocol", default: "http", null: false
+    t.integer "recent_success_count", default: 0, null: false
+    t.datetime "recent_success_window_start"
     t.datetime "updated_at", null: false
     t.index ["host", "port"], name: "index_proxies_on_host_and_port", unique: true
   end

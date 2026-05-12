@@ -7,7 +7,7 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
   SOCKS5_PROTOCOLS = %w[socks5 socks5h].freeze
   CONNECT_TIMEOUT  = 5
 
-  def initialize(timeout: 30, proxy:)
+  def initialize(timeout: 10, proxy:)
     @timeout = timeout
     @proxy_uri = URI.parse(proxy)
     @ssl_ctx   = OpenSSL::SSL::SSLContext.new.tap(&:set_params)

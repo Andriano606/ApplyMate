@@ -3,10 +3,23 @@
 require 'rails_helper'
 
 RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
+  # Proxy must be committed (not inside a per-example transaction) so that
+  # Async fibers, which check out a separate DB connection, can see it.
+  before(:all) do
+    @proxy = Proxy.create!(host: '127.0.0.1', port: 8080, protocol: 'http')
+  end
+
+  after(:all) do
+    @proxy&.destroy
+  end
+
   before do
-    # Provide a proxy so the operation doesn't raise NoProxiesError
-    Proxy.create!(host: '127.0.0.1', port: 8080, protocol: 'http')
-    # Stub mark_used! so the proxy stays in ready_for_use (avoids 3-second cooldown)
+    # Reduce async concurrency so tests finish instantly instead of spinning
+    # through thousands of fiber iterations with mocked HTTP responses.
+    stub_const('Vacancy::Operation::SyncVacancies::WORKERS_PER_SOURCE', 1)
+    stub_const('Vacancy::Operation::SyncVacancies::MAX_PAGES', 3)
+    stub_const('Vacancy::Operation::SyncVacancies::LAST_PAGE_CONFIRMATIONS', 1)
+    # Prevent the proxy from leaving ready_for_use after first use
     allow_any_instance_of(Proxy).to receive(:mark_used!)
     # Stub Elasticsearch import on Vacancy relation
     without_partial_double_verification do
@@ -78,10 +91,15 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
         file_fixture("dou/list/details/#{@dou_detail_index}.html").read
       end
 
-      # Stub DOU XHR listing
+      # Stub DOU XHR listing: page 1 (count=0) returns vacancies; subsequent pages
+      # return empty HTML with last:true so the scraper stops pagination naturally.
       allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:post_xhr).with(
         ApplyMate::Scraper::Dou::XHR_URL, anything, anything
-      ).and_return({ html: dou_html_content, last: true }.to_json)
+      ) do |_instance, _url, body|
+        count = URI.decode_www_form(body.to_s).to_h['count'].to_i
+        count == 0 ? { html: dou_html_content, last: false }.to_json
+                   : { html: '', last: true }.to_json
+      end
 
       # Stub DOU session initialization
       allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(
@@ -127,9 +145,10 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     end
 
     it 'visits each vacancy page to fetch descriptions' do
-      expect_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body)
-        .with(a_string_including('jobs.dou.ua/companies/'))
-        .exactly(20).times do |_instance, _url|
+      fetch_count = 0
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body)
+        .with(a_string_including('jobs.dou.ua/companies/')) do |_instance, _url|
+          fetch_count += 1
           @dou_detail_index ||= 0
           @dou_detail_index += 1
           @dou_detail_index = 1 if @dou_detail_index > 20
@@ -137,6 +156,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
         end
 
       operation.call
+      expect(fetch_count).to eq(20)
       expect(source_dou.vacancies.pluck(:description).compact.size).to eq(20)
     end
   end

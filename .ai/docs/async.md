@@ -160,9 +160,16 @@ end
 def release_proxy(proxy, in_use_proxy_ids)
   return unless proxy
   in_use_proxy_ids.delete(proxy.id)
-  proxy.mark_used!
+  return if proxy.destroyed?
+  with_db { proxy.mark_used! }
+end
+
+def with_db(&block)
+  ActiveRecord::Base.connection_pool.with_connection(&block)
 end
 ```
+
+**All DB operations inside async fibers must use `with_db` (or `connection_pool.with_connection` directly).** Without it, AR holds one connection per fiber for its entire lifetime — with 500 fibers, the pool exhausts instantly and subsequent fibers time out. `with_db` borrows a connection only for the duration of the block, then returns it immediately. Group related DB calls into one `with_db` block to minimize round-trips.
 
 `FOR UPDATE SKIP LOCKED` prevents two fibers from grabbing the same proxy row even if both hit the DB in the same reactor tick (DB calls block the fiber but two fibers can both be waiting for connection pool slots).
 
@@ -209,12 +216,15 @@ last_page = { counts: Hash.new(0), boundary: nil }
 On empty result:
 ```ruby
 last_page[:counts][page] += 1
-if last_page[:counts][page] >= LAST_PAGE_CONFIRMATIONS
+count = last_page[:counts][page]
+if count >= LAST_PAGE_CONFIRMATIONS
   last_page[:boundary] = [last_page[:boundary], page].compact.min
-  break
-else
-  pages_queue.unshift(page)   # retry — no break, loop continues naturally
+  next
+elsif count == 1
+  # Fan-out: push 49 copies so all remaining confirmations run in parallel.
+  (LAST_PAGE_CONFIRMATIONS - 1).times { pages_queue.unshift(page) }
 end
+# count > 1 && count < LAST_PAGE_CONFIRMATIONS: copies already in queue, do nothing
 ```
 
 On each shift:

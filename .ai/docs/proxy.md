@@ -1,15 +1,33 @@
 # Proxy Validation
 
-## Proxy model — fail tracking
+## Proxy model — fail tracking and success scoring
 
-`Proxy` tracks how many consecutive times a proxy has failed. When the count reaches `MAX_FAIL_COUNT` the proxy is deleted automatically.
+`Proxy` tracks consecutive failures and recent successes (5-minute sliding window).
 
 ```ruby
-proxy.increment_fail!   # on DeadProxyError — increments or destroys
-proxy.reset_fail!       # on success — zeroes counter (no-op if already 0)
+proxy.increment_fail!        # on DeadProxyError — increments fail_count or destroys; resets success window
+proxy.increment_succeeded!   # on success — resets fail_count, increments recent_success_count
 ```
 
-`reset_fail!` only issues a DB write when `fail_count > 0`, so calling it on every successful request is cheap.
+`increment_succeeded!` always issues a DB write (updates the success window counter on every success).
+
+### Success window — `recent_success_count` / `recent_success_window_start`
+
+`increment_succeeded!` maintains a 5-minute sliding window:
+- If `recent_success_window_start` is within the last 5 minutes → increments `recent_success_count`.
+- Otherwise → resets `recent_success_count` to 1 and starts a new window.
+
+`increment_fail!` resets both columns to `0` / `nil` — a failing proxy loses its priority status immediately.
+
+`ready_for_use` orders by active-window score first, then by `last_used_at`:
+
+```sql
+CASE WHEN recent_success_window_start > NOW() - interval '5 minutes'
+     THEN recent_success_count ELSE 0
+END DESC, last_used_at ASC NULLS FIRST
+```
+
+Proxies with more recent successes are acquired first; proxies with expired or no window fall back to round-robin.
 
 ### Call order matters
 
@@ -115,12 +133,13 @@ valid = validate(candidates, source_uris)
 
 This job is pure I/O-bound. CPU core count is irrelevant. The main constraints:
 
+- **RAM** — each fiber carries stack + an `AsyncHttp` client + local state. Valid proxies that hit `sleep(60)` between attempts keep all of that alive for minutes. Default is 200 (safe RAM, ~40–60 MB for fibers). Raise only after setting the FD limit below.
 - **File descriptors** — the critical one. Each fiber holds 1–2 FDs during a probe. Docker's default soft limit is 1024, which is far too low. Fibers that can't open sockets (`Errno::EMFILE`) return nil immediately with no yield point, and a single fiber can monopolize the reactor thread while draining the entire candidate queue. Fix: add `ulimit: ["nofile=65536:65536"]` under each server role's `options:` in `deploy.staging.yml`.
 - **Network throughput** — the real ceiling; stop increasing concurrency when `wall_clock` stops improving
-- With `VALIDATION_TIMEOUT=3`, throughput ceiling ≈ `CONCURRENCY / 3` probes/sec
+- With AsyncHttp's default 30 s timeout, throughput ceiling ≈ `CONCURRENCY / 30` probes/sec
 
 Tune by running the job with different env values and comparing `wall_clock` in the debug log:
 
 ```bash
-FETCH_PROXIES_VALIDATION_CONCURRENCY=2000 bin/rails runner "Proxy::Job::FetchProxies.perform_now"
+FETCH_PROXIES_VALIDATION_CONCURRENCY=500 bin/rails runner "Proxy::Job::FetchProxies.perform_now"
 ```

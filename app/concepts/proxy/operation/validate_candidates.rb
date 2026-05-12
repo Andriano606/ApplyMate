@@ -5,9 +5,10 @@ require 'async'
 class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
-  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '20000'))
+  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '10000'))
   VALID_PROTOCOLS        = %w[http https socks5 socks5h].freeze
-  VALIDATION_ATTEMPTS = 20
+  VALIDATION_ATTEMPTS    = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_ATTEMPTS', '20'))
+  VALIDATION_URLS        = %w[http://clients3.google.com/generate_204].freeze
 
   def perform!(candidates:, **)
     filtered = candidates.uniq { |p| "#{p[:protocol]}:#{p[:host]}:#{p[:port]}" }
@@ -15,7 +16,7 @@ class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
                          .select { |p| VALID_PROTOCOLS.include?(p[:protocol]) }
                          .shuffle
 
-    source_uris = Source.all.filter_map { |s| URI.parse(s.base_url) rescue nil }
+    source_uris = VALIDATION_URLS.filter_map { |u| URI.parse(u) rescue nil }
 
     valid = log_time('Validation') { validate(filtered, source_uris) }
     log('No valid proxies found', level: :warn, color: :red) if valid.empty?
