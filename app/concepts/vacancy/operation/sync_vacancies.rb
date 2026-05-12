@@ -13,7 +13,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   def perform!(**)
     skip_authorize
-    proxy_count = Proxy.available.count
+    proxy_count = Proxy.ready_for_use.count
     raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if proxy_count.zero?
 
     log("Available proxies: #{proxy_count}", color: :green)
@@ -84,7 +84,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
         proxy = acquire_proxy(in_use_proxy_ids)
         unless proxy
-          if Proxy.available.count.zero?
+          if Proxy.ready_for_use.count.zero?
             stop[0] = true
             log("#{ctx(source, vacancy.external_id)} #{I18n.t('vacancy.sync.no_proxies')}", color: :red)
             vacancies_queue.unshift(vacancy)
@@ -139,7 +139,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
         proxy = acquire_proxy(in_use_proxy_ids)
         unless proxy
-          if Proxy.available.count.zero?
+          if Proxy.ready_for_use.count.zero?
             stop[0] = true
             log("#{ctx(source, "p#{page}")} #{I18n.t('vacancy.sync.no_proxies')}", color: :red)
             pages_queue.unshift(page)

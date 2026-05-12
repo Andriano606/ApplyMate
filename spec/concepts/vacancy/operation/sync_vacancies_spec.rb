@@ -4,12 +4,14 @@ require 'rails_helper'
 
 RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
   before do
+    # Provide a proxy so the operation doesn't raise NoProxiesError
+    Proxy.create!(host: '127.0.0.1', port: 8080, protocol: 'http')
+    # Stub mark_used! so the proxy stays in ready_for_use (avoids 3-second cooldown)
+    allow_any_instance_of(Proxy).to receive(:mark_used!)
     # Stub Elasticsearch import on Vacancy relation
     without_partial_double_verification do
       allow_any_instance_of(ActiveRecord::Relation).to receive(:import)
     end
-    # Also stub close method as it is called in ensure block
-    allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:close)
     # Stub sleep to avoid real delays in tests
     allow_any_instance_of(ApplyMate::Scraper::Djinni).to receive(:sleep)
     allow_any_instance_of(ApplyMate::Scraper::Dou).to receive(:sleep)
