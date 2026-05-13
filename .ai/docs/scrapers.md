@@ -2,14 +2,32 @@
 
 ## Architecture
 
-Scrapers live in `app/concepts/apply_mate/scraper/`. Each scraper inherits `ApplyMate::Scraper::Base` and implements:
+Scrapers live in `app/concepts/apply_mate/scraper/`. Each scraper inherits `ApplyMate::Scraper::Base` (which already `include`s `ApplyMate::Logging`) and implements:
 
 | Method | Purpose |
 |--------|---------|
-| `fetch_listing` | Returns array of `ApplyMate::Operation::Struct` (one per vacancy) |
-| `fetch_details(url)` | Returns enriched text details for a single vacancy URL |
+| `fetch_listing(page:)` | Makes **one** HTTP request for that page/offset. Returns array of vacancy structs, or `nil` when the page is empty. No per-vacancy HTTP calls. |
+| `fetch_description(url)` | Fetches and returns enriched description text for a single vacancy. Called in the second async pass by `fetch_description_worker`. Empty for scrapers that don't support it. |
+| `fetch_details(url)` | Used by the **apply flow** (not sync). Returns structured details needed to fill an application form. |
 | `fetch_applyble(url, session_id:)` | Returns `true`/`false` — can the user apply to this vacancy? |
 | `fetch_form_data(url, session_id: nil)` | Returns a hash representing the HTML application form (inputs, action, method, cookies) |
+
+### fetch_listing must stay pure
+
+`fetch_listing` must make **exactly one** HTTP request and return immediately. Never call `fetch_description`, `fetch_details`, or any per-vacancy URL inside `fetch_listing` — that was a past mistake in Dou where the listing fetched each vacancy's details inline, blocking the entire page until all detail requests finished. Per-vacancy enrichment belongs exclusively in the second-pass `fetch_description_worker`.
+
+### fetch_description vs fetch_details
+
+These two methods serve different callers:
+
+| | `fetch_description` | `fetch_details` |
+|---|---|---|
+| Called by | `SyncVacancies` second pass | Apply flow |
+| Purpose | Enrich vacancy description in DB | Provide form/apply details |
+| Dou | ✅ implemented | empty |
+| Djinni | empty | ✅ implemented |
+
+A scraper that returns empty from `fetch_description` is valid — the second-pass worker checks `description.present?` and skips the update.
 
 Constructor always takes `(source, client)`:
 
@@ -17,6 +35,22 @@ Constructor always takes `(source, client)`:
 def initialize(source = Source.find_by(name: 'MySite'), client = ApplyMate::Client::Http.new)
   @source = source
   @client = client
+end
+```
+
+## fetch_listing pagination contract
+
+`fetch_listing` makes exactly **one** HTTP request and returns an array of vacancy structs (or `nil` when the page is empty) — `SyncVacancies` drives the loop:
+
+```ruby
+# returns nil to signal the last page
+def fetch_listing(page:)
+  check_termination!
+  # ... fetch one page ...
+  nodes = doc.css('.job-list-item')
+  return if nodes.empty?
+
+  nodes.map { |el| extract_job_data(el) }
 end
 ```
 
@@ -54,10 +88,18 @@ scraper = apply.vacancy.source.build_scraper
 
 ## SyncVacancies job dispatch
 
-`Vacancy::Job::SyncVacancies` iterates all sources and always passes `Client::Http` directly:
+`Vacancy::Operation::SyncVacancies` calls `fetch_listing(page:)` per worker, treating `nil` as the stop signal:
 
 ```ruby
-vacancies_data = source.scraper.constantize.new(source, ApplyMate::Client::Http.new).fetch_listing
+listing = scraper.fetch_listing(page: page)
+
+if listing&.any?
+  sync_vacancies_batch(listing, source)
+  all_external_ids.concat(listing.map(&:external_id))
+else
+  pages_queue.clear   # signals all other workers to stop
+  break
+end
 ```
 
 `Source::SCRAPERS` lists allowed class name strings. Add the new class there and add a migration to backfill existing rows.
@@ -134,22 +176,46 @@ def xhr_headers
 end
 ```
 
-Call `initialize_session` at the top of `fetch_listing` before any XHR calls.
+Call `initialize_session` at the top of `fetch_listing` (not in the constructor). `SyncVacancies` creates the scraper per page with a new proxy client each time, so constructor-time HTTP calls waste a request every page.
+
+If CSRF extraction fails (proxy served a captcha), raise `DeadProxyError` immediately — continuing with a nil token causes every subsequent request to fail silently:
+
+```ruby
+raise ApplyMate::Client::Base::DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
+```
+
+## Proxy-blocked responses — raise DeadProxyError
+
+When a proxy is blocked the site returns HTML instead of expected content. Two guards:
+
+**JSON endpoints** — wrap `JSON.parse` and re-raise so the worker retries with a fresh proxy:
+
+```ruby
+begin
+  data = JSON.parse(body)
+rescue JSON::ParserError
+  raise ApplyMate::Client::Base::DeadProxyError, 'non-JSON response (proxy blocked)'
+end
+```
+
+**CSRF/session init** — raise in `initialize_session` if the token is blank (see above).
+
+Both propagate to `scrape_pages`' `rescue DeadProxyError`, which releases the proxy and retries the same page with a new one.
+
+## Logging
+
+`ApplyMate::Scraper::Base` includes `ApplyMate::Logging`, so all scrapers inherit `log`. Use it instead of `Rails.logger`:
+
+```ruby
+log "Scraping page #{page}: #{url}"                                  # yellow info (default)
+log 'Could not extract CSRF token', color: :red, level: :warn        # red warn
+```
+
+Never call `Rails.logger` directly inside a scraper.
 
 ## Graceful termination
 
-Check `Thread.main[:solid_queue_terminating]` inside the pagination loop so the job can be stopped cleanly (saves collected jobs and exits):
-
-```ruby
-loop do
-  if Thread.main[:solid_queue_terminating]
-    Rails.logger.info 'Termination signal received. Saving collected jobs and exiting...'
-    break
-  end
-  # ... scrape page
-  sleep(rand(2..5))
-end
-```
+Call `check_termination!` (inherited from `Base`) at the start of `fetch_listing`. It reads `Thread.main.thread_variable_get(:solid_queue_terminating)` and raises `TerminationError` if set. Because the pagination loop now lives in `SyncVacancies`, a single `check_termination!` per `fetch_listing` call is sufficient — no manual loop checks needed in the scraper itself.
 
 ## HTML sanitization
 

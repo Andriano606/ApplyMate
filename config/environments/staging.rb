@@ -11,6 +11,8 @@ Rails.application.configure do
 
   config.active_storage.service = :minio_staging
 
+  config.cache_store = :solid_cache_store
+
   # Proxy file downloads through Rails instead of redirecting to MinIO directly.
   config.active_storage.resolve_model_to_route = :rails_storage_proxy
 end

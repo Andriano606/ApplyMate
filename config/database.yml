@@ -30,6 +30,10 @@ development:
     <<: *default
     database: apply_mate_development
     max_connections: 15  # covers Puma's 12 threads + headroom
+  cache:
+    <<: *default
+    database: apply_mate_development
+    migrations_paths: db/cache_migrate
   queue:
     <<: *default
     database: apply_mate_development

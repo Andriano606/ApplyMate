@@ -8,45 +8,19 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     @client = client
   end
 
-  def fetch_listing(on_batch:, format_result:)
-    result = []
-    page = 1
+  def fetch_listing(page:)
+    check_termination!
 
-    loop do
-      check_termination!
+    body  = @client.fetch_body("#{JOB_LIST_URL}?page=#{page}")
+    doc   = Nokogiri::HTML(body)
+    nodes = doc.css('.job-list-item, .job-item')
+    return if nodes.empty?
 
-      current_url = "#{JOB_LIST_URL}?page=#{page}"
+    nodes.map { |element| extract_job_data(element) }
+  end
 
-      Rails.logger.info "Scraping page #{page}: #{current_url}"
-
-      body = @client.fetch_body(current_url)
-      doc = Nokogiri::HTML(body)
-      body = nil
-
-      # Шукаємо елементи вакансій
-      nodes = doc.css('.job-list-item, .job-item')
-
-      # Якщо вакансій на сторінці немає — зупиняємо цикл
-      break if nodes.empty?
-
-      page_jobs = nodes.map do |element|
-        extract_job_data(element)
-      end
-      doc = nil
-      nodes = nil
-
-      on_batch.call(page_jobs)
-      result.concat(Array(format_result.call(page_jobs)))
-      page_jobs = nil
-
-      # Пауза від 2 до 5 секунд після кожного успішного запиту
-      sleep(rand(2..5))
-      GC.start
-
-      page += 1
-    end
-
-    result
+  def fetch_description(url)
+    'SKIPP'
   end
 
   def fetch_details(url)

@@ -1,0 +1,25 @@
+- validation_urls = Proxy::Operation::ValidateCandidates::VALIDATION_URLS
+- source_urls     = @sources.filter_map(&:base_url).uniq
+- all_urls        = (validation_urls + source_urls).uniq
+
+= render ApplyMate::Component::TurboModal.new( \
+    modal_id: "#{helpers.dom_id(@proxy)}_modal", \
+    title: I18n.t('admin.proxy.show.title', url: @proxy.url), \
+    size: :'2xl') do |modal|
+  - modal.with_body do
+    .space-y-4
+      - all_urls.each do |url|
+        div[data-controller="clipboard"]
+          p.text-xs.font-medium.text-gray-500.uppercase.tracking-wide.mb-1 = url
+          .relative.bg-gray-900.rounded-lg.overflow-hidden
+            .p-3.overflow-x-auto.pr-10
+              code.text-green-400.text-xs.select-all.whitespace-pre[data-clipboard-target="source"]
+                = "curl -s -x #{@proxy.url} #{url} -L -i --max-time 10"
+            button.absolute.top-2.right-2.p-1.rounded.text-gray-400.hover:text-green-400.transition-colors[
+                type="button"
+                data-clipboard-target="button"
+                data-action="click->clipboard#copy"
+                title=I18n.t('admin.proxy.show.copy')]
+              = icon(:clipboard_list, size: 4)
+  - modal.with_footer do
+    = button(label: I18n.t('admin.common.cancel'), data: { action: 'click->turbo-modal#close' })

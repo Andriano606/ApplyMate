@@ -6,7 +6,7 @@ require 'set'
 class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
-  SCHEMED_PROXY_URI  = /\A(socks5h|socks5a|socks5|socks4a|socks4|https?)\z/i.freeze
+  SCHEMED_PROXY_URI  = /\A(socks5h|socks5a|socks5|https?)\z/i.freeze
   FETCH_CONCURRENCY  = Integer(ENV.fetch('FETCH_PROXIES_FETCH_CONCURRENCY', '50'))
   FETCH_OPEN_TIMEOUT = 10
   FETCH_READ_TIMEOUT = 60
@@ -14,8 +14,10 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
 
   LIST_URLS = [
     'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/socks5.txt',
-    'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/socks4.txt',
+    'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt',
+    'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/https/data.txt',
     'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/https.txt',
+    'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.txt',
     'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/http.txt'
   ].freeze
 
@@ -118,8 +120,6 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
 
     return 'socks5h' if path.include?('socks5a') || u.include?('socks5a')
     return 'socks5'  if path.include?('socks5')  || u.include?('socks5')
-    return 'socks4a' if path.include?('socks4a') || u.include?('socks4a')
-    return 'socks4'  if path.include?('socks4')  || u.include?('socks4')
     # Do not use `include?('https')` — every URL is https://…
     # "https.txt" means the proxy forwards HTTPS traffic, not that it speaks TLS itself — store as http.
     return 'http' if path.end_with?('/https.txt') || %r{/https\.txt(\?|\z)}.match?(path)

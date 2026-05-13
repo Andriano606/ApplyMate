@@ -1,5 +1,60 @@
 # Proxy Validation
 
+## Proxy model — fail tracking and success scoring
+
+`Proxy` tracks consecutive failures and recent successes (5-minute sliding window).
+
+```ruby
+proxy.increment_fail!        # on DeadProxyError — increments fail_count or destroys; resets success window
+proxy.increment_succeeded!   # on success — resets fail_count, increments recent_success_count
+```
+
+`increment_succeeded!` always issues a DB write (updates the success window counter on every success).
+
+### Success window — `recent_success_count` / `recent_success_window_start`
+
+`increment_succeeded!` maintains a 5-minute sliding window:
+- If `recent_success_window_start` is within the last 5 minutes → increments `recent_success_count`.
+- Otherwise → resets `recent_success_count` to 1 and starts a new window.
+
+`increment_fail!` resets both columns to `0` / `nil` — a failing proxy loses its priority status immediately.
+
+`ready_for_use` orders by active-window score first, then by `last_used_at`:
+
+```sql
+CASE WHEN recent_success_window_start > NOW() - interval '5 minutes'
+     THEN recent_success_count ELSE 0
+END DESC, last_used_at ASC NULLS FIRST
+```
+
+Proxies with more recent successes are acquired first; proxies with expired or no window fall back to round-robin.
+
+### Call order matters
+
+`increment_fail!` must be called **before** `release_proxy` and before setting `proxy = nil`. After those two steps the reference is gone or the record may be destroyed:
+
+```ruby
+rescue ApplyMate::Client::Base::DeadProxyError
+  proxy&.increment_fail!          # ← while proxy reference is still live
+  release_proxy(proxy, in_use_proxy_ids)
+  proxy = nil
+  retry
+```
+
+### Guard `mark_used!` against destroyed records
+
+`increment_fail!` may destroy the proxy row. Any code that calls `mark_used!` afterward must check `proxy.destroyed?` first:
+
+```ruby
+def release_proxy(proxy, in_use_proxy_ids)
+  return unless proxy
+  in_use_proxy_ids.delete(proxy.id)
+  proxy.mark_used! unless proxy.destroyed?
+end
+```
+
+Without the guard, `update_column` on a destroyed record raises `ActiveRecord::RecordNotFound`.
+
 ## Class structure
 
 | Class | Responsibility |
@@ -48,15 +103,24 @@ sep    = raw.index("\r\n\r\n")
 (300..399).cover?(status) || (status == 200 && sep && raw.length > sep + 4)
 ```
 
-## Two-phase validation
+## Validation
 
-Phase 1 (fast, eliminates ~95% of candidates):
-- TCP CONNECT/SOCKS handshake to `www.google.com:443` — confirms proxy is alive
+Uses `ApplyMate::Client::AsyncHttp` with its default timeout — one client instance per candidate, constructed inside the fiber.
 
-Phase 2 (real-content check):
-- Open tunnel to actual source URL (e.g. `dou.ua:443`, `djinni.co:443`)
-- Wrap in TLS via `OpenSSL::SSL::SSLSocket` using `ssl_connect` helper (connect_nonblock + IO.select loop — never call `ssl.connect` directly; see `async.md`)
-- Send `GET /`, check 2xx/3xx response
+A proxy is accepted if **at least one of `VALIDATION_ATTEMPTS` (20) attempts passes**. Each attempt requires both:
+1. `PHASE1_URL` (google.com) is reachable — confirms basic internet access
+2. At least one source URI is reachable
+
+`any?` short-circuits on the first successful attempt.
+
+```ruby
+VALIDATION_ATTEMPTS.times.any? do
+  reachable?(client, PHASE1_URL) &&
+    source_uris.map(&:to_s).any? { |url| reachable?(client, url) }
+end
+```
+
+Accept any 2xx/3xx response. `AsyncHttp` raises `DeadProxyError` on any tunnel or I/O failure — rescue it in `reachable?` and return `false`.
 
 Load source URIs once in `perform` before the `Async` block and pass into `validate` — never query `Source` inside a fiber:
 
@@ -69,12 +133,13 @@ valid = validate(candidates, source_uris)
 
 This job is pure I/O-bound. CPU core count is irrelevant. The main constraints:
 
+- **RAM** — each fiber carries stack + an `AsyncHttp` client + local state. Valid proxies that hit `sleep(60)` between attempts keep all of that alive for minutes. Default is 200 (safe RAM, ~40–60 MB for fibers). Raise only after setting the FD limit below.
 - **File descriptors** — the critical one. Each fiber holds 1–2 FDs during a probe. Docker's default soft limit is 1024, which is far too low. Fibers that can't open sockets (`Errno::EMFILE`) return nil immediately with no yield point, and a single fiber can monopolize the reactor thread while draining the entire candidate queue. Fix: add `ulimit: ["nofile=65536:65536"]` under each server role's `options:` in `deploy.staging.yml`.
 - **Network throughput** — the real ceiling; stop increasing concurrency when `wall_clock` stops improving
-- With `VALIDATION_TIMEOUT=3`, throughput ceiling ≈ `CONCURRENCY / 3` probes/sec
+- With AsyncHttp's default 30 s timeout, throughput ceiling ≈ `CONCURRENCY / 30` probes/sec
 
 Tune by running the job with different env values and comparing `wall_clock` in the debug log:
 
 ```bash
-FETCH_PROXIES_VALIDATION_CONCURRENCY=2000 bin/rails runner "Proxy::Job::FetchProxies.perform_now"
+FETCH_PROXIES_VALIDATION_CONCURRENCY=500 bin/rails runner "Proxy::Job::FetchProxies.perform_now"
 ```
