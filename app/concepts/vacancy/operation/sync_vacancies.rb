@@ -172,10 +172,12 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       begin
         client = nil
         proxy  = nil
-        page   = pages_queue.shift
 
         clean_boundary_pages(scraped_pages, last_page)
         clean_pages_queue(pages_queue, last_page, scraped_pages)
+
+        page   = pages_queue.shift
+
         break if break_fiber_condition(scraped_pages, last_page, stop, page)
         next if next_fiber_condition(page, scraped_pages, last_page)
 
@@ -213,14 +215,14 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           # log("#{ctx(source, "p#{page}", proxy)} #{listing.size} items", color: :green)
           external_ids.concat(listing.map(&:external_id))
         else
-          unless scraped_pages.any? && scraped_pages.max > page
+          if scraped_pages.empty? || (scraped_pages.any? && page > scraped_pages.max)
             last_page[:counts][page] += 1
             count = last_page[:counts][page]
 
             if count >= LAST_PAGE_CONFIRMATIONS
               last_page[:boundary] = [ last_page[:boundary], page ].compact.min
-            else
-              pages_queue.unshift(page)
+            elsif count == 1
+              LAST_PAGE_CONFIRMATIONS.times { pages_queue.unshift(page) }
             end
           end
         end
