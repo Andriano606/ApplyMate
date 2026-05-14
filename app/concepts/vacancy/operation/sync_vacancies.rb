@@ -56,7 +56,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   def fetch_description_for_source(source)
     log_time("#{source.name} description") do
-      vacancies_queue  = source.vacancies.to_a
+      vacancies_queue  = source.vacancies.order(:id).to_a
       total            = vacancies_queue.size
       done             = [ 0 ]
       in_use_proxy_ids = Set.new
@@ -226,6 +226,8 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
             elsif count == 1
               LAST_PAGE_CONFIRMATIONS.times { pages_queue.unshift(page) }
             end
+          else
+            pages_queue.unshift(page)
           end
         end
       rescue ApplyMate::Client::Base::DeadProxyError => e

@@ -75,6 +75,46 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       expect(vacancy.company_icon_url).to eq('https://p.djinni.co/f6/759465ffbaeb7add22812612b475ed/photo_2025-04-07_16.14.27_400.jpeg')
       expect(vacancy.description).to include('Ми — performance marketing команда')
     end
+
+    context 'when a page within the scraped range returns empty on first request (anti-scraping)' do
+      # Two proxies so both fibers can run concurrently without hitting the NO PROXY sleep path.
+      # Committed outside the per-example transaction so Async fibers see them.
+      before(:all) do
+        @proxy2 = Proxy.create!(host: '127.0.0.2', port: 8080, protocol: 'http')
+      end
+
+      after(:all) do
+        @proxy2&.destroy
+      end
+
+      before do
+        stub_const('Vacancy::Operation::SyncVacancies::WORKERS_PER_SOURCE', 2)
+
+        @page1_calls = 0
+
+        # sleep(0.05) is an Async-aware yield — the scheduler switches to fiber 2, which
+        # scrapes page 2 (scraped_pages.max becomes 2) before fiber 1 returns its empty
+        # result. Page 1 is then an inner page (1 <= scraped_pages.max), so the anti-scraping
+        # branch is reached instead of the boundary-candidate branch.
+        allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body)
+          .with(a_string_including('djinni.co')) do |_instance, url|
+            if url.include?('page=1') || !url.include?('page=')
+              sleep(0.05)
+              @page1_calls += 1
+              @page1_calls == 1 ? '<html><body></body></html>' : djinni_html_content
+            elsif url.include?('page=2')
+              djinni_html_content
+            else
+              '<html><body></body></html>'
+            end
+          end
+      end
+
+      it 'retries the page after a higher-numbered page was already scraped' do
+        operation.call
+        expect(@page1_calls).to eq(2)
+      end
+    end
   end
 
   describe 'DOU source' do
