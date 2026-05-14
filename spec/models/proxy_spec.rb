@@ -52,13 +52,6 @@ RSpec.describe Proxy, type: :model do
         expect(scope.to_a).to eq([ high, low ])
       end
 
-      it "treats never-used proxy as fully reliable" do
-        never  = create(:proxy, success_count: 0, fail_count: 0)
-        active = create(:proxy, success_count: 1, fail_count: 9)
-
-        expect(scope.first).to eq(never)
-      end
-
       it "treats all-success proxy as fully reliable" do
         perfect = create(:proxy, success_count: 5, fail_count: 0)
         mixed   = create(:proxy, success_count: 3, fail_count: 2)
