@@ -193,10 +193,12 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
             "candidate:#{candidate_page || '?'}(#{candidate_count || 0}/#{LAST_PAGE_CONFIRMATIONS}) " \
             "queue_head[#{WORKERS_PER_SOURCE}]: first=#{upcoming.first} min=#{upcoming.min} max=#{upcoming.max}"
           )
+          log("pages_queue (#{pages_queue.size}): #{pages_queue if pages_queue.size < 5}")
         end
 
         proxy = acquire_proxy(in_use_proxy_ids)
         unless proxy
+          log("#{ctx(source, "p#{page}", proxy)} error: NO PROXY", color: :red)
           pages_queue.unshift(page)
           sleep(5)
           next
@@ -226,12 +228,13 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
             end
           end
         end
-      rescue ApplyMate::Client::Base::DeadProxyError
+      rescue ApplyMate::Client::Base::DeadProxyError => e
+        log("#{ctx(source, "p#{page}", proxy)} error: #{e.message}", color: :red)
         with_db { proxy&.increment_fail! }
         pages_queue.unshift(page)
         retry
       rescue StandardError => e
-        # log("#{ctx(source, "p#{page}", proxy)} error: #{e.message}", color: :red)
+        log("#{ctx(source, "p#{page}", proxy)} error: #{e.message}", color: :red)
         pages_queue.unshift(page)
         retry
       ensure
