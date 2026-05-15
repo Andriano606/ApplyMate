@@ -27,7 +27,7 @@ Rails.application.routes.draw do
     mount MissionControl::Jobs::Engine, at: '/jobs'
   end
 
-  resources :vacancies, only: [ :index ]
+  resources :vacancies, only: [ :index, :show ]
   resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :ai_integrations, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :applies, only: [ :index, :show, :new, :create, :destroy ]

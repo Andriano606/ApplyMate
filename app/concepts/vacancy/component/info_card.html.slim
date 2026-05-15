@@ -1,0 +1,83 @@
+.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700.overflow-hidden.mb-4
+
+  / Hero: status badge + vacancy link
+  .px-6.pt-5.pb-4
+    - if signed_in? || @vacancy.url.present?
+      .flex.items-start.justify-between.gap-3
+        - if signed_in?
+          = render Apply::Component::StatusBadge.new(vacancy: @vacancy, apply: @apply)
+        - if @vacancy.url.present?
+          = helpers.link_to @vacancy.url, target: '_blank', rel: 'noopener noreferrer', \
+              class: 'shrink-0 mt-1 text-gray-400 hover:text-indigo-500 transition-colors ml-auto'
+            = icon(:external_link, size: 4)
+
+    / Title + company
+    .mt-3
+      h2.text-base.font-semibold.text-gray-900.dark:text-gray-100.leading-snug
+        = @vacancy.title
+      - if @vacancy.company_name.present?
+        p.mt-0.5.text-sm.text-gray-500.dark:text-gray-400 = @vacancy.company_name
+
+    / Description — clamped preview / full HTML, toggled via turbo frame
+    - if @vacancy.description.present?
+      = helpers.turbo_frame_tag "vacancy_description_#{@vacancy.hashid}" do
+        - if @expanded
+          div.mt-3.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.space-y-2
+            = description_full
+          = helpers.link_to @collapse_url, \
+              class: 'mt-1 inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 transition-colors'
+            span = I18n.t('vacancy.info_card.collapse_description')
+            = icon(:chevron_up, size: 3)
+        - else
+          p.mt-3.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.line-clamp-3
+            = description_preview
+          = helpers.link_to @expand_url, \
+              class: 'mt-1 inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 transition-colors'
+            span = I18n.t('vacancy.info_card.expand_description')
+            = icon(:chevron_down, size: 3)
+
+  / Meta grid
+  div(class="border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-6 py-4")
+    .grid.grid-cols-2.gap-x-8.gap-y-4.sm:grid-cols-3
+      / Source
+      div
+        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+          = I18n.t('apply.show.fields.source')
+        p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
+          = @vacancy.source.name
+
+      - if @apply
+        / Type
+        div
+          p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+            = I18n.t('apply.show.fields.apply_type')
+          p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
+            = apply_type_label
+
+        / Date
+        div
+          p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+            = I18n.t('apply.show.fields.created_at')
+          p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
+            = I18n.l(@apply.created_at, format: :default)
+
+        / AI Integration
+        div
+          p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+            = I18n.t('apply.show.fields.ai_integration')
+          p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
+            = @apply.ai_integration.label
+
+        / Profile (CV + form)
+        div
+          p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+            = I18n.t('apply.show.fields.profile')
+          p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
+            = @apply.user_profile.name
+
+        / Source profile (account)
+        div
+          p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+            = I18n.t('apply.show.fields.source_profile')
+          p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
+            = @apply.source_profile.name

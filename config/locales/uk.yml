@@ -395,7 +395,11 @@ uk:
       success: Профіль оновлено
   vacancy:
     card:
+      details: Деталі
       view_original: Переглянути оригінал
+    info_card:
+      collapse_description: Згорнути
+      expand_description: Розгорнути
     search:
       add: Додати
       and: і
@@ -410,6 +414,8 @@ uk:
         one: Знайдено %{count} вакансію
         other: Знайдено %{count} вакансій
       save_as_default: Зберегти фільтр
+    show:
+      back: До вакансій
     sync:
       no_proxies: Немає доступних проксі — синхронізацію зупинено
     total_vacancies: вакансій

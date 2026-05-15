@@ -25,10 +25,15 @@
     h3.text-xl.font-extrabold.text-gray-900.dark:text-gray-100.leading-tight.tracking-tight.line-clamp-1
       = @vacancy.title
     p.text-sm.text-gray-500.dark:text-gray-400.leading-relaxed.line-clamp-5 = description
-  - if @vacancy.url.present?
-    .border-t.border-gray-200.dark:border-gray-700
+  .border-t.border-gray-200.dark:border-gray-700.flex
+    = helpers.link_to helpers.vacancy_path(@vacancy), \
+        data: { turbo_frame: '_top' }, \
+        class: "flex items-center gap-1.5 px-5 py-3 font-medium font-outfit text-[13px] text-gray-900 dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors#{' border-r border-gray-200 dark:border-gray-700' if @vacancy.url.present?}"
+      = icon(:eye, size: 4)
+      = I18n.t('vacancy.card.details')
+    - if @vacancy.url.present?
       a.flex.items-center.gap-1.5.px-5.py-3.font-medium.font-outfit.text-gray-900 (
-          class=" text-[13px]  dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" \
+          class=" text-[13px] dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" \
           href=@vacancy.url target="_blank" rel="noopener noreferrer"
         )
         = icon(:external_link, size: 4)

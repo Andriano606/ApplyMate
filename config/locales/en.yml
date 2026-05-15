@@ -394,7 +394,11 @@ en:
       success: Профіль оновлено
   vacancy:
     card:
+      details: Деталі
       view_original: View original posting
+    info_card:
+      collapse_description: Згорнути
+      expand_description: Розгорнути
     search:
       add: Add
       and: AND
@@ -409,6 +413,8 @@ en:
         one: Found %{count} vacancy
         other: Found %{count} vacancies
       save_as_default: Save as default
+    show:
+      back: До вакансій
     sync:
       no_proxies: No proxies available — sync stopped
     total_vacancies: vacancies

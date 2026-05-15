@@ -1,74 +1,7 @@
 = header(**header_opts)
 = Apply::TurboHandler::StatusUpdate.stream_from(@apply.vacancy, current_user, helpers)
 
-/ ─── Info Card ───────────────────────────────────────────────────────────────
-.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700.overflow-hidden.mb-4
-
-  / Hero: status badge + vacancy link
-  .px-6.pt-5.pb-4
-    .flex.items-start.justify-between.gap-3
-      = render Apply::Component::StatusBadge.new(vacancy: @apply.vacancy, apply: @apply)
-      - if @apply.vacancy.url.present?
-        = helpers.link_to @apply.vacancy.url, target: '_blank', rel: 'noopener noreferrer', \
-            class: 'shrink-0 mt-1 text-gray-400 hover:text-indigo-500 transition-colors'
-          = icon(:external_link, size: 4)
-
-    / Title + company
-    .mt-3
-      h2.text-base.font-semibold.text-gray-900.dark:text-gray-100.leading-snug
-        = @apply.vacancy.title
-      - if @apply.vacancy.company_name.present?
-        p.mt-0.5.text-sm.text-gray-500.dark:text-gray-400 = @apply.vacancy.company_name
-
-    / Description — clamped to 3 lines
-    - if @apply.vacancy.description.present?
-      p.mt-3.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.line-clamp-3
-        = helpers.strip_tags(@apply.vacancy.description)
-
-  / Meta grid
-  div(class="border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-6 py-4")
-    .grid.grid-cols-2.gap-x-8.gap-y-4.sm:grid-cols-3
-      / Source
-      div
-        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
-          = I18n.t('apply.show.fields.source')
-        p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
-          = @apply.vacancy.source.name
-
-      / Type
-      div
-        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
-          = I18n.t('apply.show.fields.apply_type')
-        p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
-          = apply_type_label
-
-      / Date
-      div
-        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
-          = I18n.t('apply.show.fields.created_at')
-        p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
-          = I18n.l(@apply.created_at, format: :default)
-
-      / AI Integration
-      div
-        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
-          = I18n.t('apply.show.fields.ai_integration')
-        p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
-          = @apply.ai_integration.label
-
-      / Profile (CV + form)
-      div
-        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
-          = I18n.t('apply.show.fields.profile')
-        p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
-          = @apply.user_profile.name
-
-      / Source profile (account)
-      div
-        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
-          = I18n.t('apply.show.fields.source_profile')
-        p.mt-0.5.text-sm.font-medium.text-gray-900.dark:text-gray-100
-          = @apply.source_profile.name
+= render Vacancy::Component::InfoCard.new(vacancy: @apply.vacancy, apply: @apply, expanded: @expanded, expand_url: expand_url, collapse_url: collapse_url)
 
 / ─── Content Card ────────────────────────────────────────────────────────────
 div(class=card_class)

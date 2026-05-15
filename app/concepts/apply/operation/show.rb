@@ -8,7 +8,8 @@ class Apply::Operation::Show < ApplyMate::Operation::Base
     self.model = ApplyMate::Operation::Struct.new(
       apply:    apply,
       cv_tab:   params[:cv_tab]&.to_sym || :preview,
-      form_tab: params[:form_tab]&.to_sym || :fields
+      form_tab: params[:form_tab]&.to_sym || :fields,
+      expanded: params[:expanded].present?
     )
   end
 end
