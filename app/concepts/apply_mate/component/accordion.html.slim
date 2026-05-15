@@ -1,10 +1,13 @@
-div(data-controller="accordion")
-  button.w-full.flex.items-center.justify-between.py-2.text-left(
-    type="button"
-    data-action="click->accordion#toggle"
-  )
-    span.text-xs.font-medium.text-gray-400.dark:text-gray-500.uppercase.tracking-wide = @title
-    span.text-gray-400.transition-transform.duration-200(data-accordion-target="icon" class="#{'rotate-180' if @open}")
-      = icon(:chevron_down, size: 4)
-  div(data-accordion-target="content" class="#{'hidden' unless @open}")
-    = content
+details(class='bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 group' \
+    open=(@open || nil))
+  summary(class='flex items-center gap-2 px-6 py-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden')
+    .flex.items-center.gap-2.flex-1
+      span.text-xs.font-medium.text-gray-400.dark:text-gray-500.uppercase.tracking-wide = @title
+      - if @loading
+        .animate-spin.rounded-full.h-3.5.w-3.5.border-2.border-gray-200.dark:border-gray-600.border-t-indigo-500
+      span.text-gray-400.transition-transform.duration-200.group-open:rotate-180
+        = icon(:chevron_down, size: 4)
+    - if actions?
+      .flex.items-center.gap-2
+        = actions
+  = content

@@ -4,9 +4,6 @@
 
 import { application } from './application';
 
-import AccordionController from './accordion_controller';
-application.register('accordion', AccordionController);
-
 import ClipboardController from './clipboard_controller';
 application.register('clipboard', ClipboardController);
 

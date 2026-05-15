@@ -50,7 +50,19 @@ This applies to any Rails helper: `turbo_frame_tag`, `link_to`, `image_tag`, `co
 ## Decision tree — before creating a component
 
 **Step 1 — check if it already exists.**
-Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `badge`, `alert`, `accordion`, `turbo_form_modal`, `file_drop`, etc.). If a matching helper exists, use it — do not create a duplicate.
+Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
+
+```slim
+/ ✅ use the helper
+= link(url: path, size: :sm) do
+  = icon(:arrow_down_tray, size: 4)
+  = I18n.t('...')
+
+/ ❌ avoid — bypasses the shared component
+= helpers.link_to path, class: 'inline-flex items-center ...'
+  = icon(:arrow_down_tray, size: 4)
+  = I18n.t('...')
+```
 
 **Step 2 — if it doesn't exist, decide whether it's reusable.**
 
@@ -190,6 +202,93 @@ Use ViewComponent slots for components that accept inner content blocks:
 ```ruby
 renders_one :header
 renders_many :rows
+```
+
+### Rendering a slot in a template
+
+**Never** use `render(slot_instance)` — it delegates `render_in` via `method_missing` without the content block, so the slot renders empty. Use `= slot_instance` instead, which calls `Slot#to_s` and correctly passes the block:
+
+```slim
+/ ✅ correct
+= actions
+
+/ ❌ silent empty output
+= render(actions)
+```
+
+### `renders_many` with a lambda
+
+Use a lambda when slots need access to parent state (instance variables). The lambda is bound to the parent component, so `@ivars` are available:
+
+```ruby
+renders_many :tabs, lambda { |label:|
+  @index = (@index || 0) + 1
+  Tab.new(label: label, url: "#{@base_url}?tab=#{@index}", active: @current == @index.to_s)
+}
+```
+
+The block passed to `with_tab { ... }` is stored on the slot and forwarded to `render_in` via `Slot#to_s` — it does not need to be yielded inside the lambda.
+
+### Inline slot component (no template)
+
+For slots that just render their content block, define `call` returning `content`. No `.html.slim` needed:
+
+```ruby
+class MyComponent::Item < ApplyMate::Component::Base
+  def initialize(label:)
+    @label = label
+  end
+
+  def label
+    @label
+  end
+
+  def call
+    content
+  end
+end
+```
+
+Do not use `attr_reader` — expose methods explicitly (project style rule).
+
+### Slot identity comparison in templates
+
+`tab == shown` uses object identity (`BasicObject#==`) since `Slot` doesn't override `==`. This works reliably when both sides come from the same `tabs` array:
+
+```slim
+- shown = tabs.find(&:active?) || tabs.first
+- tabs.each do |tab|
+  = helpers.link_to tab.label, tab.url, class: tab == shown ? active_class : inactive_class
+```
+
+### Per-request counter with `before_render`
+
+To generate unique IDs that are stable across requests (required for Turbo Frames), store state on `view_context` in `before_render` — it is fresh per request:
+
+```ruby
+def before_render
+  n = (view_context.instance_variable_get(:@__tabs_counter) || 0) + 1
+  view_context.instance_variable_set(:@__tabs_counter, n)
+  @frame_id = "tabs_component_#{n}"
+end
+```
+
+**Do not use `@@class_variables`** for this — they persist across requests, so Turbo Frame IDs in the page won't match IDs in the response, producing "Content missing".
+
+### `helpers.params` in helper methods
+
+In `ApplyMate::Component::Helper` methods, bare `params` is not in scope. Use `helpers.params`:
+
+```ruby
+# ✅ correct
+def tabs(base_url:, &block)
+  render(Tabs.new(base_url:, current: helpers.params['selected_tab']))
+end
+
+# ❌ raises NoMethodError
+def tabs(base_url:, &block)
+  render(Tabs.new(base_url:, current: params['selected_tab']))
+end
 ```
 
 ## Skeleton

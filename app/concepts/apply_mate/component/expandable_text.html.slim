@@ -1,0 +1,11 @@
+details(class='group')
+  summary(class='cursor-pointer list-none [&::-webkit-details-marker]:hidden')
+    .inline-flex.items-center.gap-1.text-xs.text-indigo-500.hover:text-indigo-700.transition-colors.mb-1
+      span.group-open:hidden = I18n.t('apply_mate.expandable_text.expand')
+      span.hidden.group-open:inline = I18n.t('apply_mate.expandable_text.collapse')
+      span.transition-transform.duration-200.group-open:rotate-180
+        = icon(:chevron_down, size: 3)
+    p.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.group-open:hidden(class=clamp_class)
+      = preview_text
+  .text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.space-y-2
+    = full_html
