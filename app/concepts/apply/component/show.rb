@@ -36,10 +36,6 @@ class Apply::Component::Show < ApplyMate::Component::Base
       'dark:bg-red-900/20 rounded-lg p-3 font-mono whitespace-pre-wrap'
   end
 
-  def cv_tab_class(tab)
-    "#{TAB_BASE} #{@cv_tab == tab ? TAB_ACTIVE : TAB_INACTIVE}"
-  end
-
   def form_tab_class(tab)
     "#{TAB_BASE} #{@form_tab == tab ? TAB_ACTIVE : TAB_INACTIVE}"
   end

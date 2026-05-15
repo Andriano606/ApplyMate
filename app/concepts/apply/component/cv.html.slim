@@ -1,0 +1,33 @@
+.px-6.py-4(data-controller='accordion')
+  .flex.items-center.justify-between
+    button.flex.items-center.gap-2.py-1.text-left(type='button' data-action='click->accordion#toggle')
+      span.text-xs.font-medium.uppercase.tracking-wide.text-gray-400.dark:text-gray-500
+        = I18n.t('apply.show.fields.cv')
+      span.text-gray-400.transition-transform.duration-200(data-accordion-target='icon')
+        = icon(:chevron_down, size: 4)
+    - if @apply.cv.attached?
+      = helpers.link_to helpers.rails_blob_path(@apply.cv, disposition: 'attachment'), \
+          class: 'inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 transition-colors'
+        = icon(:arrow_down_tray, size: 4)
+        = I18n.t('apply.show.download_cv')
+
+  div(data-accordion-target='content' class='hidden')
+    - if @apply.cv.attached?
+      = helpers.turbo_frame_tag 'cv_tab' do
+        .border-b.border-gray-200.dark:border-gray-700.mt-3.mb-4
+          nav.flex.gap-1.-mb-px
+            = helpers.link_to I18n.t('apply.show.cv_tab_preview'), helpers.apply_path(@apply, cv_tab: :preview), \
+                class: cv_tab_class(:preview), data: { turbo_frame: 'cv_tab' }
+            = helpers.link_to I18n.t('apply.show.cv_tab_prompt'), helpers.apply_path(@apply, cv_tab: :prompt), \
+                class: cv_tab_class(:prompt), data: { turbo_frame: 'cv_tab' }
+
+        - if @cv_tab == :prompt
+          .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.font-mono.leading-relaxed
+            = Apply::Ai::Prompt::GenerateCv.call(@apply)
+        - else
+          iframe.w-full.rounded-lg.border.border-gray-200.dark:border-gray-700(
+            src="#{helpers.rails_blob_path(@apply.cv, disposition: 'inline')}#toolbar=0"
+            style='height:600px'
+          )
+    - else
+      p.mt-2.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.show.no_data')
