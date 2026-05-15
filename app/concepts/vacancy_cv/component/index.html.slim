@@ -1,0 +1,13 @@
+= VacancyCv::TurboHandler::Index.frame_tag(@vacancy, helpers) do
+  = VacancyCv::TurboHandler::Index.stream_from(@vacancy, page_user, helpers)
+  - @vacancy_cvs.reject { |vc| vc.cv.attached? }.each do |vacancy_cv|
+    = VacancyCv::TurboHandler::CvReady.stream_from(vacancy_cv, page_user, helpers)
+
+  .mt-4
+    = link(url: helpers.new_vacancy_vacancy_cv_path(@vacancy), label: I18n.t('vacancy.show.generate_cv'), \
+        variant: :primary, data: { turbo_stream: true })
+
+  - if @vacancy_cvs.any?
+    .mt-4.space-y-3
+      - @vacancy_cvs.each_with_index do |vacancy_cv, i|
+        = render VacancyCv::Component::CvContent.new(vacancy_cv:, title: cv_title(i))

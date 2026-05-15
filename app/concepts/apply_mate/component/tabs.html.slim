@@ -1,0 +1,7 @@
+= helpers.turbo_frame_tag @frame_id do
+  - shown = tabs.find(&:active?) || tabs.first
+  .border-b.border-gray-200.dark:border-gray-700.mb-4
+    nav.flex.gap-1.-mb-px
+      - tabs.each do |tab|
+        = helpers.link_to tab.label, tab.url, class: tab_class(tab, shown), data: { turbo_frame: @frame_id }
+  = shown if shown

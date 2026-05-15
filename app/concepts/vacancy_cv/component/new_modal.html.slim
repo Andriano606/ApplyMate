@@ -1,0 +1,6 @@
+= turbo_form_modal( \
+    model: @vacancy_cv, \
+    endpoint: [ @vacancy, @vacancy_cv ], \
+    header_text: I18n.t('vacancy.show.generate_cv'), \
+    submit_text: I18n.t('vacancy.show.generate_cv')) do |modal|
+  = render Vacancy::Component::GenerateCvForm.new(form: modal.form)

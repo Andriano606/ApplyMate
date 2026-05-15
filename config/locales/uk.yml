@@ -189,6 +189,10 @@ uk:
       filling_form: Заповнення форми
       generating_cv: Генерація резюме
       sending_cv: Надсилання
+  apply_mate:
+    expandable_text:
+      collapse: Згорнути
+      expand: Розгорнути
   components:
     debug_button:
       label: Адмін
@@ -397,9 +401,6 @@ uk:
     card:
       details: Деталі
       view_original: Переглянути оригінал
-    info_card:
-      collapse_description: Згорнути
-      expand_description: Розгорнути
     search:
       add: Додати
       and: і
@@ -416,9 +417,14 @@ uk:
       save_as_default: Зберегти фільтр
     show:
       back: До вакансій
+      generate_cv: Згенерувати резюме
     sync:
       no_proxies: Немає доступних проксі — синхронізацію зупинено
     total_vacancies: вакансій
+    update:
+      generate_cv_started: Генерацію резюме розпочато
+  vacancy_cv:
+    generating: Генерація резюме...
   will_paginate:
     next_label: Наступна &raquo;
     page_gap: "&hellip;"

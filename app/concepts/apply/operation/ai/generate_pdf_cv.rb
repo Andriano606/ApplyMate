@@ -13,7 +13,7 @@ class Apply::Operation::Ai::GeneratePdfCv < Apply::Operation::Base
 
   def run!(apply:, handler:, prompt_class:, schema_class:, **)
     raw_pdf = apply.raw_cv.presence || ApplyMate::Ai::AiHandler.call(
-      prompt_instance:       prompt_class.new(apply),
+      prompt_instance:       prompt_class.new(user_profile: apply.user_profile, vacancy: apply.vacancy, generate_cv_prompt: apply.generate_cv_prompt),
       response_schema_class: schema_class,
       ai_integration:        apply.ai_integration
     )

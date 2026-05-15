@@ -22,19 +22,7 @@
           option_component: 'SourceProfile::Component::SelectOption' \
         }
 
-    = modal.form.input :user_profile_id, \
-        collection: current_user.user_profiles, \
-        label_method: :name, \
-        value_method: :id, \
-        include_blank: I18n.t('apply.new.form.select_profile'), \
-        label: I18n.t('apply.new.form.user_profile')
-
-    = modal.form.input :ai_integration_id, \
-        collection: current_user.ai_integrations, \
-        label_method: proc { |ai| "#{ai.provider.capitalize.humanize} #{ai.model ? "(#{ai.model})" : ''}" }, \
-        value_method: :id, \
-        include_blank: I18n.t('apply.new.form.select_integration'), \
-        label: I18n.t('apply.new.form.ai_integration')
+    = render Vacancy::Component::GenerateCvForm.new(form: modal.form)
 
     = modal.form.input :fill_form_prompt_id, \
         as: :select, \
@@ -44,12 +32,3 @@
         value_method: :id, \
         include_blank: I18n.t('apply.new.form.select_fill_form_prompt'), \
         label: I18n.t('apply.new.form.fill_form_prompt')
-
-    = modal.form.input :generate_cv_prompt_id, \
-        as: :select, \
-        wrapper: :select, \
-        collection: current_user.prompts.generate_cv, \
-        label_method: :name, \
-        value_method: :id, \
-        include_blank: I18n.t('apply.new.form.select_generate_cv_prompt'), \
-        label: I18n.t('apply.new.form.generate_cv_prompt')

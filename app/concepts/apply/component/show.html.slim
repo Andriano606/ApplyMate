@@ -1,58 +1,60 @@
 = header(**header_opts)
 = Apply::TurboHandler::StatusUpdate.stream_from(@apply.vacancy, current_user, helpers)
 
-= render Vacancy::Component::InfoCard.new(vacancy: @apply.vacancy, apply: @apply, expanded: @expanded, expand_url: expand_url, collapse_url: collapse_url)
+= render Apply::Component::InfoCard.new(apply: @apply)
 
-/ ─── Content Card ────────────────────────────────────────────────────────────
-div(class=card_class)
-
-  = render Apply::Component::Cv.new(apply: @apply, cv_tab: @cv_tab)
+/ ─── Content Sections ────────────────────────────────────────────────────────
+.space-y-3
+  / CV
+  = accordion(title: I18n.t('apply.show.fields.cv')) do |a|
+    - if @apply.cv.attached?
+      - a.with_actions do
+        = link(url: helpers.rails_blob_path(@apply.cv, disposition: 'attachment'), size: :md) do
+          = I18n.t('apply.show.download_cv')
+      .px-6.py-4
+        = tabs(base_url: helpers.apply_path(@apply)) do |t|
+          - t.with_tab(label: I18n.t('apply.show.cv_tab_preview')) do
+            iframe.w-full.rounded-lg.border.border-gray-200.dark:border-gray-700(
+              src="#{helpers.rails_blob_path(@apply.cv, disposition: 'inline')}#toolbar=0"
+              style='height:600px'
+            )
+          - t.with_tab(label: I18n.t('apply.show.cv_tab_prompt')) do
+            .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.font-mono.leading-relaxed
+              = Apply::Ai::Prompt::GenerateCv.call(user_profile: @apply.user_profile, \
+                  vacancy: @apply.vacancy, generate_cv_prompt: @apply.generate_cv_prompt)
+    - else
+      .px-6.py-4
+        p.mt-2.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.show.no_data')
 
   / Screenshot
   - if @apply.screenshot.attached?
-    .px-6.py-4
-      p.text-sm.font-medium.text-gray-500.dark:text-gray-400.mb-3 = I18n.t('apply.show.fields.screenshot')
-      = helpers.link_to helpers.rails_blob_path(@apply.screenshot, disposition: 'inline'), \
-              target: '_blank', rel: 'noopener noreferrer' do
-        = helpers.image_tag( \
-            helpers.rails_blob_path(@apply.screenshot, disposition: 'inline'), \
-            class: 'w-full rounded-lg border border-gray-200 dark:border-gray-600 ' \
-                   'shadow-sm hover:opacity-90 transition-opacity', \
-            alt: I18n.t('apply.show.fields.screenshot') \
-          )
+    = accordion(title: I18n.t('apply.show.fields.screenshot')) do
+      .px-6.py-4
+        = helpers.link_to helpers.rails_blob_path(@apply.screenshot, disposition: 'inline'), \
+                target: '_blank', rel: 'noopener noreferrer' do
+          = helpers.image_tag( \
+              helpers.rails_blob_path(@apply.screenshot, disposition: 'inline'), \
+              class: 'w-full rounded-lg border border-gray-200 dark:border-gray-600 ' \
+                     'shadow-sm hover:opacity-90 transition-opacity', \
+              alt: I18n.t('apply.show.fields.screenshot') \
+            )
 
-  / Filled form data — tabbed accordion
-  .px-6.py-4(data-controller='accordion')
-    button.flex.items-center.gap-2.py-1.text-left.w-full(type='button' data-action='click->accordion#toggle')
-      span.text-xs.font-medium.uppercase.tracking-wide.text-gray-400.dark:text-gray-500
-        = I18n.t('apply.show.filled_form_data')
-      span.text-gray-400.transition-transform.duration-200(data-accordion-target='icon')
-        = icon(:chevron_down, size: 4)
-
-    div(data-accordion-target='content' class='hidden')
-      - if @apply.filled_inputs.present?
-        = helpers.turbo_frame_tag 'form_tab' do
-          .border-b.border-gray-200.dark:border-gray-700.mt-3.mb-4
-            nav.flex.gap-1.-mb-px
-              = helpers.link_to( \
-                  I18n.t('apply.show.filled_form_tab_fields'), \
-                  helpers.apply_path(@apply, form_tab: :fields), \
-                  class: form_tab_class(:fields), \
-                  data: { turbo_frame: 'form_tab' } \
-                )
-              = helpers.link_to I18n.t('apply.show.cv_tab_prompt'), helpers.apply_path(@apply, form_tab: :prompt), \
-                  class: form_tab_class(:prompt), data: { turbo_frame: 'form_tab' }
-
-          - if @form_tab == :prompt
+  / Filled form data
+  = accordion(title: I18n.t('apply.show.filled_form_data')) do
+    - if @apply.filled_inputs.present?
+      .px-6.py-4
+        = tabs(base_url: helpers.apply_path(@apply)) do |t|
+          - t.with_tab(label: I18n.t('apply.show.filled_form_tab_fields')) do
+            = render Apply::Component::FilledFormPreview.new(filled_inputs: @apply.filled_inputs)
+          - t.with_tab(label: I18n.t('apply.show.cv_tab_prompt')) do
             .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.font-mono.leading-relaxed
               = Apply::Ai::Prompt::FillForm.call(@apply)
-          - else
-            = render Apply::Component::FilledFormPreview.new(filled_inputs: @apply.filled_inputs)
-      - else
+    - else
+      .px-6.py-4
         p.mt-2.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.show.no_data')
 
   / Error
   - if @apply.error.present?
-    .px-6.py-4
-      p.text-sm.font-medium.text-red-600.dark:text-red-400.mb-2 = I18n.t('apply.show.fields.error')
-      = helpers.tag.p(@apply.error, class: error_text_class)
+    = accordion(title: I18n.t('apply.show.fields.error')) do
+      .px-6.py-4
+        = helpers.tag.p(@apply.error, class: error_text_class)

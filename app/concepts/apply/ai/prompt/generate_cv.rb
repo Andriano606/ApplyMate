@@ -33,20 +33,22 @@ class Apply::Ai::Prompt::GenerateCv < ApplyMate::Ai::Prompt::Base
     Не використовуй графіку або складні таблиці, які можуть "зламати" ATS. СУВОРА ЗАБОРОНА на будь-який супровідний текст. Не пиши "Ось ваше резюме..." або "Я адаптував навички...". Виводь ТІЛЬКИ текст самого резюме.
   PROMPT
 
-  def initialize(apply)
-    @apply = apply
+  def initialize(user_profile:, vacancy:, generate_cv_prompt: nil)
+    @user_profile      = user_profile
+    @vacancy           = vacancy
+    @generate_cv_prompt = generate_cv_prompt
   end
 
   def call
     template
-      .sub('PLACEHOLDER_USER_PROFILE', @apply.user_profile.cv)
-      .sub('PLACEHOLDER_VACANCY_TITLE', @apply.vacancy.title.to_s)
-      .sub('PLACEHOLDER_VACANCY_DESCRIPTION', [ @apply.vacancy.description, @apply.vacancy.details ].select(&:present?).join("\n\n"))
+      .sub('PLACEHOLDER_USER_PROFILE', @user_profile.cv)
+      .sub('PLACEHOLDER_VACANCY_TITLE', @vacancy.title.to_s)
+      .sub('PLACEHOLDER_VACANCY_DESCRIPTION', [ @vacancy.description, @vacancy.details ].select(&:present?).join("\n\n"))
   end
 
   private
 
   def template
-    @apply.generate_cv_prompt&.content || PROMPT_TEMPLATE
+    @generate_cv_prompt&.content || PROMPT_TEMPLATE
   end
 end

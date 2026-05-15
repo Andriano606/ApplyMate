@@ -6,7 +6,8 @@ class Vacancy < ApplicationRecord
 
   belongs_to :source
 
-  has_many :applies, dependent: :destroy
+  has_many :applies,      dependent: :destroy
+  has_many :vacancy_cvs,  dependent: :destroy
 
   index_name "vacancies_#{Rails.env}"
 

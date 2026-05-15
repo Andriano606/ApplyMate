@@ -43,8 +43,16 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::Alert.new(text:, type:))
   end
 
-  def accordion(title:, open: false, &block)
-    render(ApplyMate::Component::Accordion.new(title:, open:), &block)
+  def accordion(title:, open: false, loading: false, &block)
+    render(ApplyMate::Component::Accordion.new(title:, open:, loading:), &block)
+  end
+
+  def expandable_text(html:, lines: 3)
+    render(ApplyMate::Component::ExpandableText.new(html:, lines:))
+  end
+
+  def tabs(base_url:, id: nil, &block)
+    render(ApplyMate::Component::Tabs.new(base_url:, id:), &block)
   end
 
   def select_option(form:, radio_attribute:, radio_value:, radio_name:, selected:, &block)

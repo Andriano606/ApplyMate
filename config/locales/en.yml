@@ -189,6 +189,10 @@ en:
       filling_form: Заповнення форми
       generating_cv: Генерація резюме
       sending_cv: Надсилання
+  apply_mate:
+    expandable_text:
+      collapse: Згорнути
+      expand: Розгорнути
   components:
     debug_button:
       label: Admin
@@ -396,9 +400,6 @@ en:
     card:
       details: Деталі
       view_original: View original posting
-    info_card:
-      collapse_description: Згорнути
-      expand_description: Розгорнути
     search:
       add: Add
       and: AND
@@ -415,9 +416,14 @@ en:
       save_as_default: Save as default
     show:
       back: До вакансій
+      generate_cv: Згенерувати резюме
     sync:
       no_proxies: No proxies available — sync stopped
     total_vacancies: vacancies
+    update:
+      generate_cv_started: Генерацію резюме розпочато
+  vacancy_cv:
+    generating: Генерація резюме...
   will_paginate:
     next_label: Next &raquo;
     page_gap: "&hellip;"

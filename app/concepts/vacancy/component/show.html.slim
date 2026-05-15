@@ -1,5 +1,9 @@
 = header(**header_opts)
+
 - if signed_in?
   = Apply::TurboHandler::StatusUpdate.stream_from(@vacancy, current_user, helpers)
 
-= render Vacancy::Component::InfoCard.new(vacancy: @vacancy, apply: @apply, expanded: @expanded, expand_url: expand_url, collapse_url: collapse_url)
+= render Vacancy::Component::InfoCard.new(vacancy: @vacancy)
+
+- if signed_in?
+  = VacancyCv::TurboHandler::Index.frame_tag(@vacancy, helpers, src: helpers.vacancy_vacancy_cvs_path(@vacancy))
