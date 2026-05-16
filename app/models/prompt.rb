@@ -11,6 +11,7 @@ class Prompt < ApplicationRecord
   has_many :fill_form_applies, class_name: 'Apply', foreign_key: :fill_form_prompt_id, dependent: :nullify, inverse_of: :fill_form_prompt
   has_many :generate_cv_applies, class_name: 'Apply', foreign_key: :generate_cv_prompt_id, dependent: :nullify, inverse_of: :generate_cv_prompt
   has_many :vacancy_cvs, foreign_key: :generate_cv_prompt_id, dependent: :destroy, inverse_of: :generate_cv_prompt
+  has_many :vacancy_forms, foreign_key: :fill_form_prompt_id, dependent: :destroy, inverse_of: :fill_form_prompt
   has_many :default_fill_form_users, class_name: 'User', foreign_key: :default_fill_form_prompt_id, dependent: :nullify, inverse_of: :default_fill_form_prompt
   has_many :default_generate_cv_users, class_name: 'User', foreign_key: :default_generate_cv_prompt_id, dependent: :nullify, inverse_of: :default_generate_cv_prompt
 

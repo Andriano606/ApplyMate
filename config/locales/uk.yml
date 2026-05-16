@@ -434,6 +434,16 @@ uk:
       generate_cv_started: Генерацію резюме розпочато
   vacancy_cv:
     generating: Генерація резюме...
+  vacancy_form:
+    create:
+      success: Форму успішно збережено
+    index:
+      tab_form: Форма
+      tab_prompt: Промпт
+      title_single: Форма
+    new:
+      submit: Зберегти
+      title: Отримати форму вакансії
   will_paginate:
     next_label: Наступна &raquo;
     page_gap: "&hellip;"

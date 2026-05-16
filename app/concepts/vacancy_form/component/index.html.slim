@@ -1,0 +1,16 @@
+= VacancyForm::TurboHandler::Index.frame_tag(@vacancy, helpers) do
+  = VacancyForm::TurboHandler::Index.stream_from(@vacancy, page_user, helpers)
+
+  .mt-4
+    = link(url: helpers.new_vacancy_vacancy_form_path(@vacancy), label: I18n.t('vacancy_form.new.title'), \
+        variant: :primary, data: { turbo_stream: true })
+
+  - if @vacancy_forms.any?
+    .mt-4.space-y-3
+      - @vacancy_forms.each_with_index do |vacancy_form, i|
+        = accordion(title: form_title(i), loading: vacancy_form.processing?) do
+          .px-6.py-4
+            = tabs(base_url: helpers.vacancy_vacancy_forms_path(@vacancy),
+                    id: "tabs_vacancy_form_#{vacancy_form.hashid}") do |t|
+              - t.with_tab(label: I18n.t('vacancy_form.index.tab_form')) do
+              - t.with_tab(label: I18n.t('vacancy_form.index.tab_prompt')) do
