@@ -18,7 +18,7 @@ services:
       - "5901:5900"          # VNC (для VNC-клієнтів типу RealVNC/TigerVNC)
       - "9224:9222"          # Chrome DevTools Protocol
     environment:
-      - SCREEN_WIDTH=1920
+      - SCREEN_WIDTH=1440
       - SCREEN_HEIGHT=1080
       - SCREEN_DEPTH=24
       - VNC_PASSWORD=        # Встанови пароль або залиш порожнім
