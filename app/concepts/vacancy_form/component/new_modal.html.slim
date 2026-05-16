@@ -1,0 +1,6 @@
+= turbo_form_modal( \
+    model: @vacancy_form, \
+    endpoint: [ @vacancy, @vacancy_form ], \
+    header_text: I18n.t('vacancy_form.new.title'), \
+    submit_text: I18n.t('vacancy_form.new.submit')) do |modal|
+  = render Vacancy::Component::FetchFormForm.new(form: modal.form)

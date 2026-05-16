@@ -6,7 +6,7 @@ class VacancyCv::TurboHandler::CvReady < ApplyMate::TurboHandler::Base
   end
 
   def self.frame_tag(vacancy_cv, view_context, &block)
-    view_context.turbo_frame_tag(frame_id(vacancy_cv), &block)
+    view_context.turbo_frame_tag(frame_id(vacancy_cv), class: 'block', &block)
   end
 
   def self.broadcast(vacancy_cv)

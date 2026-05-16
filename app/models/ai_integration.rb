@@ -19,7 +19,8 @@ class AiIntegration < ApplicationRecord
            class_name: 'Apply',
            foreign_key: 'ai_integration_id',
            dependent: :destroy
-  has_many :vacancy_cvs, dependent: :destroy
+  has_many :vacancy_cvs,   dependent: :destroy
+  has_many :vacancy_forms, dependent: :destroy
 
   encrypts :api_key
 

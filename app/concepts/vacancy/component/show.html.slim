@@ -7,3 +7,4 @@
 
 - if signed_in?
   = VacancyCv::TurboHandler::Index.frame_tag(@vacancy, helpers, src: helpers.vacancy_vacancy_cvs_path(@vacancy))
+  = VacancyForm::TurboHandler::Index.frame_tag(@vacancy, helpers, src: helpers.vacancy_vacancy_forms_path(@vacancy))

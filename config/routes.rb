@@ -29,7 +29,8 @@ Rails.application.routes.draw do
   end
 
   resources :vacancies, only: [ :index, :show ] do
-    resources :vacancy_cvs, only: [ :index, :new, :create ]
+    resources :vacancy_cvs,   only: [ :index, :new, :create ]
+    resources :vacancy_forms, only: [ :index, :new, :create ]
   end
   resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :ai_integrations, only: [ :index, :new, :create, :edit, :update, :destroy ]
