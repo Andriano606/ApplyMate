@@ -24,6 +24,7 @@ Rails.application.routes.draw do
     resource :impersonation, only: [ :create, :destroy ]
     resources :proxies, only: [ :index, :show ]
     resources :sources, only: [ :new, :create, :index, :edit, :update, :destroy ]
+    resources :job_stats, only: [ :index ]
     mount MissionControl::Jobs::Engine, at: '/jobs'
   end
 

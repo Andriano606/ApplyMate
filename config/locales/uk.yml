@@ -15,6 +15,8 @@ uk:
     dashboard:
       index:
         back_to_site: На сайт
+        job_stats: Статистика задач
+        job_stats_description: Швидкість виконання фонових задач
         jobs: Черга задач
         jobs_description: Моніторинг фонових завдань
         proxies: Проксі
@@ -29,6 +31,13 @@ uk:
         success: Ви увійшли як іншого користувача
       destroy:
         success: Ви повернулися до свого облікового запису
+    job_stats:
+      index:
+        chart_subtitle: Середній час виконання кожного типу задачі за останні %{days}
+          днів
+        chart_title: Час виконання задач по днях
+        title: Статистика задач
+        y_axis_label: секунди
     proxy:
       index:
         empty: Проксі не знайдено
