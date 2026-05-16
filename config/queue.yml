@@ -2,7 +2,7 @@ default: &default
   dispatchers:
     - polling_interval: 1
       batch_size: 500
-      finished_jobs_retention: 1.day
+      finished_jobs_retention: 30.days
   workers:
     # Queue(s) and polling interval are injected per-role via Kamal env.
     # worker role:        SQ_QUEUES=default,          SQ_POLLING_INTERVAL=1
