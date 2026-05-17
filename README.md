@@ -20,10 +20,10 @@ Deployed via [Kamal](https://kamal-deploy.org/).
 
 ### Staging infrastructure
 
-| Role       | Host          | Description                                           |
-|------------|---------------|-------------------------------------------------------|
-| `web`      | 192.168.31.58 | Puma (Raspberry Pi 5, arm64)                          |
-| `worker`   | 192.168.31.58 | Solid Queue — всі черги                               |
+| Role       | Host           | Description                                           |
+|------------|----------------|-------------------------------------------------------|
+| `web`      | 192.168.50.155 | Puma (Raspberry Pi 5, arm64)                          |
+| `worker`   | 192.168.50.155  | Solid Queue — всі черги                               |
 
 ### Staging accessory URLs
 
@@ -31,19 +31,19 @@ Deployed via [Kamal](https://kamal-deploy.org/).
 |----------------|-------------------------------------------------------------------|--------------------------------|
 | App (public)   | [https://staging.beapply.xyz](https://staging.beapply.xyz)       | Via Cloudflare Tunnel          |
 | App (local)    | [http://staging.applymate.local](http://staging.applymate.local) | Requires `/etc/hosts` entry    |
-| PostgreSQL     | `192.168.31.58:5434`                                             | No web UI                      |
-| MinIO S3 API   | [http://192.168.31.58:9002](http://192.168.31.58:9002)           | S3-compatible endpoint         |
-| MinIO Console  | [http://192.168.31.58:9003](http://192.168.31.58:9003)           | Web UI for bucket management   |
-| Elasticsearch  | [http://192.168.31.58:9201](http://192.168.31.58:9201)           | REST API                       |
-| Chrome noVNC   | [http://192.168.31.58:6081/vnc.html](http://192.168.31.58:6081/vnc.html) | Browser-based VNC UI  |
-| Chrome VNC     | `192.168.31.58:5901`                                             | VNC client (RealVNC/TigerVNC)  |
-| Chrome CDP     | `192.168.31.58:9222`                                             | Chrome DevTools Protocol       |
+| PostgreSQL     | `192.168.50.155:5434`                                             | No web UI                      |
+| MinIO S3 API   | [http://192.168.50.155:9002](http://192.168.50.155:9002)           | S3-compatible endpoint         |
+| MinIO Console  | [http://192.168.50.155:9003](http://192.168.50.155:9003)           | Web UI for bucket management   |
+| Elasticsearch  | [http://192.168.50.155:9201](http://192.168.50.155:9201)           | REST API                       |
+| Chrome noVNC   | [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html) | Browser-based VNC UI  |
+| Chrome VNC     | `192.168.50.155:5901`                                             | VNC client (RealVNC/TigerVNC)  |
+| Chrome CDP     | `192.168.50.155:9222`                                             | Chrome DevTools Protocol       |
 
 ### Prerequisites
 
 Add to `/etc/hosts` on your machine (for local access):
 ```
-192.168.31.58 staging.applymate.local
+192.168.50.155 staging.applymate.local
 ```
 
 ### Cloudflare Tunnel (staging)
@@ -61,13 +61,13 @@ The `cloudflared` daemon runs as a systemd service on the RPi and maintains 4 pe
 
 ```bash
 # Status
-ssh andrii@192.168.31.58 "sudo systemctl status cloudflared"
+ssh andrii@192.168.50.155 "sudo systemctl status cloudflared"
 
 # Restart tunnel
-ssh andrii@192.168.31.58 "sudo systemctl restart cloudflared"
+ssh andrii@192.168.50.155 "sudo systemctl restart cloudflared"
 
 # Logs
-ssh andrii@192.168.31.58 "sudo journalctl -u cloudflared -f"
+ssh andrii@192.168.50.155 "sudo journalctl -u cloudflared -f"
 ```
 
 ### First deploy (sets up Docker, proxy, database)
@@ -91,7 +91,7 @@ bin/kamal deploy -d staging
 bin/kamal deploy -d staging --roles=web,worker
 
 # Деплой тільки на конкретний хост
-bin/kamal deploy -d staging --hosts=192.168.31.58
+bin/kamal deploy -d staging --hosts=192.168.50.155
 ```
 
 ### Useful commands
@@ -152,16 +152,16 @@ Active Storage на staging використовує MinIO як S3-сумісн�
 bin/kamal accessory boot minio -d staging
 
 # 2. Відкрити порти на RPi (одноразово)
-ssh andrii@192.168.31.58 "sudo ufw allow from 192.168.31.0/24 to any port 9002 && sudo ufw allow from 192.168.31.0/24 to any port 9003 && sudo ufw reload"
+ssh andrii@192.168.50.155 "sudo ufw allow from 192.168.31.0/24 to any port 9002 && sudo ufw allow from 192.168.31.0/24 to any port 9003 && sudo ufw reload"
 
-# 3. Створити bucket через веб-консоль: http://192.168.31.58:9003
+# 3. Створити bucket через веб-консоль: http://192.168.50.155:9003
 #    Логін: значення minio.access_key_id / minio.secret_access_key зі staging credentials
 #    Bucket name: apply-mate-staging
 ```
 
 **Доступ:**
-- S3 API: `http://192.168.31.58:9002`
-- Веб-консоль: `http://192.168.31.58:9003`
+- S3 API: `http://192.168.50.155:9002`
+- Веб-консоль: `http://192.168.50.155:9003`
 
 ### Chrome VNC (staging)
 
@@ -198,9 +198,9 @@ bin/kamal accessory boot chrome_vnc -d staging
 ```
 
 **Доступ:**
-- noVNC (веб): [http://192.168.31.58:6081/vnc.html](http://192.168.31.58:6081/vnc.html)
-- VNC клієнт: `192.168.31.58:5901`
-- Chrome CDP: `192.168.31.58:9222`
+- noVNC (веб): [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html)
+- VNC клієнт: `192.168.50.155:5901`
+- Chrome CDP: `192.168.50.155:9222`
 
 **Після зміни Dockerfile або entrypoint.sh:**
 
