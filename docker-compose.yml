@@ -69,7 +69,46 @@ services:
         mc anonymous set download local/apply-mate-dev;
       "
 
+  loki:
+    image: grafana/loki:3.0.0
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./docker/loki:/etc/loki
+      - loki_data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    volumes:
+      - ./docker/promtail:/etc/promtail
+      - ./log:/logs:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docker/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting
+      - ./docker/grafana/provisioning/datasources/loki.yml:/etc/grafana/provisioning/datasources/loki.yml
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    depends_on:
+      - loki
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   elasticsearch_data:
   minio_data:
+  loki_data:
+  grafana_data:

@@ -16,7 +16,7 @@ class Apply::Operation::SendApply::Http < Apply::Operation::Base
   private
 
   def run!(apply:, handler:, **)
-    client     = ApplyMate::Client::Http.new(timeout: 30)
+    client     = ApplyMate::Client::AsyncHttp.new(timeout: 30)
     session_id = apply.source_profile.session_id
 
     cookie_parts = []

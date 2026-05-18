@@ -22,7 +22,7 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
   ].freeze
 
   def perform!(**)
-    proxies = log_time('Fetch') { fetch_from_sources }
+    proxies = log('Fetch') { fetch_from_sources }
     unique  = proxies.uniq { |p| [ p[:protocol], p[:host], p[:port] ] }.size
     log("Parsed #{unique}/#{proxies.size} unique candidates")
     self.model = proxies

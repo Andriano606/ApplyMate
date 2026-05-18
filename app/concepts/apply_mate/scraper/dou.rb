@@ -4,22 +4,13 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   VACANCIES_URL = 'https://jobs.dou.ua/vacancies/'
   XHR_URL       = 'https://jobs.dou.ua/vacancies/xhr-load/'
 
-  def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::Http.new)
+  def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::AsyncHttp.new)
     @source = source
     @client = client
   end
 
   def fetch_description(url)
     response = @client.get(url)
-
-    unless response.success?
-      # Proxy IP blocked by bot protection or server failure — try another proxy
-      raise ApplyMate::Client::Base::DeadProxyError, "status #{response.status}" if
-        response.status == 403 || response.status == 429 || response.status >= 500
-
-      # 4xx: vacancy deleted or not found — no point retrying with another proxy
-      return 'SKIP_VACANCY'
-    end
 
     html = response.body
     return nil if html.blank?
@@ -64,8 +55,9 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     initialize_session
     check_termination!
 
-    count = (page - 1) * (@items_per_page || 40)
-    body  = @client.post_xhr(XHR_URL, URI.encode_www_form(count:), xhr_headers)
+    count    = (page - 1) * (@items_per_page || 40)
+    response = @client.post(XHR_URL, body: URI.encode_www_form(count:), headers: xhr_headers)
+    body     = response&.body
     return if body.blank?
 
     begin

@@ -11,8 +11,12 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   def fetch_listing(page:)
     check_termination!
 
-    body  = @client.fetch_body("#{JOB_LIST_URL}?page=#{page}")
-    doc   = Nokogiri::HTML(body)
+    url      = "#{JOB_LIST_URL}?page=#{page}"
+    response = @client.get(url)
+    return if response.nil?
+    return if response.final_url != url && response.final_url == JOB_LIST_URL
+
+    doc   = Nokogiri::HTML(response.body)
     nodes = doc.css('.job-list-item, .job-item')
     return if nodes.empty?
 
@@ -24,8 +28,8 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   end
 
   def fetch_details(url)
-    body = @client.fetch_body(url)
-    doc = Nokogiri::HTML(body)
+    response = @client.get(url)
+    doc = Nokogiri::HTML(response&.body)
 
     sections = []
 

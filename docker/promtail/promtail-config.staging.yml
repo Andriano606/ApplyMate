@@ -1,0 +1,57 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions/positions.yaml
+
+clients:
+  - url: http://apply_mate_staging-loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: kamal_docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+
+    relabel_configs:
+      # Keep only containers from this Kamal service
+      - source_labels: ['__meta_docker_container_label_service']
+        regex: 'apply_mate_staging'
+        action: keep
+      # Keep only Rails app roles (skip db / minio / elasticsearch / loki / grafana / etc.)
+      - source_labels: ['__meta_docker_container_label_role']
+        regex: 'web|worker'
+        action: keep
+
+      # Match the dashboards & alerting rules which filter on {job="rails"}
+      - target_label: 'job'
+        replacement: 'rails'
+      - target_label: 'app'
+        replacement: 'apply_mate'
+      - target_label: 'env'
+        replacement: 'staging'
+
+      - source_labels: ['__meta_docker_container_label_role']
+        target_label: 'role'
+      - source_labels: ['__meta_docker_container_label_destination']
+        target_label: 'destination'
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+
+    pipeline_stages:
+      # Unwrap Docker json-file driver envelope ({"log":"...","stream":"stdout","time":"..."})
+      - docker: {}
+      # Parse Rails JSON log line (lograge / vacancy_sync_* events)
+      - json:
+          expressions:
+            method: method
+            path: path
+            status: status
+            controller: controller
+            action: action
+      - labels:
+          method:
+          status:
+          controller:

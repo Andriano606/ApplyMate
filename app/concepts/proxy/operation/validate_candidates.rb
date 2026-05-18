@@ -16,10 +16,19 @@ class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
                          .select { |p| VALID_PROTOCOLS.include?(p[:protocol]) }
                          .shuffle
 
+    log(event: 'proxy_validation_started', candidates: filtered.size)
+
     source_uris = VALIDATION_URLS.filter_map { |u| URI.parse(u) rescue nil }
 
-    valid = log_time('Validation') { validate(filtered, source_uris) }
-    log('No valid proxies found', level: :warn, color: :red) if valid.empty?
+    valid = log('Validation') { validate(filtered, source_uris) }
+
+    if valid.empty?
+      log('No valid proxies found', level: :warn, color: :red)
+      log(event: 'proxy_validation_no_results', candidates: filtered.size, level: :warn)
+    else
+      rate = (valid.size * 100.0 / [ filtered.size, 1 ].max).round(2)
+      log(event: 'proxy_validation_completed', valid: valid.size, total: filtered.size, rate: rate)
+    end
 
     self.model = valid
   end

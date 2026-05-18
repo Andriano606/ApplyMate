@@ -30,8 +30,8 @@ class ApplyMate::Client::Browser < ApplyMate::Client::Base
   # Never mix both patterns on the same Browser instance.
 
   # Navigates to url, executes JS, and returns [final_url, body, cookies_string].
-  # Unlike fetch_body, does not reject redirected URLs — use for external pages
-  # that may redirect or require JS rendering (Vue/React apps).
+  # Unlike the HTTP clients, does not reject redirected URLs — use for external
+  # pages that may redirect or require JS rendering (Vue/React apps).
   def fetch_rendered(url)
     navigate_to(url)
     cookies = @browser.cookies.all.map { |_, c| "#{c.name}=#{c.value}" }.join('; ')

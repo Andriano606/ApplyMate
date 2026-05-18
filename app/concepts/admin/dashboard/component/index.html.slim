@@ -24,3 +24,10 @@
       description: I18n.t('admin.dashboard.index.proxies_description'),
       turbo: false)
     = icon(:lock_closed, size: 6, class: 'text-purple-600')
+  = dashboard_card(path: ENV.fetch('GRAFANA_URL', 'http://localhost:3001'),
+      icon_bg: 'bg-orange-50',
+      title: I18n.t('admin.dashboard.index.grafana'),
+      description: I18n.t('admin.dashboard.index.grafana_description'),
+      turbo: false,
+      target: '_blank')
+    = icon(:grafana, size: 6)
