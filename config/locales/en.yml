@@ -15,6 +15,8 @@ en:
     dashboard:
       index:
         back_to_site: To site
+        grafana: Grafana
+        grafana_description: View logs in real time
         job_stats: Статистика задач
         job_stats_description: Швидкість виконання фонових задач
         jobs: Job queue

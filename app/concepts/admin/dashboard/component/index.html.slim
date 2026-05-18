@@ -29,3 +29,10 @@
       title: I18n.t('admin.dashboard.index.job_stats'),
       description: I18n.t('admin.dashboard.index.job_stats_description'))
     = icon(:chart_bar, size: 6, class: 'text-orange-600')
+  = dashboard_card(path: 'http://localhost:3001',
+      icon_bg: 'bg-orange-50',
+      title: I18n.t('admin.dashboard.index.grafana'),
+      description: I18n.t('admin.dashboard.index.grafana_description'),
+      turbo: false,
+      target: '_blank')
+    = icon(:grafana, size: 6)

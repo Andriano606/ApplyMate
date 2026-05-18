@@ -29,4 +29,13 @@ module ApplyMate::Logging
     log("#{label} — #{(Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(3)}s", color: color, level: level)
     result
   end
+
+  # Emits a pure JSON line readable by Promtail/Loki for structured alerting.
+  # The file logger has ANSI stripped and no prefix, so this lands as valid JSON.
+  #
+  #   log_structured(event: 'proxy_validation_completed', valid: 42, total: 500, rate: 8.4)
+  def log_structured(event:, level: :info, **fields)
+    payload = { event: event, source: self.class.name, time: Time.current.iso8601(3) }.merge(fields)
+    Rails.logger.public_send(level, payload.to_json)
+  end
 end

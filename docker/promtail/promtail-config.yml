@@ -1,0 +1,33 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: rails
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: rails
+          app: apply_mate
+          env: development
+          __path__: /logs/development.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            method: method
+            path: path
+            status: status
+            controller: controller
+            action: action
+      - labels:
+          method:
+          status:
+          controller:
