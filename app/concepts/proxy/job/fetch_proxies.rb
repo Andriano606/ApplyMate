@@ -14,10 +14,11 @@ class Proxy::Job::FetchProxies < ApplicationJob
     end
 
     shard_size = (candidates.size / shard_count.to_f).ceil
-    candidates.each_slice(shard_size).each_with_index do |shard, i|
-      cache_key = "proxy_shard_#{job_id}_#{i}"
-      Rails.cache.write(cache_key, shard, expires_in: 4.hours)
-      Proxy::Job::ValidateShard.perform_later(cache_key)
+    cache_keys = candidates.each_slice(shard_size).each_with_index.map do |shard, i|
+      key = "proxy_shard_#{job_id}_#{i}"
+      Rails.cache.write(key, shard, expires_in: (shard_count * 3).hours)
+      key
     end
+    Proxy::Job::ValidateShard.perform_later(cache_keys.first, cache_keys.drop(1))
   end
 end

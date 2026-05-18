@@ -5,7 +5,7 @@ require 'async'
 class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
-  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '10000'))
+  VALIDATION_CONCURRENCY = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_CONCURRENCY', '5000'))
   VALID_PROTOCOLS        = %w[http https socks5 socks5h].freeze
   VALIDATION_ATTEMPTS    = Integer(ENV.fetch('FETCH_PROXIES_VALIDATION_ATTEMPTS', '20'))
   VALIDATION_URLS        = %w[http://clients3.google.com/generate_204].freeze
