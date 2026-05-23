@@ -24,8 +24,3 @@
       description: I18n.t('admin.dashboard.index.proxies_description'),
       turbo: false)
     = icon(:lock_closed, size: 6, class: 'text-purple-600')
-  = dashboard_card(path: admin_job_stats_path,
-      icon_bg: 'bg-orange-100',
-      title: I18n.t('admin.dashboard.index.job_stats'),
-      description: I18n.t('admin.dashboard.index.job_stats_description'))
-    = icon(:chart_bar, size: 6, class: 'text-orange-600')
