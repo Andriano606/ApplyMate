@@ -24,12 +24,11 @@ default: &default
   # https://guides.rubyonrails.org/configuring.html#database-pooling
   max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
 
-
 development:
   primary:
     <<: *default
     database: apply_mate_development
-    max_connections: 15  # covers Puma's 12 threads + headroom
+    max_connections: 300 # covers SyncVacancies fibers (WORKERS_PER_SOURCE × N_sources) + Puma threads
   cache:
     <<: *default
     database: apply_mate_development
@@ -38,7 +37,7 @@ development:
     <<: *default
     database: apply_mate_development
     migrations_paths: db/queue_migrate
-    max_connections: 8   # covers Solid Queue's 5 threads/process + headroom
+    max_connections: 8 # covers Solid Queue's 5 threads/process + headroom
   cable:
     <<: *default
     database: apply_mate_development

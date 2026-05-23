@@ -106,6 +106,9 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         if description == 'SKIPP'
           log("#{ctx(source, vacancy.external_id, proxy)} no description, skipp...", color: :yellow)
           break
+        elsif description == 'SKIP_VACANCY'
+          log("#{ctx(source, vacancy.external_id, proxy)} vacancy gone, skipping...", color: :yellow)
+          next
         elsif description.present?
           with_db do
             proxy.increment_succeeded!

@@ -6,6 +6,7 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
   HTTP_PROTOCOLS   = %w[http https].freeze
   SOCKS5_PROTOCOLS = %w[socks5 socks5h].freeze
   CONNECT_TIMEOUT  = 5
+  MAX_REDIRECTS    = 5
 
   def initialize(timeout: 10, proxy:)
     @timeout = timeout
@@ -37,12 +38,12 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
 
   # All proxy failures return nil (never raise), so the error_handler in get/post
   # never retries — a dead proxy should fail fast, not burn 5 retry slots.
-  def proxy_request(method, url, headers:, body: nil)
+  def proxy_request(method, url, headers:, body: nil, redirects: MAX_REDIRECTS)
     uri  = URI.parse(url)
     host = uri.host
     port = uri.port || (uri.scheme == 'https' ? 443 : 80)
 
-    Async::Task.current.with_timeout(@timeout) do
+    response = Async::Task.current.with_timeout(@timeout) do
       sock = open_tunnel(host, port)
       return nil unless sock
 
@@ -67,6 +68,18 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
         ssl&.close rescue nil
       end
     end
+
+    if response && (300..399).include?(response.status) && redirects > 0
+      location = response.headers['location']
+      if location.present?
+        new_url    = URI.join(url, location).to_s
+        # 307/308 preserve method+body; all others switch to GET (standard browser behaviour)
+        new_method = [307, 308].include?(response.status) ? method : :GET
+        return proxy_request(new_method, new_url, headers: headers, body: new_method == :GET ? nil : body, redirects: redirects - 1)
+      end
+    end
+
+    response
   rescue Async::TimeoutError, StandardError
     nil
   end

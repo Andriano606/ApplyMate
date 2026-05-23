@@ -10,7 +10,18 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   end
 
   def fetch_description(url)
-    html = @client.fetch_body(url)
+    response = @client.get(url)
+
+    unless response.success?
+      # Proxy IP blocked by bot protection or server failure — try another proxy
+      raise ApplyMate::Client::Base::DeadProxyError, "status #{response.status}" if
+        response.status == 403 || response.status == 429 || response.status >= 500
+
+      # 4xx: vacancy deleted or not found — no point retrying with another proxy
+      return 'SKIP_VACANCY'
+    end
+
+    html = response.body
     return nil if html.blank?
 
     doc  = Nokogiri::HTML(html)
