@@ -124,11 +124,11 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
 
     before do
       # Stub the HTTP client to return sequential detail files for DOU vacancies
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body).with(a_string_including('jobs.dou.ua/companies/')) do |_instance, _url|
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(a_string_including('jobs.dou.ua/companies/')) do |_instance, _url|
         @dou_detail_index ||= 0
         @dou_detail_index += 1
         @dou_detail_index = 1 if @dou_detail_index > 20
-        file_fixture("dou/list/details/#{@dou_detail_index}.html").read
+        ApplyMate::Client::Base::Response.new(file_fixture("dou/list/details/#{@dou_detail_index}.html").read, {}, 200)
       end
 
       # Stub DOU XHR listing: page 1 (count=0) returns vacancies; subsequent pages
@@ -144,7 +144,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       # Stub DOU session initialization
       allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(
         ApplyMate::Scraper::Dou::VACANCIES_URL
-      ).and_return(double(headers: { 'set-cookie' => 'csrftoken=test_token;' }))
+      ).and_return(ApplyMate::Client::Base::Response.new('', { 'set-cookie' => 'csrftoken=test_token;' }, 200))
     end
 
     it 'syncs 20 vacancies' do
@@ -186,13 +186,13 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
 
     it 'visits each vacancy page to fetch descriptions' do
       fetch_count = 0
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body)
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get)
         .with(a_string_including('jobs.dou.ua/companies/')) do |_instance, _url|
           fetch_count += 1
           @dou_detail_index ||= 0
           @dou_detail_index += 1
           @dou_detail_index = 1 if @dou_detail_index > 20
-          file_fixture("dou/list/details/#{@dou_detail_index}.html").read
+          ApplyMate::Client::Base::Response.new(file_fixture("dou/list/details/#{@dou_detail_index}.html").read, {}, 200)
         end
 
       operation.call
