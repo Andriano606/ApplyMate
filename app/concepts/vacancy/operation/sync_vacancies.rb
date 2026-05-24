@@ -90,7 +90,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         unless proxy
           if with_db { Proxy.count.zero? }
             stop[0] = true
-            # log("#{ctx(source, vacancy.external_id)} #{I18n.t('vacancy.sync.no_proxies')}", color: :red)
+            log("#{ctx(source, vacancy.external_id)} #{I18n.t('vacancy.sync.no_proxies')}", color: :red)
             vacancies_queue.unshift(vacancy)
             break
           end
@@ -127,11 +127,12 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           end
         end
       rescue ApplyMate::Client::Base::DeadProxyError
+        log("#{ctx(source, vacancy.external_id, proxy)} error: Dead Proxy", color: :red)
         with_db { proxy&.increment_fail! }
         vacancies_queue.unshift(vacancy)
         retry
       rescue StandardError => e
-        # log("#{ctx(source, vacancy.external_id, proxy)} error: #{e.message}", color: :red)
+        log("#{ctx(source, vacancy.external_id, proxy)} error: #{e.message}", color: :red)
         vacancies_queue.unshift(vacancy)
         retry
       ensure
