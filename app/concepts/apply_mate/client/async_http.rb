@@ -74,7 +74,7 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
       if location.present?
         new_url    = URI.join(url, location).to_s
         # 307/308 preserve method+body; all others switch to GET (standard browser behaviour)
-        new_method = [307, 308].include?(response.status) ? method : :GET
+        new_method = [ 307, 308 ].include?(response.status) ? method : :GET
         return proxy_request(new_method, new_url, headers: headers, body: new_method == :GET ? nil : body, redirects: redirects - 1)
       end
     end
