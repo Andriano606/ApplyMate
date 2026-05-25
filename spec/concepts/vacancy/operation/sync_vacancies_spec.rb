@@ -37,12 +37,13 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
 
     before do
       # Stub the HTTP client to return the Djinni fixture
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body).with(a_string_including('djinni.co')) do |_instance, url|
-        if url.include?('page=1') || !url.include?('page=')
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(a_string_including('djinni.co')) do |_instance, url|
+        body = if url.include?('page=1') || !url.include?('page=')
           djinni_html_content
         else
           '<html><body></body></html>'
         end
+        ApplyMate::Client::Base::Response.new(body, {}, 200, url)
       end
     end
 
@@ -96,9 +97,9 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
         # scrapes page 2 (scraped_pages.max becomes 2) before fiber 1 returns its empty
         # result. Page 1 is then an inner page (1 <= scraped_pages.max), so the anti-scraping
         # branch is reached instead of the boundary-candidate branch.
-        allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body)
+        allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get)
           .with(a_string_including('djinni.co')) do |_instance, url|
-            if url.include?('page=1') || !url.include?('page=')
+            body = if url.include?('page=1') || !url.include?('page=')
               sleep(0.05)
               @page1_calls += 1
               @page1_calls == 1 ? '<html><body></body></html>' : djinni_html_content
@@ -107,6 +108,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
             else
               '<html><body></body></html>'
             end
+            ApplyMate::Client::Base::Response.new(body, {}, 200, url)
           end
       end
 
@@ -133,13 +135,13 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
 
       # Stub DOU XHR listing: page 1 (count=0) returns vacancies; subsequent pages
       # return empty HTML with last:true so the scraper stops pagination naturally.
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:post_xhr).with(
-        ApplyMate::Scraper::Dou::XHR_URL, anything, anything
-      ) do |_instance, _url, body|
-        count = URI.decode_www_form(body.to_s).to_h['count'].to_i
-        count == 0 ? { html: dou_html_content, last: false }.to_json
-                   : { html: '', last: true }.to_json
-      end
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:post)
+        .with(ApplyMate::Scraper::Dou::XHR_URL, any_args) do |_instance, url, body:, **|
+          count = URI.decode_www_form(body.to_s).to_h['count'].to_i
+          response_body = count == 0 ? { html: dou_html_content, last: false }.to_json
+                                     : { html: '', last: true }.to_json
+          ApplyMate::Client::Base::Response.new(response_body, {}, 200, url)
+        end
 
       # Stub DOU session initialization
       allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(
@@ -206,13 +208,14 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     let(:djinni_html_content) { file_fixture('djinni/list/vacancies_page.html').read }
 
     before do
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body).and_return('<html></html>')
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:fetch_body).with(a_string_including('djinni.co')) do |_instance, url|
-        if url.include?('page=1') || !url.include?('page=')
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).and_return(ApplyMate::Client::Base::Response.new('<html></html>', {}, 200, ''))
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(a_string_including('djinni.co')) do |_instance, url|
+        body = if url.include?('page=1') || !url.include?('page=')
           djinni_html_content
         else
           '<html><body></body></html>'
         end
+        ApplyMate::Client::Base::Response.new(body, {}, 200, url)
       end
     end
 

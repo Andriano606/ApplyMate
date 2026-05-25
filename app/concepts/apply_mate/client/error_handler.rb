@@ -1,19 +1,24 @@
 # frozen_string_literal: true
 
+# Wraps a single HTTP call: classifies failures, retries with exponential
+# backoff, raises AttemptsExhaustedError when the budget runs out. Pass an
+# instance to the client constructor — the client calls `run { … }` around
+# each request, so all retry/error policy lives here.
 class ApplyMate::Client::ErrorHandler
   class AttemptsExhaustedError < StandardError; end
 
-  # Network-level errors that always warrant a retry, regardless of message content.
-  # Covers both Faraday (Http) and async-http (AsyncHttp) transports.
+  # Transport-level errors worth retrying.
   RETRYABLE_EXCEPTIONS = [
-    Faraday::TimeoutError,
-    Faraday::ConnectionFailed,
     Errno::ECONNREFUSED,
     Errno::ECONNRESET,
     Errno::ETIMEDOUT,
     IO::TimeoutError,
-    EOFError
+    EOFError,
+    ApplyMate::Client::Base::RetryableHttpError
   ].freeze
+
+  # HTTP statuses that should trigger a retry (server-side transient failures).
+  RETRYABLE_STATUSES = [ 502, 503, 504 ].freeze
 
   def initialize(max_retries: 3, base_delay: 2)
     @max_retries = max_retries
@@ -22,36 +27,31 @@ class ApplyMate::Client::ErrorHandler
 
   def run
     attempts = 0
-
     begin
-      yield
+      response = yield
+      check_retryable_status(response)
+      response
     rescue *RETRYABLE_EXCEPTIONS => e
       handle_retry(e, attempts += 1)
       retry
-    rescue StandardError => e
-      if retryable_error?(e)
-        handle_retry(e, attempts += 1)
-        retry
-      else
-        raise e
-      end
     end
   end
 
   private
 
-  def retryable_error?(error)
-    error.message.match?(/502|503|504/)
+  def check_retryable_status(response)
+    return unless response.is_a?(ApplyMate::Client::Base::Response)
+    return unless RETRYABLE_STATUSES.include?(response.status)
+
+    raise ApplyMate::Client::Base::RetryableHttpError, "HTTP #{response.status}"
   end
 
   def handle_retry(error, attempts)
     if attempts > @max_retries
-      Rails.logger.error "[Client] Спроби вичерпано: #{error.message}"
       raise AttemptsExhaustedError, "Final failure after #{@max_retries} retries. Last error: #{error.message}"
     end
 
     wait_time = @base_delay * (2**attempts)
-    Rails.logger.warn "[Client] #{error.class} (#{error.message}). Спроба #{attempts}, чекаємо #{wait_time}с..."
     sleep(wait_time)
   end
 end

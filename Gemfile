@@ -88,8 +88,8 @@ gem 'simple_form'
 # Pagination
 gem 'will_paginate'
 
-# Hashids for public-facing model IDs
-gem 'hashid-rails'
+# Structured single-line JSON logs for Loki ingestion
+gem 'lograge'
 
 # ZIP archive parsing for 3MF file format support
 gem 'rubyzip'

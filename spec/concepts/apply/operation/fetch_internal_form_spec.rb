@@ -6,14 +6,18 @@ RSpec.describe Apply::Operation::FetchInternalForm do
   context 'Djinni internal apply (Art of Spin)' do
     include_context 'art of spin djinni'
 
+    let(:http_client) { instance_double(ApplyMate::Client::AsyncHttp) }
+
     before do
-      stub_request(:get, ArtOfSpinDjinni::VACANCY_URL)
-        .to_return(
-          status:  200,
-          body:    djinni_apply_html,
-          headers: { 'Content-Type' => 'text/html; charset=utf-8',
-                     'Set-Cookie'   => 'sessionid=test-session-id; Path=/; HttpOnly' }
+      allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
+      allow(http_client).to receive(:get).and_return(
+        ApplyMate::Client::Base::Response.new(
+          djinni_apply_html,
+          { 'set-cookie' => 'sessionid=test-session-id; Path=/; HttpOnly' },
+          200,
+          ArtOfSpinDjinni::VACANCY_URL
         )
+      )
     end
 
     describe '#call' do
@@ -21,8 +25,11 @@ RSpec.describe Apply::Operation::FetchInternalForm do
 
       it 'fetches the vacancy page with the session cookie' do
         run_operation
-        expect(WebMock).to have_requested(:get, ArtOfSpinDjinni::VACANCY_URL)
-          .with(headers: { 'Cookie' => 'sessionid=test-session-id' })
+        expect(http_client).to have_received(:get).with(
+          ArtOfSpinDjinni::VACANCY_URL,
+          headers:          hash_including('Cookie' => 'sessionid=test-session-id'),
+          follow_redirects: true
+        )
       end
 
       it 'extracts the Djinni apply form fields' do
@@ -73,14 +80,18 @@ RSpec.describe Apply::Operation::FetchInternalForm do
   context 'DOU internal apply (Coidea Agency)' do
     include_context 'coidea dou'
 
+    let(:http_client) { instance_double(ApplyMate::Client::AsyncHttp) }
+
     before do
-      stub_request(:get, CoideaDou::VACANCY_URL)
-        .to_return(
-          status:  200,
-          body:    dou_apply_html,
-          headers: { 'Content-Type'  => 'text/html; charset=utf-8',
-                     'Set-Cookie'    => 'sessionid=test-session-id; Path=/; HttpOnly' }
+      allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
+      allow(http_client).to receive(:get).and_return(
+        ApplyMate::Client::Base::Response.new(
+          dou_apply_html,
+          { 'set-cookie' => 'sessionid=test-session-id; Path=/; HttpOnly' },
+          200,
+          CoideaDou::VACANCY_URL
         )
+      )
     end
 
     describe '#call' do
@@ -88,8 +99,11 @@ RSpec.describe Apply::Operation::FetchInternalForm do
 
       it 'fetches the vacancy page with the session cookie' do
         run_operation
-        expect(WebMock).to have_requested(:get, CoideaDou::VACANCY_URL)
-          .with(headers: { 'Cookie' => 'sessionid=test-session-id' })
+        expect(http_client).to have_received(:get).with(
+          CoideaDou::VACANCY_URL,
+          headers:          hash_including('Cookie' => 'sessionid=test-session-id'),
+          follow_redirects: true
+        )
       end
 
       it 'extracts the DOU apply form fields' do

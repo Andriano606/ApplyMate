@@ -14,7 +14,7 @@ class Admin::Dashboard::Component::Index < ApplyMate::Component::Base
     }
   end
 
-  def dashboard_card(path:, icon_bg:, title:, description:, turbo: true, &block)
-    render(Admin::Dashboard::Component::Card.new(path:, icon_bg:, title:, description:, turbo:), &block)
+  def dashboard_card(path:, icon_bg:, title:, description:, turbo: true, target: nil, &block)
+    render(Admin::Dashboard::Component::Card.new(path:, icon_bg:, title:, description:, turbo:, target:), &block)
   end
 end

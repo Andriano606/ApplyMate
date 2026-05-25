@@ -13,6 +13,6 @@ class Source < ApplicationRecord
   validates :scraper, presence: true, inclusion: { in: SCRAPERS.map(&:to_s) }
 
   def build_scraper
-    self.scraper.constantize.new(self, ApplyMate::Client::Http.new)
+    self.scraper.constantize.new(self, ApplyMate::Client::AsyncHttp.new)
   end
 end

@@ -37,7 +37,7 @@ class Apply::Operation::Ai::FetchExternalForm < Apply::Operation::Base
           @browser, external_url, check_result['trigger_selector']
         )
       elsif check_result['form_url'].present?
-        page_url, doc, cookies = http_fetch_and_parse(ApplyMate::Client::Http.new, check_result['form_url'])
+        page_url, doc, cookies = http_fetch_and_parse(ApplyMate::Client::AsyncHttp.new, check_result['form_url'])
       else
         raise 'AI could not locate an application form page'
       end

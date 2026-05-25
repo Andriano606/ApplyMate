@@ -5,7 +5,7 @@ Elasticsearch::Model.client = Elasticsearch::Client.new(
 )
 
 Rails.application.config.after_initialize do
-  ApplicationRecord.descendants.select { |m| m.include?(Elasticsearch::Model) }.each do |model|
+  [ Vacancy ].each do |model|
     model.__elasticsearch__.create_index! unless model.__elasticsearch__.index_exists?
   rescue => e
     Rails.logger.warn "Elasticsearch index setup failed for #{model}: #{e.message}"
