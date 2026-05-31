@@ -1,4 +1,4 @@
-web: bin/rails server -p ${CONDUCTOR_PORT:-3000}
+web: bin/rails server -p ${PORT:-3000}
 js: bun run build --watch
 css: bun run build:css --watch
 worker: bin/rails solid_queue:start

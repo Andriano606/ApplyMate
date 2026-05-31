@@ -9,6 +9,14 @@ $stderr.sync = true
 
 include ConductorHelpers
 
+# Workspaces claim a port from this range and persist it in .env.development.local.
+# We don't use Conductor's CONDUCTOR_PORT because the port has to also be registered
+# in Google Cloud Console as an Authorized redirect URI for Google OAuth — and Conductor
+# doesn't guarantee a fixed port range. Owning the range ourselves means: register
+# http://localhost:3001..3020/auth/google_oauth2/callback in GCP once, every workspace
+# lands in that range automatically.
+WORKSPACE_PORT_RANGE = (3001..3020).freeze
+
 # Runs once when Conductor creates a workspace. Prepares an isolated, runnable
 # checkout: its own Postgres DB + Elasticsearch index, installed deps, built assets.
 def main
@@ -30,10 +38,14 @@ def main
   prepare_databases
   build_assets
 
+  port = read_env_value('.env.development.local', 'PORT')
   puts ''
   puts '✅ Workspace setup complete!'
   puts "   dev + test databases/indexes are isolated to this workspace — tests can run in parallel."
-  puts '▶️  Click Run to start the dev server (it will serve on http://localhost:$CONDUCTOR_PORT).'
+  puts "▶️  Click Run to start the dev server (it will serve on http://localhost:#{port})."
+  puts ''
+  puts "📌 Reminder: register http://localhost:#{WORKSPACE_PORT_RANGE.min}..#{WORKSPACE_PORT_RANGE.max}/auth/google_oauth2/callback"
+  puts '   in Google Cloud Console (one-time) so Google OAuth works for every workspace.'
 end
 
 # Gitignored secrets (master.key, .env, per-env credential keys) live only in the root
@@ -79,10 +91,38 @@ end
 def write_env_files
   write_env_file('.env.development.local',
                  'APP_DB_NAME' => db_name,
-                 'ES_INDEX_NAMESPACE' => es_index_namespace)
+                 'ES_INDEX_NAMESPACE' => es_index_namespace,
+                 'PORT' => pick_port_for_workspace)
   write_env_file('.env.test.local',
                  'APP_TEST_DB_NAME' => test_db_name,
                  'ES_INDEX_NAMESPACE' => es_index_namespace)
+end
+
+# Returns the port this workspace should bind to. If one was already claimed (set in
+# .env.development.local), reuse it — stable per workspace across restarts. Otherwise
+# pick the lowest port in WORKSPACE_PORT_RANGE not claimed by a sibling workspace.
+def pick_port_for_workspace
+  existing = read_env_value('.env.development.local', 'PORT')
+  return existing.to_i if existing && !existing.empty?
+
+  taken = sibling_workspace_ports
+  free = WORKSPACE_PORT_RANGE.find { |p| !taken.include?(p) }
+  unless free
+    error_exit(
+      "All ports in #{WORKSPACE_PORT_RANGE.min}..#{WORKSPACE_PORT_RANGE.max} are claimed by sibling workspaces.",
+      'Archive an unused workspace or widen WORKSPACE_PORT_RANGE in bin/conductor/setup.rb.'
+    )
+  end
+  free
+end
+
+def sibling_workspace_ports
+  parent = File.dirname(workspace_root)
+  self_env = File.join(workspace_root, '.env.development.local')
+  Dir.glob(File.join(parent, '*', '.env.development.local'))
+     .reject { |path| path == self_env }
+     .flat_map { |path| File.readlines(path).filter_map { |line| line[/^PORT=(\d+)/, 1]&.to_i } }
+     .uniq
 end
 
 # Idempotent: only appends keys that aren't already present.

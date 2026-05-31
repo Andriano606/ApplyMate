@@ -9,7 +9,7 @@ $stderr.sync = true
 include ConductorHelpers
 
 # Runs on the Conductor "Run" button. Ensures infra + DB are ready, then hands off
-# to foreman with the Conductor Procfile (web bound to the workspace's CONDUCTOR_PORT).
+# to foreman with the Conductor Procfile (web bound to the workspace's claimed PORT).
 def main
   ensure_asdf_shims_on_path!
   Dir.chdir(workspace_root)
@@ -28,7 +28,12 @@ def main
 
   ensure_foreman!
 
-  port = ENV['CONDUCTOR_PORT'] || '3000'
+  # We pass --env /dev/null so foreman skips loading .env (dotenv-rails does that at
+  # Rails boot). That means we must export PORT here ourselves — otherwise the
+  # ${PORT} in Procfile.conductor stays unexpanded and Rails falls back to 3000.
+  port = read_env_value('.env.development.local', 'PORT') || ENV['CONDUCTOR_PORT'] || '3000'
+  ENV['PORT'] = port.to_s
+
   puts ''
   puts "▶️  Starting dev server on http://localhost:#{port}"
   exec('foreman', 'start', '-f', 'Procfile.conductor', '--env', '/dev/null')
