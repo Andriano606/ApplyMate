@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require 'fileutils'
 require_relative 'conductor_helpers'
 
 $stdout.sync = true
@@ -21,6 +22,7 @@ def main
   puts "   ES indexes : vacancies_development_#{workspace_slug} / vacancies_test_#{workspace_slug}"
   puts ''
 
+  copy_secrets_from_root!
   write_env_files
   compose_up!
   wait_for_tcp('localhost', 5432, 'PostgreSQL')
@@ -32,6 +34,41 @@ def main
   puts '✅ Workspace setup complete!'
   puts "   dev + test databases/indexes are isolated to this workspace — tests can run in parallel."
   puts '▶️  Click Run to start the dev server (it will serve on http://localhost:$CONDUCTOR_PORT).'
+end
+
+# Gitignored secrets (master.key, .env, per-env credential keys) live only in the root
+# checkout — git worktree does not copy them into a new workspace. Without master.key
+# Rails.application.credentials returns nil for everything, which is why Google OAuth
+# fails with "Missing required parameter: client_id" in fresh workspaces. Copy them
+# from CONDUCTOR_ROOT_PATH so the workspace boots with the same credentials as root.
+def copy_secrets_from_root!
+  root = root_path
+  if File.expand_path(root) == File.expand_path(workspace_root)
+    puts '✅ Workspace IS the root checkout — no secrets to copy'
+    return
+  end
+
+  secrets = [
+    'config/master.key',
+    '.env',
+    *Dir.glob(File.join(root, 'config/credentials/*.key')).map { |p| p.sub("#{root}/", '') }
+  ].uniq
+
+  secrets.each do |rel|
+    src = File.join(root, rel)
+    dst = File.join(workspace_root, rel)
+    next unless File.exist?(src)
+
+    if File.exist?(dst)
+      puts "✅ #{rel} already present"
+      next
+    end
+
+    FileUtils.mkdir_p(File.dirname(dst))
+    FileUtils.cp(src, dst)
+    File.chmod(0o600, dst) if rel.end_with?('.key')
+    puts "✅ Copied #{rel} from root checkout"
+  end
 end
 
 # Per-workspace isolation is driven by these env vars, read by config/database.yml
