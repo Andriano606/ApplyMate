@@ -45,6 +45,19 @@ module ConductorHelpers
     workspace_slug
   end
 
+  # Read a single KEY=value entry from a workspace env file (e.g. PORT from
+  # .env.development.local). Returns the trimmed value, or nil if missing.
+  def read_env_value(relative_path, key)
+    path = File.join(workspace_root, relative_path)
+    return nil unless File.exist?(path)
+
+    File.foreach(path) do |line|
+      match = line.match(/^#{Regexp.escape(key)}=(.+)$/)
+      return match[1].strip if match
+    end
+    nil
+  end
+
   # Make the asdf-managed toolchain resolvable for child processes.
   def ensure_asdf_shims_on_path!
     shims = File.join(Dir.home, '.asdf', 'shims')
