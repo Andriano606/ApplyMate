@@ -27,20 +27,20 @@ default: &default
 development:
   primary:
     <<: *default
-    database: apply_mate_development
+    database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
     max_connections: 300 # covers SyncVacancies fibers (WORKERS_PER_SOURCE × N_sources) + Puma threads
   cache:
     <<: *default
-    database: apply_mate_development
+    database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
     migrations_paths: db/cache_migrate
   queue:
     <<: *default
-    database: apply_mate_development
+    database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
     migrations_paths: db/queue_migrate
     max_connections: 8 # covers Solid Queue's 5 threads/process + headroom
   cable:
     <<: *default
-    database: apply_mate_development
+    database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
     migrations_paths: db/cable_migrate
     max_connections: 5
 
@@ -76,7 +76,7 @@ development:
 # Do not set this db to the same as development or production.
 test:
   <<: *default
-  database: apply_mate_test
+  database: <%= ENV.fetch("APP_TEST_DB_NAME", "apply_mate_test") %>
 
 # As with config/credentials.yml, you never want to store sensitive information,
 # like your database password, in your source code. If your source code is
