@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "setup": "asdf exec ruby bin/conductor/setup.rb",
+    "run": "asdf exec ruby bin/conductor/run.rb",
+    "archive": "asdf exec ruby bin/conductor/archive.rb"
+  },
+  "runScriptMode": "concurrent"
+}
