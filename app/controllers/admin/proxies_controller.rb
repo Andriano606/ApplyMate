@@ -2,7 +2,7 @@
 
 class Admin::ProxiesController < Admin::BaseController
   def index
-    endpoint Admin::Proxy::Operation::Index, Admin::Proxy::Component::Index
+    endpoint Admin::Proxy::Operation::Index, Admin::Proxy::Component::Index, Admin::Proxy::Serializer::Index
   end
 
   def show

@@ -6,6 +6,7 @@ class User < ApplicationRecord
   has_many :applies, dependent: :destroy
   has_many :source_profiles, dependent: :destroy
   has_many :prompts, dependent: :destroy
+  has_many :api_tokens, dependent: :destroy
 
   belongs_to :default_profile, class_name: 'UserProfile', optional: true
   belongs_to :default_ai_integration, class_name: 'AiIntegration', optional: true

@@ -24,7 +24,11 @@ Rails.application.routes.draw do
     resource :impersonation, only: [ :create, :destroy ]
     resources :proxies, only: [ :index, :show ]
     resources :sources, only: [ :new, :create, :index, :edit, :update, :destroy ]
+    resources :api_tokens, only: [ :index, :new, :create, :destroy ]
     mount MissionControl::Jobs::Engine, at: '/jobs'
+
+    mount Rswag::Api::Engine => '/api-docs'
+    mount Rswag::Ui::Engine => '/api-docs'
   end
 
   resources :vacancies, only: [ :index, :show ] do

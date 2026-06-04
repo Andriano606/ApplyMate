@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "bun bun.config.js",
-    "build:css": "bunx @tailwindcss/cli -i ./app/stylesheets/application.tailwind.css -o ./app/assets/builds/application.css --minify",
+    "build:css": "tailwindcss -i ./app/stylesheets/application.tailwind.css -o ./app/assets/builds/application.css --minify",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -31,3 +31,16 @@
       turbo: false,
       target: '_blank')
     = icon(:grafana, size: 6)
+  = dashboard_card(path: admin_api_tokens_path,
+      icon_bg: 'bg-amber-100',
+      title: I18n.t('admin.dashboard.index.api_tokens'),
+      description: I18n.t('admin.dashboard.index.api_tokens_description'),
+      turbo: false)
+    = icon(:key, size: 6, class: 'text-amber-600')
+  = dashboard_card(path: '/admin/api-docs/index.html',
+      icon_bg: 'bg-teal-100',
+      title: I18n.t('admin.dashboard.index.api_docs'),
+      description: I18n.t('admin.dashboard.index.api_docs_description'),
+      turbo: false,
+      target: '_blank')
+    = icon(:document_text, size: 6, class: 'text-teal-600')

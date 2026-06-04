@@ -94,6 +94,10 @@ gem 'lograge'
 # ZIP archive parsing for 3MF file format support
 gem 'rubyzip'
 
+# OpenAPI / Swagger API docs (UI served in /admin)
+gem 'rswag-api'
+gem 'rswag-ui'
+
 group :development, :test do
   # Load environment variables from .env
   gem 'dotenv-rails'
@@ -146,4 +150,7 @@ group :test do
 
   # Async waiting for RSpec
   gem 'rspec-wait'
+
+  # Generate OpenAPI docs from request specs
+  gem 'rswag-specs'
 end
