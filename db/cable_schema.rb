@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_16_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_04_150729) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -51,6 +51,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_16_000001) do
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.index ["user_id"], name: "index_ai_integrations_on_user_id"
+  end
+
+  create_table "api_tokens", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "last_used_at"
+    t.string "name"
+    t.string "token", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["token"], name: "index_api_tokens_on_token", unique: true
+    t.index ["user_id"], name: "index_api_tokens_on_user_id"
   end
 
   create_table "applies", force: :cascade do |t|
@@ -328,6 +339,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_16_000001) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_integrations", "users"
+  add_foreign_key "api_tokens", "users"
   add_foreign_key "applies", "ai_integrations"
   add_foreign_key "applies", "prompts", column: "fill_form_prompt_id"
   add_foreign_key "applies", "prompts", column: "generate_cv_prompt_id"

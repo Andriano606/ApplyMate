@@ -8,12 +8,40 @@ en:
         record_invalid: 'Validation failed: %{errors}'
         taken: has already been taken
   admin:
+    api_token:
+      create:
+        success: Token created
+      destroy:
+        success: Token revoked
+      form:
+        name: Name
+        user: User
+        user_prompt: Select a user
+      index:
+        empty: No tokens yet
+        new: Create token
+        revoke_confirm: Revoke this token?
+        table:
+          actions: Actions
+          created_at: Created
+          last_used_at: Last used
+          name: Name
+          token: Token
+          user: User
+        title: API tokens
+      new:
+        submit: Create token
+        title: New API token
     common:
       back: Back
       back_to_dashboard: Back to dashboard
       cancel: Cancel
     dashboard:
       index:
+        api_docs: API docs
+        api_docs_description: Swagger UI for the JSON API
+        api_tokens: API tokens
+        api_tokens_description: Create and revoke access tokens
         back_to_site: To site
         grafana: Grafana
         grafana_description: View logs in real time

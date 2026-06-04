@@ -8,12 +8,40 @@ uk:
         record_invalid: 'Перевірка не пройшла: %{errors}'
         taken: вже використовується
   admin:
+    api_token:
+      create:
+        success: Токен створено
+      destroy:
+        success: Токен відкликано
+      form:
+        name: Назва
+        user: Користувач
+        user_prompt: Оберіть користувача
+      index:
+        empty: Токени ще не створені
+        new: Створити токен
+        revoke_confirm: Відкликати цей токен?
+        table:
+          actions: Дії
+          created_at: Створено
+          last_used_at: Останнє використання
+          name: Назва
+          token: Токен
+          user: Користувач
+        title: API токени
+      new:
+        submit: Створити токен
+        title: Новий API токен
     common:
       back: Назад
       back_to_dashboard: Повернутися до панелі
       cancel: Скасувати
     dashboard:
       index:
+        api_docs: API документація
+        api_docs_description: Swagger UI для JSON API
+        api_tokens: API токени
+        api_tokens_description: Створення та відкликання токенів доступу
         back_to_site: На сайт
         grafana: Grafana
         grafana_description: Перегляд логів у реальному часі

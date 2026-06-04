@@ -6,7 +6,7 @@ module OperationsMethods
 
   protected
 
-  def endpoint(operation, component = nil, &block)
+  def endpoint(operation, component = nil, serializer = nil, &block)
     result = operation.call(params:, current_user:)
 
     check_authorization_is_called result
@@ -23,31 +23,15 @@ module OperationsMethods
       format.js do
       end
 
-      # We use it for select2 search results
       format.json do
-        if action_name == 'index'
-          collection = if result.model.is_a?(ApplyMate::Operation::Struct)
-                         key = operation.to_s.split('::').first.underscore.pluralize
-                         result.model[key]
-          else
-                         result.model
-          end
-
-          render json: {
-            result: collection.map(&:select2_search_result),
-            pagination: {
-              more: collection.respond_to?(:next_page) && collection.next_page.present?
-            }
-          }
-        elsif action_name.include?('destroy')
-          if result.success?
-            render json: { message: result.message }, status: :ok
-          else
-            render json: { error: result.error_message }, status: :unprocessable_entity
-          end
-        end
+        ApplyMate::Endpoint::Json.new(controller: self, component:, serializer:, operation:).call(result, &block)
       end
     end
+  # API clients get a clean 403; HTML keeps its existing behavior (re-raise).
+  rescue Pundit::NotAuthorizedError => e
+    raise e unless request.format.json?
+
+    ApplyMate::Endpoint::Json.new(controller: self).render_forbidden
   end
 
   def check_authorization_is_called(result)

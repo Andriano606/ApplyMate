@@ -1,0 +1,6 @@
+= turbo_form_modal( \
+    model: api_token, \
+    endpoint: [ :admin, api_token ], \
+    header_text: I18n.t('admin.api_token.new.title'), \
+    submit_text: I18n.t('admin.api_token.new.submit')) do |modal|
+  = render Admin::ApiToken::Component::Form.new(form: modal.form)
