@@ -13,9 +13,11 @@ include ConductorHelpers
 # We don't use Conductor's CONDUCTOR_PORT because the port has to also be registered
 # in Google Cloud Console as an Authorized redirect URI for Google OAuth — and Conductor
 # doesn't guarantee a fixed port range. Owning the range ourselves means: register
-# http://localhost:3001..3020/auth/google_oauth2/callback in GCP once, every workspace
+# http://localhost:3002..3020/auth/google_oauth2/callback in GCP once, every workspace
 # lands in that range automatically.
-WORKSPACE_PORT_RANGE = (3001..3020).freeze
+# NB: start at 3002 — docker-compose binds host port 3001 (grafana) and 3100 (loki),
+# so the dev server must avoid them. Keep the upper bound below 3100.
+WORKSPACE_PORT_RANGE = (3002..3020).freeze
 
 # Runs once when Conductor creates a workspace. Prepares an isolated, runnable
 # checkout: its own Postgres DB + Elasticsearch index, installed deps, built assets.
@@ -104,6 +106,12 @@ end
 def pick_port_for_workspace
   existing = read_env_value('.env.development.local', 'PORT')
   return existing.to_i if existing && !existing.empty?
+
+  # conductor-linux assigns the port via CONDUCTOR_PORT — honour it so the
+  # launcher's sidebar and the running server agree. Falls back to the range
+  # scan when launched without it (e.g. the original Conductor app).
+  conductor_port = ENV['CONDUCTOR_PORT'].to_i
+  return conductor_port if conductor_port.positive?
 
   taken = sibling_workspace_ports
   free = WORKSPACE_PORT_RANGE.find { |p| !taken.include?(p) }
