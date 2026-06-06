@@ -163,14 +163,20 @@ def prepare_databases
   puts ''
   puts '🗄️  Preparing databases...'
   puts "   development → #{db_name}"
-  retry_system!('bin/rails', 'db:prepare')
+  # db:prepare maintains the test schema as a side effect, but it runs in the
+  # development environment — where APP_TEST_DB_NAME is NOT loaded (it lives in
+  # .env.test.local, and dev boot only reads .env.development.local). Without it the
+  # test config falls back to the default `apply_mate_test`, so every workspace's
+  # db:prepare would create/share that one DB. Pass APP_TEST_DB_NAME explicitly so the
+  # test DB it touches is this workspace's namespaced one.
+  retry_system!({ 'APP_TEST_DB_NAME' => test_db_name }, 'bin/rails', 'db:prepare')
   # db:prepare only seeds when it creates the DB from scratch, so seed explicitly
   # (Oaken seeds are idempotent via unique_by) to guarantee the dev user exists.
   puts '   seeding development data...'
   retry_system!('bin/rails', 'db:seed')
   # Test DB: schema only, no seeds (Oaken seeds would pollute the test database).
   puts "   test → #{test_db_name} (schema only)"
-  retry_system!({ 'RAILS_ENV' => 'test' }, 'bin/rails', 'db:test:prepare')
+  retry_system!({ 'RAILS_ENV' => 'test', 'APP_TEST_DB_NAME' => test_db_name }, 'bin/rails', 'db:test:prepare')
 end
 
 def build_assets

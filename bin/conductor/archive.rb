@@ -36,7 +36,15 @@ def delete_es_index(env)
 end
 
 def drop_database(env)
-  ok = system({ 'RAILS_ENV' => env, 'DISABLE_DATABASE_ENVIRONMENT_CHECK' => '1' }, 'bin/rails', 'db:drop')
+  # db:drop drops the current env's DB AND the test DB in one go. In the development
+  # env APP_TEST_DB_NAME isn't loaded (it lives in .env.test.local), so without it the
+  # test config falls back to the default `apply_mate_test` — and we'd drop that SHARED
+  # DB out from under the root checkout and every sibling workspace. Pass APP_TEST_DB_NAME
+  # explicitly so we only ever drop this workspace's namespaced test DB.
+  ok = system(
+    { 'RAILS_ENV' => env, 'APP_TEST_DB_NAME' => test_db_name, 'DISABLE_DATABASE_ENVIRONMENT_CHECK' => '1' },
+    'bin/rails', 'db:drop'
+  )
   warn "⚠️  #{env}: could not drop database (Postgres down or already gone) — skipping." unless ok
 end
 
