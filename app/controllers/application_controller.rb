@@ -16,10 +16,9 @@ class ApplicationController < ActionController::Base
   private
 
   def auto_login_default_user
-    return if session[:user_id].present?
-
     email = ENV['DEFAULT_LOGIN_EMAIL'].presence
     return unless email
+    return if signed_in? # already signed in as a real user (ignores stale session ids)
 
     user = User.find_by(email:)
     session[:user_id] = user.id if user
