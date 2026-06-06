@@ -8,7 +8,22 @@ class ApplicationController < ActionController::Base
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   allow_browser versions: :modern
 
+  # Dev convenience: when DEFAULT_LOGIN_EMAIL is set, start already signed in as
+  # that user so each Conductor workspace skips the login flow. Registered only
+  # in development — never bypasses auth in test or production.
+  before_action :auto_login_default_user if Rails.env.development?
+
   private
+
+  def auto_login_default_user
+    return if session[:user_id].present?
+
+    email = ENV['DEFAULT_LOGIN_EMAIL'].presence
+    return unless email
+
+    user = User.find_by(email:)
+    session[:user_id] = user.id if user
+  end
 
   def append_info_to_payload(payload)
     super
