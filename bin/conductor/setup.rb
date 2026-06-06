@@ -164,6 +164,10 @@ def prepare_databases
   puts '🗄️  Preparing databases...'
   puts "   development → #{db_name}"
   retry_system!('bin/rails', 'db:prepare')
+  # db:prepare only seeds when it creates the DB from scratch, so seed explicitly
+  # (Oaken seeds are idempotent via unique_by) to guarantee the dev user exists.
+  puts '   seeding development data...'
+  retry_system!('bin/rails', 'db:seed')
   # Test DB: schema only, no seeds (Oaken seeds would pollute the test database).
   puts "   test → #{test_db_name} (schema only)"
   retry_system!({ 'RAILS_ENV' => 'test' }, 'bin/rails', 'db:test:prepare')
