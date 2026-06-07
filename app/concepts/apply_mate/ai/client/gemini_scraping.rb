@@ -25,7 +25,17 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
     @browser = Ferrum::Browser.new(
       # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
-      timeout: 30
+      timeout: 30,
+      browser_options: {
+        # Chrome's sandbox needs unprivileged user namespaces, which the
+        # staging host (Raspberry Pi) blocks via AppArmor. Without these flags
+        # Chrome dies on boot with "No usable sandbox!" and never exposes its
+        # CDP websocket, surfacing as Ferrum::ProcessTimeoutError. Required when
+        # launching a local browser inside the container; harmless when set.
+        'no-sandbox': nil,
+        # /dev/shm is only 64M inside the container — keep Chrome off it.
+        'disable-dev-shm-usage': nil
+      }
     )
   end
 

@@ -18,6 +18,15 @@ class ApplyMate::Client::Browser
       # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
       browser_options: {
+        # Chrome's sandbox needs unprivileged user namespaces, which the
+        # staging host (Raspberry Pi) blocks via AppArmor. Without these flags
+        # Chrome dies on boot with "No usable sandbox!" and never exposes its
+        # CDP websocket, surfacing as Ferrum::ProcessTimeoutError ("Browser did
+        # not produce websocket url within 10 seconds"). Required when launching
+        # a local browser inside the container; harmless when set.
+        'no-sandbox': nil,
+        # /dev/shm is only 64M inside the container — keep Chrome off it.
+        'disable-dev-shm-usage': nil,
         "disable-blink-features": 'AutomationControlled',
         "user-agent": 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
       }
