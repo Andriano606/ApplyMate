@@ -23,7 +23,7 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
     # constrained hosts (prod runs on a Raspberry Pi), which surfaces as the
     # random "Timed out waiting for response" error.
     @browser = Ferrum::Browser.new(
-      url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
+      # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
       timeout: 30
     )
