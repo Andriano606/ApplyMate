@@ -9,7 +9,8 @@ class Proxy < ApplicationRecord
       Arel.sql(<<~SQL)
       (fail_count + success_count = 0) ASC,
       COALESCE(success_count::float / NULLIF(fail_count + success_count, 0), 1.0) DESC,
-      success_count DESC
+      success_count DESC,
+      created_at ASC
     SQL
     )
   }

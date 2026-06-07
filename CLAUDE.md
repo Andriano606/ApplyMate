@@ -98,7 +98,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/models_and_db.md` — nullable FK patterns, inverse associations for multiple FKs to the same table, uniqueness errors on `:base`.
 - `.ai/docs/ruby_style.md` — project Ruby style rules (no endless methods, etc.).
 - `.ai/docs/proxy.md` — proxy model fail tracking (`increment_fail!` / `reset_fail!`), `https`→`http` normalization gotcha, 2xx/3xx reachability rule.
-- `.ai/docs/fetch_proxies.md` — `Proxy::Job::FetchProxies` internals: fiber count per phase, stop conditions, catalog URL recursion, protocol inference, validation logic (`VALIDATION_ATTEMPTS`, `sleep(60)` anti-rate-limit), persist upsert semantics. **Read before modifying `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, `Proxy::Operation::ValidateCandidates`, or `Proxy::Operation::PersistProxies`.**
+- `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: single-threaded fetch→persist (no validation, no shards), fiber count in FetchCandidates, stop conditions, catalog URL recursion, protocol inference, persist upsert semantics. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
 - `.ai/docs/sync_vacancies.md` — `Vacancy::Operation::SyncVacancies` internals: fiber count per source, stop conditions, empty-page confirmation logic (LAST_PAGE_CONFIRMATIONS), boundary narrowing, shared data structures. **Read before modifying the vacancy sync pipeline.**
 
 <!-- rtk-instructions v2 -->

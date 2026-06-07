@@ -11,7 +11,7 @@ RSpec.describe Apply::Operation::FetchInternalForm do
     before do
       allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
       allow(http_client).to receive(:get).and_return(
-        ApplyMate::Client::Base::Response.new(
+        ApplyMate::Client::AsyncHttp::Response.new(
           djinni_apply_html,
           { 'set-cookie' => 'sessionid=test-session-id; Path=/; HttpOnly' },
           200,
@@ -74,6 +74,24 @@ RSpec.describe Apply::Operation::FetchInternalForm do
         run_operation
         expect(apply.reload.error).to be_nil
       end
+
+      context 'when the page returns several Set-Cookie headers (Django + Cloudflare)' do
+        before do
+          allow(http_client).to receive(:get).and_return(
+            ApplyMate::Client::AsyncHttp::Response.new(
+              djinni_apply_html,
+              { 'set-cookie' => [ 'csrftoken=tok-abc; Path=/', 'sessionid=anon-xyz; Path=/; HttpOnly' ] },
+              200,
+              ArtOfSpinDjinni::VACANCY_URL
+            )
+          )
+        end
+
+        it 'captures every cookie, including the csrftoken needed for the CSRF-protected POST' do
+          run_operation
+          expect(apply.reload.cookies).to eq('csrftoken=tok-abc; sessionid=anon-xyz')
+        end
+      end
     end
   end
 
@@ -85,7 +103,7 @@ RSpec.describe Apply::Operation::FetchInternalForm do
     before do
       allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
       allow(http_client).to receive(:get).and_return(
-        ApplyMate::Client::Base::Response.new(
+        ApplyMate::Client::AsyncHttp::Response.new(
           dou_apply_html,
           { 'set-cookie' => 'sessionid=test-session-id; Path=/; HttpOnly' },
           200,

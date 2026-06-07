@@ -46,7 +46,6 @@ servers:
         SQ_POLLING_INTERVAL: "1"
         SQ_PROCESSES: "4"
         SQ_THREADS: "2"
-        FETCH_PROXIES_SHARD_COUNT: "4"
 
 
 registry:

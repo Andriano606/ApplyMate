@@ -9,11 +9,8 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   end
 
   def fetch_listing(page:)
-    check_termination!
-
     url      = "#{JOB_LIST_URL}?page=#{page}"
-    response = @client.get(url)
-    return if response.nil?
+    response = via_proxy { @client.get(url) }
     return if response.final_url != url && response.final_url == JOB_LIST_URL
 
     doc   = Nokogiri::HTML(response.body)

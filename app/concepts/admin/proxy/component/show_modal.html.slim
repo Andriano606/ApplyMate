@@ -1,6 +1,6 @@
-- validation_urls = Proxy::Operation::ValidateCandidates::VALIDATION_URLS
-- source_urls     = @sources.filter_map(&:base_url).uniq
-- all_urls        = (validation_urls + source_urls).uniq
+- check_urls  = %w[http://clients3.google.com/generate_204]
+- source_urls = @sources.filter_map(&:base_url).uniq
+- all_urls    = (check_urls + source_urls).uniq
 
 = render ApplyMate::Component::TurboModal.new( \
     modal_id: "#{helpers.dom_id(@proxy)}_modal", \

@@ -4,41 +4,44 @@ require 'async'
 require 'kernel/sync'
 require 'resolv'
 
-# Unified HTTP client: raw fiber-aware sockets, optional proxy (HTTP CONNECT,
-# SOCKS5, or direct). Works both inside an Async fiber and outside one
-# (wraps the call in Sync { … } so SolidQueue jobs can use the same client).
-# All retry / error policy is delegated to the injected ErrorHandler.
-class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
-  MAX_REDIRECTS    = 5
-  CONNECT_TIMEOUT  = 5
+class ApplyMate::Client::AsyncHttp
+  Response = Struct.new(:body, :headers, :status, :final_url)
+
+  USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  MAX_REDIRECTS   = 5
+  TCP_CONNECT_TIMEOUT = 5
   HTTP_PROTOCOLS   = %w[http https].freeze
   SOCKS5_PROTOCOLS = %w[socks5 socks5h].freeze
-  PROXY_DEAD_STATUSES = [ 502, 503, 504 ].freeze
-
-  # Errors that mean "the underlying TCP/TLS connection failed" — caller should treat
-  # them as a dead proxy, not as a bug. Anything outside this list propagates so real
-  # bugs are visible in logs instead of being silently converted to proxy failures.
-  NETWORK_ERRORS = [
-    Async::TimeoutError, IOError, EOFError, SocketError,
-    Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::ETIMEDOUT,
-    Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::EPIPE,
-    OpenSSL::SSL::SSLError
-  ].freeze
-
-  # `Socket.tcp` calls C-level `getaddrinfo(3)` which the Fiber Scheduler cannot
-  # intercept — it blocks the whole reactor thread. Pre-resolving via pure-Ruby
-  # `Resolv` makes DNS fiber-aware; caching avoids repeat lookups for the same host.
   DNS_CACHE = Concurrent::Map.new
   DNS_TTL_S = 300
 
-  def initialize(timeout: 15, proxy: nil, error_handler: nil)
-    @timeout       = timeout
-    @proxy_uri     = proxy.present? ? URI.parse(proxy) : nil
-    @ssl_ctx       = OpenSSL::SSL::SSLContext.new.tap(&:set_params)
-    @error_handler = error_handler || self.class.default_error_handler
+  def initialize(request_timeout: 15, proxy: nil)
+    @request_timeout = request_timeout
+    @proxy_uri       = proxy.present? ? URI.parse(proxy) : nil
+    @ssl_ctx         = OpenSSL::SSL::SSLContext.new.tap(&:set_params)
   end
 
-  def self.resolve(host)
+  def get(url, headers: {}, follow_redirects: true, **)
+    perform(:GET, url, headers: headers, follow_redirects: follow_redirects)
+  end
+
+  def post(url, body:, headers: {}, **)
+    perform(:POST, url, body: body, headers: headers, follow_redirects: true)
+  end
+
+  def post_multipart(url, payload:, headers: {})
+    body, content_type = build_multipart(payload)
+    extra_headers      = headers.merge('Content-Type' => content_type)
+    perform(:POST, url, body: body, headers: extra_headers, follow_redirects: false)
+  end
+
+  private
+
+  def merge_default_headers(extra = {})
+    extra.each_with_object('User-Agent' => USER_AGENT) { |(k, v), h| h[k.to_s] = v.to_s }
+  end
+
+  def resolve(host)
     return host if host.nil? || host.empty?
     return host if host.match?(/\A\d{1,3}(\.\d{1,3}){3}\z/) || host.include?(':')
 
@@ -49,37 +52,11 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
     ip = Resolv.getaddress(host)
     DNS_CACHE[host] = { ip: ip, expires_at: now + DNS_TTL_S }
     ip
-  rescue Resolv::ResolvError, Resolv::ResolvTimeout
-    host
   end
-
-  def get(url, headers: {}, follow_redirects: true, **)
-    @error_handler.run { perform(:GET, url, headers: headers, follow_redirects: follow_redirects) }
-  end
-
-  def post(url, body:, headers: {}, **)
-    @error_handler.run { perform(:POST, url, body: body, headers: headers, follow_redirects: true) }
-  end
-
-  # Sends a multipart POST without redirect-following — the caller inspects
-  # 3xx responses directly (e.g. to detect a successful form submission).
-  def post_multipart(url, payload:, headers: {})
-    body, content_type = build_multipart(payload)
-    extra_headers      = headers.merge('Content-Type' => content_type)
-    @error_handler.run { perform(:POST, url, body: body, headers: extra_headers, follow_redirects: false) }
-  end
-
-  private
 
   def perform(method, url, headers:, body: nil, follow_redirects:)
-    full_headers = self.class.merge_default_headers(headers)
-    response     = with_timeout { request_with_redirects(method, url, full_headers, body, MAX_REDIRECTS, follow_redirects) }
-    raise DeadProxyError, "Connection failed for #{url} (proxy=#{@proxy_uri})" if response.nil?
-    if @proxy_uri && PROXY_DEAD_STATUSES.include?(response.status)
-      raise DeadProxyError, "HTTP #{response.status} via proxy=#{@proxy_uri}"
-    end
-
-    response
+    full_headers = merge_default_headers(headers)
+    with_timeout { request_with_redirects(method, url, full_headers, body, MAX_REDIRECTS, follow_redirects) }
   end
 
   def request_with_redirects(method, url, headers, body, remaining, follow_redirects)
@@ -89,16 +66,22 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
     if follow_redirects && (300..399).cover?(response.status) && remaining.positive?
       location = response.headers['location']
       if location.present?
-        new_url    = URI.join(url, location).to_s
-        # 307/308 preserve method+body; all others switch to GET (standard browser behaviour)
-        new_method = [ 307, 308 ].include?(response.status) ? method : :GET
-        new_body   = new_method == :GET ? nil : body
-        return request_with_redirects(new_method, new_url, headers, new_body, remaining - 1, follow_redirects)
+        new_url     = URI.join(url, location).to_s
+        new_method  = [ 307, 308 ].include?(response.status) ? method : :GET
+        new_body    = new_method == :GET ? nil : body
+        new_headers = redirect_headers(headers, url, new_url)
+        return request_with_redirects(new_method, new_url, new_headers, new_body, remaining - 1, follow_redirects)
       end
     end
 
     response.final_url = url
     response
+  end
+
+  def redirect_headers(headers, from_url, to_url)
+    return headers if URI.parse(from_url).host == URI.parse(to_url).host
+
+    headers.reject { |k, _| %w[cookie authorization].include?(k.to_s.downcase) }
   end
 
   def send_once(method, url, headers, body)
@@ -121,8 +104,6 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
 
       write_request(io, method, uri, headers, body)
       read_response(io)
-    rescue *NETWORK_ERRORS
-      nil
     ensure
       io.close   rescue nil
       ssl&.close rescue nil
@@ -131,72 +112,63 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
 
   def with_timeout(&block)
     if Async::Task.current?
-      Async::Task.current.with_timeout(@timeout, &block)
+      Async::Task.current.with_timeout(@request_timeout, &block)
     else
-      Sync { Async::Task.current.with_timeout(@timeout, &block) }
+      Sync { Async::Task.current.with_timeout(@request_timeout, &block) }
     end
-  rescue *NETWORK_ERRORS
-    nil
   end
 
   def open_tunnel(host, port)
-    target_ip = self.class.resolve(host)
-    return Socket.tcp(target_ip, port.to_i, connect_timeout: CONNECT_TIMEOUT) if @proxy_uri.nil?
+    return Socket.tcp(resolve(host), port.to_i, connect_timeout: TCP_CONNECT_TIMEOUT) if @proxy_uri.nil?
 
-    proxy_ip = self.class.resolve(@proxy_uri.host)
-    sock     = Socket.tcp(proxy_ip, @proxy_uri.port.to_i, connect_timeout: CONNECT_TIMEOUT)
-    return nil unless sock
-
-    case @proxy_uri.scheme.to_s.downcase
+    sock        = Socket.tcp(resolve(@proxy_uri.host), @proxy_uri.port.to_i, connect_timeout: TCP_CONNECT_TIMEOUT)
+    established = false
+    result      = case @proxy_uri.scheme.to_s.downcase
     when *HTTP_PROTOCOLS   then http_connect_tunnel(sock, host, port)
     when *SOCKS5_PROTOCOLS then socks5_tunnel(sock, host, port)
-    else
-      sock.close rescue nil
-      nil
     end
-  rescue *NETWORK_ERRORS
-    sock&.close rescue nil
-    nil
+    established = !result.nil?
+    result
+  ensure
+    if sock && !established
+      sock.close rescue nil
+    end
   end
 
   def http_connect_tunnel(sock, host, port)
     sock.write("CONNECT #{host}:#{port} HTTP/1.1\r\nHost: #{host}:#{port}\r\n\r\n")
     status_line = sock.gets
-    return close_and_nil(sock) unless status_line&.split(' ', 3)&.at(1).to_i == 200
+    return nil unless status_line&.split(' ', 3)&.at(1).to_i == 200
 
     loop { line = sock.gets; break if line.nil? || line == "\r\n" }
     sock
-  rescue *NETWORK_ERRORS
-    close_and_nil(sock)
   end
 
   def socks5_tunnel(sock, host, port)
     sock.write("\x05\x01\x00")
-    return close_and_nil(sock) unless sock.read(2) == "\x05\x00"
+    return nil unless sock.read(2) == "\x05\x00"
 
     host_b  = host.b
     request = [ 0x05, 0x01, 0x00, 0x03, host_b.bytesize ].pack('C5') + host_b + [ port ].pack('n')
     sock.write(request)
 
     head = sock.read(4)
-    return close_and_nil(sock) unless head&.length == 4 && head.getbyte(0) == 0x05 && head.getbyte(1) == 0x00
+    return nil unless head&.length == 4 && head.getbyte(0) == 0x05 && head.getbyte(1) == 0x00
 
     case head.getbyte(3)
     when 0x01 then sock.read(6)
-    when 0x03 then sock.read(sock.read(1).ord + 2)
+    when 0x03
+      len = sock.read(1)
+      return nil unless len
+      sock.read(len.ord + 2)
     when 0x04 then sock.read(18)
     end
 
     sock
-  rescue *NETWORK_ERRORS
-    close_and_nil(sock)
   end
 
-  # connect_nonblock + IO.select loop with an explicit deadline. ssl.connect can
-  # block the reactor thread on some Ruby/io-event/platform combos, so we drive
-  # the handshake non-blocking. Safe in both Async and non-Async contexts.
   def ssl_connect(ssl)
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @timeout
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @request_timeout
     loop do
       ssl.connect_nonblock
       return true
@@ -208,34 +180,82 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
       remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
       return false if remaining <= 0
       IO.select(nil, [ ssl.to_io ], nil, remaining) or return false
-    rescue *NETWORK_ERRORS
-      return false
     end
   end
 
   def write_request(io, method, uri, headers, body)
     lines = [ "#{method} #{uri.request_uri} HTTP/1.0", "Host: #{uri.host}" ]
-    headers.each { |k, v| lines << "#{k}: #{v}" }
+    lines << 'Connection: close'
+    lines << 'Accept-Encoding: identity'
+    headers.each { |k, v| lines << "#{strip_crlf(k)}: #{strip_crlf(v)}" }
     lines << "Content-Length: #{body.bytesize}" if body
     io.write(lines.join("\r\n") + "\r\n\r\n")
     io.write(body) if body
   end
 
-  # HTTP/1.0: server closes the connection after the response, so io.read gives
-  # the complete body without needing chunked-encoding or Content-Length parsing.
+  # Strips CRLF to prevent header injection via crafted header names/values.
+  def strip_crlf(value)
+    value.to_s.delete("\r\n")
+  end
+
   def read_response(io)
-    raw        = io.read.to_s
-    header_end = raw.index("\r\n\r\n")
-    return nil unless header_end
+    header_blob, body_so_far = read_headers(io)
 
-    lines  = raw[0, header_end].split("\r\n")
+    lines  = header_blob.split("\r\n")
     status = lines.first&.split(' ', 3)&.at(1).to_i
-    hdrs   = lines[1..].each_with_object({}) do |line, h|
-      k, v = line.split(': ', 2)
-      h[k.to_s.downcase] = v.to_s if k
-    end
+    return nil unless status.positive?
 
-    Response.new(raw[header_end + 4..], hdrs, status, nil)
+    hdrs = parse_headers(lines[1..])
+
+    Response.new(read_body(io, hdrs, body_so_far), hdrs, status, nil)
+  end
+
+  # Set-Cookie is the one response header servers legitimately send multiple
+  # times (e.g. Django emitting csrftoken + sessionid, plus Cloudflare cookies).
+  # Collapsing them into a single Hash key would keep only the last and silently
+  # drop the rest — so set-cookie is accumulated into an Array, every other
+  # header stays a String.
+  def parse_headers(lines)
+    lines.each_with_object({}) do |line, h|
+      k, v = line.split(': ', 2)
+      next unless k
+
+      key = k.downcase
+      if key == 'set-cookie'
+        (h[key] ||= []) << v.to_s
+      else
+        h[key] = v.to_s
+      end
+    end
+  end
+
+  # Reads up to the end of the header block (\r\n\r\n) and returns
+  # [header_string, leftover_body_bytes]. If the connection closes before the
+  # headers are complete, readpartial raises EOFError — left to propagate.
+  def read_headers(io)
+    buffer = String.new(encoding: 'ASCII-8BIT')
+    loop do
+      idx = buffer.index("\r\n\r\n")
+      return [ buffer[0, idx], buffer[idx + 4..] || '' ] if idx
+
+      buffer << io.readpartial(16_384)
+    end
+  end
+
+  # With Content-Length we read exactly that many bytes; a connection that drops
+  # early makes readpartial raise EOFError (truncation surfaces as an error).
+  # Without Content-Length the body is delimited by the connection close, so a
+  # clean EOF via #read is the expected end — only a hard transport failure
+  # (e.g. a TLS close without close_notify) raises. No errors are rescued here.
+  def read_body(io, headers, body)
+    length = headers['content-length']&.to_i
+
+    if length
+      body << io.readpartial(16_384) while body.bytesize < length
+      body[0, length]
+    else
+      body << io.read.to_s
+    end
   end
 
   def build_multipart(payload)
@@ -261,10 +281,5 @@ class ApplyMate::Client::AsyncHttp < ApplyMate::Client::Base
 
   def file_part?(value)
     value.respond_to?(:read) && value.respond_to?(:original_filename) && value.respond_to?(:content_type)
-  end
-
-  def close_and_nil(sock)
-    sock&.close rescue nil
-    nil
   end
 end

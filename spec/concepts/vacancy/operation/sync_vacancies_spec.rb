@@ -43,7 +43,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
         else
           '<html><body></body></html>'
         end
-        ApplyMate::Client::Base::Response.new(body, {}, 200, url)
+        ApplyMate::Client::AsyncHttp::Response.new(body, {}, 200, url)
       end
     end
 
@@ -108,7 +108,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
             else
               '<html><body></body></html>'
             end
-            ApplyMate::Client::Base::Response.new(body, {}, 200, url)
+            ApplyMate::Client::AsyncHttp::Response.new(body, {}, 200, url)
           end
       end
 
@@ -130,7 +130,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
         @dou_detail_index ||= 0
         @dou_detail_index += 1
         @dou_detail_index = 1 if @dou_detail_index > 20
-        ApplyMate::Client::Base::Response.new(file_fixture("dou/list/details/#{@dou_detail_index}.html").read, {}, 200)
+        ApplyMate::Client::AsyncHttp::Response.new(file_fixture("dou/list/details/#{@dou_detail_index}.html").read, {}, 200)
       end
 
       # Stub DOU XHR listing: page 1 (count=0) returns vacancies; subsequent pages
@@ -140,13 +140,13 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
           count = URI.decode_www_form(body.to_s).to_h['count'].to_i
           response_body = count == 0 ? { html: dou_html_content, last: false }.to_json
                                      : { html: '', last: true }.to_json
-          ApplyMate::Client::Base::Response.new(response_body, {}, 200, url)
+          ApplyMate::Client::AsyncHttp::Response.new(response_body, {}, 200, url)
         end
 
       # Stub DOU session initialization
       allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(
         ApplyMate::Scraper::Dou::VACANCIES_URL
-      ).and_return(ApplyMate::Client::Base::Response.new('', { 'set-cookie' => 'csrftoken=test_token;' }, 200))
+      ).and_return(ApplyMate::Client::AsyncHttp::Response.new('', { 'set-cookie' => 'csrftoken=test_token;' }, 200))
     end
 
     it 'syncs 20 vacancies' do
@@ -194,7 +194,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
           @dou_detail_index ||= 0
           @dou_detail_index += 1
           @dou_detail_index = 1 if @dou_detail_index > 20
-          ApplyMate::Client::Base::Response.new(file_fixture("dou/list/details/#{@dou_detail_index}.html").read, {}, 200)
+          ApplyMate::Client::AsyncHttp::Response.new(file_fixture("dou/list/details/#{@dou_detail_index}.html").read, {}, 200)
         end
 
       operation.call
@@ -208,14 +208,14 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     let(:djinni_html_content) { file_fixture('djinni/list/vacancies_page.html').read }
 
     before do
-      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).and_return(ApplyMate::Client::Base::Response.new('<html></html>', {}, 200, ''))
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).and_return(ApplyMate::Client::AsyncHttp::Response.new('<html></html>', {}, 200, ''))
       allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(a_string_including('djinni.co')) do |_instance, url|
         body = if url.include?('page=1') || !url.include?('page=')
           djinni_html_content
         else
           '<html><body></body></html>'
         end
-        ApplyMate::Client::Base::Response.new(body, {}, 200, url)
+        ApplyMate::Client::AsyncHttp::Response.new(body, {}, 200, url)
       end
     end
 
@@ -224,15 +224,6 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
         expect_any_instance_of(ActiveRecord::Relation).to receive(:import).at_least(:once)
       end
       described_class.call
-    end
-
-    it 'raises TerminationError when solid_queue_terminating is set' do
-      Thread.main.thread_variable_set(:solid_queue_terminating, true)
-      expect {
-        described_class.call
-      }.to raise_error(ApplyMate::Scraper::Base::TerminationError)
-    ensure
-      Thread.main.thread_variable_set(:solid_queue_terminating, false)
     end
   end
 end

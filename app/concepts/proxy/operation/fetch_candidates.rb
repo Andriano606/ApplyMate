@@ -90,7 +90,8 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
 
   def try_fetch(url)
     response = http_client.get(url)
-    return response.body if response.success?
+    return nil if response.nil?
+    return response.body if (200..299).cover?(response.status)
     log("HTTP #{response.status} fetching #{url}", level: :warn, color: :red)
     nil
   rescue StandardError => e

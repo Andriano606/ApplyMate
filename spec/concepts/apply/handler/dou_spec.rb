@@ -12,7 +12,7 @@ RSpec.describe Apply::Handler::Dou do
     allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get)
       .with(HoneytechDou::VACANCY_URL, any_args)
       .and_return(
-        ApplyMate::Client::Base::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
+        ApplyMate::Client::AsyncHttp::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
       )
 
     # Gemini API — stubbed in call order:

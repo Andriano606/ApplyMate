@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ApplyMate::Client::Browser < ApplyMate::Client::Base
+class ApplyMate::Client::Browser
   # CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
   # CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
 

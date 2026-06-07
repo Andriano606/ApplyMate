@@ -133,7 +133,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
             vacancies_queue.unshift(vacancy)
           end
         end
-      rescue ApplyMate::Client::Base::DeadProxyError
+      rescue ApplyMate::Scraper::Base::DeadProxyError
         deleted[0] += 1 if kill_proxy(proxy)
         release_proxy(proxy, in_use_proxy_ids)
         proxy = nil
@@ -218,7 +218,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
             pages_queue.unshift(page)
           end
         end
-      rescue ApplyMate::Client::Base::DeadProxyError
+      rescue ApplyMate::Scraper::Base::DeadProxyError
         deleted[0] += 1 if kill_proxy(proxy)
         release_proxy(proxy, in_use_proxy_ids)
         proxy = nil

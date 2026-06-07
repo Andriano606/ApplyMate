@@ -24,8 +24,8 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
     def port = @server.addr[1]
     def url(path = '/') = "http://127.0.0.1:#{port}#{path}"
 
-    def queue(status: 200, headers: {}, body: '', delay: nil)
-      @mutex.synchronize { @responses << { status: status, headers: headers, body: body, delay: delay } }
+    def queue(status: 200, headers: {}, body: '', delay: nil, raw: nil)
+      @mutex.synchronize { @responses << { status: status, headers: headers, body: body, delay: delay, raw: raw } }
     end
 
     def stop
@@ -75,6 +75,8 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
     end
 
     def write_response(sock, r)
+      return sock.write(r[:raw]) if r[:raw] # verbatim bytes, e.g. a truncated body
+
       sock.write "HTTP/1.0 #{r[:status]} Status\r\n"
       r[:headers].each { |k, v| sock.write "#{k}: #{v}\r\n" }
       sock.write "Content-Length: #{r[:body].bytesize}\r\n"
@@ -85,20 +87,14 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
   end
 
   let(:server) { TestServer.new }
-  let(:no_retry_handler) { ApplyMate::Client::ErrorHandler.new(max_retries: 0, base_delay: 0) }
-
-  before do
-    # Eliminate real backoff sleeps inside ErrorHandler#handle_retry.
-    allow_any_instance_of(ApplyMate::Client::ErrorHandler).to receive(:sleep)
-  end
 
   after { server.stop }
 
   # ── #initialize ──────────────────────────────────────────────────────────────
   describe '#initialize' do
-    it 'defaults timeout to 15 seconds' do
+    it 'defaults request_timeout to 15 seconds' do
       client = described_class.new
-      expect(client.instance_variable_get(:@timeout)).to eq(15)
+      expect(client.instance_variable_get(:@request_timeout)).to eq(15)
     end
 
     it 'defaults proxy to nil (direct connection)' do
@@ -118,34 +114,21 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
       proxy  = client.instance_variable_get(:@proxy_uri)
       expect(proxy.scheme).to eq('socks5h')
     end
-
-    it 'accepts a custom error_handler' do
-      handler = ApplyMate::Client::ErrorHandler.new(max_retries: 42)
-      client  = described_class.new(error_handler: handler)
-      expect(client.instance_variable_get(:@error_handler)).to eq(handler)
-    end
-
-    it 'falls back to Base.default_error_handler when none provided' do
-      client = described_class.new
-      expect(client.instance_variable_get(:@error_handler))
-        .to be_a(ApplyMate::Client::ErrorHandler)
-    end
   end
 
   # ── #get ─────────────────────────────────────────────────────────────────────
   describe '#get' do
-    let(:client) { described_class.new(timeout: 5, error_handler: no_retry_handler) }
+    let(:client) { described_class.new(request_timeout: 5) }
 
     it 'returns a Response with body, status, headers, and final_url on 200' do
       server.queue(status: 200, body: 'hello', headers: { 'X-Server' => 'test' })
       response = client.get(server.url('/foo'))
 
-      expect(response).to be_a(ApplyMate::Client::Base::Response)
+      expect(response).to be_a(ApplyMate::Client::AsyncHttp::Response)
       expect(response.status).to eq(200)
       expect(response.body).to eq('hello')
       expect(response.headers['x-server']).to eq('test')
       expect(response.final_url).to eq(server.url('/foo'))
-      expect(response.success?).to be true
     end
 
     it 'sends the GET method and request path' do
@@ -160,7 +143,7 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
       client.get(server.url)
 
       expect(server.requests.last[:headers]['user-agent'])
-        .to eq(ApplyMate::Client::Base::USER_AGENT)
+        .to eq(ApplyMate::Client::AsyncHttp::USER_AGENT)
     end
 
     it 'merges custom headers with the User-Agent' do
@@ -170,7 +153,7 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
       headers = server.requests.last[:headers]
       expect(headers['x-custom']).to eq('value')
       expect(headers['cookie']).to eq('a=1')
-      expect(headers['user-agent']).to eq(ApplyMate::Client::Base::USER_AGENT)
+      expect(headers['user-agent']).to eq(ApplyMate::Client::AsyncHttp::USER_AGENT)
     end
 
     it 'sends the Host header derived from the URL' do
@@ -180,12 +163,11 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
       expect(server.requests.last[:headers]['host']).to eq('127.0.0.1')
     end
 
-    it 'returns Response with success? false for 4xx without retrying' do
+    it 'returns Response with a 4xx status without retrying' do
       server.queue(status: 404, body: 'not found')
       response = client.get(server.url)
 
       expect(response.status).to eq(404)
-      expect(response.success?).to be false
       expect(server.requests.size).to eq(1)
     end
 
@@ -200,7 +182,7 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
 
   # ── #post ────────────────────────────────────────────────────────────────────
   describe '#post' do
-    let(:client) { described_class.new(timeout: 5, error_handler: no_retry_handler) }
+    let(:client) { described_class.new(request_timeout: 5) }
 
     it 'sends POST method with the body' do
       server.queue(status: 200, body: 'ok')
@@ -229,7 +211,7 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
 
   # ── #post_multipart ──────────────────────────────────────────────────────────
   describe '#post_multipart' do
-    let(:client) { described_class.new(timeout: 5, error_handler: no_retry_handler) }
+    let(:client) { described_class.new(request_timeout: 5) }
 
     it 'sets multipart/form-data Content-Type with boundary' do
       server.queue(status: 200, body: '')
@@ -279,23 +261,11 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
       expect(response.headers['location']).to eq('/thank-you')
       expect(server.requests.size).to eq(1)
     end
-
-    it 'goes through the error_handler and retries on 502' do
-      handler = ApplyMate::Client::ErrorHandler.new(max_retries: 3, base_delay: 0)
-      client  = described_class.new(timeout: 5, error_handler: handler)
-      server.queue(status: 502, body: 'bad gateway')
-      server.queue(status: 200, body: 'ok')
-
-      response = client.post_multipart(server.url, payload: { 'a' => '1' })
-
-      expect(response.status).to eq(200)
-      expect(server.requests.size).to eq(2)
-    end
   end
 
   # ── Redirects ────────────────────────────────────────────────────────────────
   describe 'redirect handling' do
-    let(:client) { described_class.new(timeout: 5, error_handler: no_retry_handler) }
+    let(:client) { described_class.new(request_timeout: 5) }
 
     it 'follows a 301 and switches to GET (drops body)' do
       server.queue(status: 301, headers: { 'Location' => '/new' }, body: '')
@@ -390,85 +360,75 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
     end
   end
 
+  # ── Header parsing ───────────────────────────────────────────────────────────
+  describe 'response header parsing' do
+    let(:client) { described_class.new(request_timeout: 2) }
+
+    it 'collects multiple Set-Cookie headers into an Array (none dropped)' do
+      # Django + Cloudflare commonly emit several Set-Cookie headers on one response.
+      # Collapsing them into a single Hash key would silently lose all but the last —
+      # e.g. dropping csrftoken and breaking the subsequent CSRF-protected POST.
+      server.queue(raw: "HTTP/1.0 200 Status\r\n" \
+        "Set-Cookie: csrftoken=abc123; Path=/\r\n" \
+        "Set-Cookie: sessionid=anon-xyz; Path=/; HttpOnly\r\n" \
+        "Connection: close\r\n\r\nbody")
+
+      cookies = client.get(server.url).headers['set-cookie']
+      expect(cookies).to eq([ 'csrftoken=abc123; Path=/', 'sessionid=anon-xyz; Path=/; HttpOnly' ])
+    end
+
+    it 'still exposes a single Set-Cookie header as a one-element Array' do
+      server.queue(raw: "HTTP/1.0 200 Status\r\n" \
+        "Set-Cookie: sessionid=only-one; Path=/\r\n" \
+        "Connection: close\r\n\r\nbody")
+
+      expect(client.get(server.url).headers['set-cookie']).to eq([ 'sessionid=only-one; Path=/' ])
+    end
+
+    it 'keeps non-cookie headers as plain Strings' do
+      server.queue(status: 200, body: '', headers: { 'X-Server' => 'edge' })
+      expect(client.get(server.url).headers['x-server']).to eq('edge')
+    end
+  end
+
   # ── Error handling ───────────────────────────────────────────────────────────
   describe 'error handling' do
-    it 'raises DeadProxyError when the connection is refused' do
+    it 'lets the connection-refused error propagate (no rescue)' do
       dead_url = server.url('/anything')
       server.stop
       sleep 0.05 # let the OS release the port
-      client = described_class.new(timeout: 2, error_handler: no_retry_handler)
+      client = described_class.new(request_timeout: 2)
 
-      expect { client.get(dead_url) }
-        .to raise_error(ApplyMate::Client::Base::DeadProxyError, /Connection failed/)
+      expect { client.get(dead_url) }.to raise_error(SystemCallError)
     end
 
-    it 'raises DeadProxyError when the upstream is slower than @timeout' do
+    it 'lets the timeout error propagate when the upstream is slower than @timeout' do
       server.queue(status: 200, body: 'late', delay: 1.5)
-      client = described_class.new(timeout: 0.3, error_handler: no_retry_handler)
+      client = described_class.new(request_timeout: 0.3)
 
-      expect { client.get(server.url) }
-        .to raise_error(ApplyMate::Client::Base::DeadProxyError)
+      expect { client.get(server.url) }.to raise_error(Async::TimeoutError)
     end
 
-    it 'retries on 502 and returns the eventual successful Response' do
-      server.queue(status: 502, body: 'bad gateway')
-      server.queue(status: 502, body: 'bad gateway')
-      server.queue(status: 200, body: 'ok')
+    it 'lets the EOFError propagate when the body is truncated mid-transfer (Content-Length exceeds bytes sent)' do
+      # Header promises 100 bytes but the connection drops after only 5.
+      server.queue(raw: "HTTP/1.0 200 Status\r\nContent-Length: 100\r\nConnection: close\r\n\r\nhello")
+      client = described_class.new(request_timeout: 2)
 
-      handler = ApplyMate::Client::ErrorHandler.new(max_retries: 3, base_delay: 0)
-      client  = described_class.new(timeout: 5, error_handler: handler)
-
-      response = client.get(server.url)
-      expect(response.status).to eq(200)
-      expect(server.requests.size).to eq(3)
+      expect { client.get(server.url) }.to raise_error(EOFError)
     end
 
-    it 'retries on 503 and 504 the same way' do
-      server.queue(status: 503, body: '')
-      server.queue(status: 504, body: '')
-      server.queue(status: 200, body: 'ok')
+    it 'returns the body for close-delimited responses with no Content-Length' do
+      # Without Content-Length the body simply ends when the connection closes.
+      server.queue(raw: "HTTP/1.0 200 Status\r\nConnection: close\r\n\r\nbody-without-length")
+      client = described_class.new(request_timeout: 2)
 
-      handler = ApplyMate::Client::ErrorHandler.new(max_retries: 3, base_delay: 0)
-      client  = described_class.new(timeout: 5, error_handler: handler)
-
-      response = client.get(server.url)
-      expect(response.status).to eq(200)
-    end
-
-    it 'raises AttemptsExhaustedError after max_retries on persistent 502' do
-      6.times { server.queue(status: 502, body: '') }
-      handler = ApplyMate::Client::ErrorHandler.new(max_retries: 2, base_delay: 0)
-      client  = described_class.new(timeout: 5, error_handler: handler)
-
-      expect { client.get(server.url) }
-        .to raise_error(ApplyMate::Client::ErrorHandler::AttemptsExhaustedError, /Final failure after 2 retries/)
-      expect(server.requests.size).to eq(3) # 1 initial + 2 retries
-    end
-
-    it 'does NOT retry on 500 (not in RETRYABLE_STATUSES)' do
-      server.queue(status: 500, body: 'oops')
-      handler = ApplyMate::Client::ErrorHandler.new(max_retries: 5, base_delay: 0)
-      client  = described_class.new(timeout: 5, error_handler: handler)
-
-      response = client.get(server.url)
-      expect(response.status).to eq(500)
-      expect(server.requests.size).to eq(1)
-    end
-
-    it 'does NOT retry on 4xx' do
-      server.queue(status: 429, body: 'too many')
-      handler = ApplyMate::Client::ErrorHandler.new(max_retries: 5, base_delay: 0)
-      client  = described_class.new(timeout: 5, error_handler: handler)
-
-      response = client.get(server.url)
-      expect(response.status).to eq(429)
-      expect(server.requests.size).to eq(1)
+      expect(client.get(server.url).body).to eq('body-without-length')
     end
   end
 
   # ── Async context handling ───────────────────────────────────────────────────
   describe 'Async context' do
-    let(:client) { described_class.new(timeout: 5, error_handler: no_retry_handler) }
+    let(:client) { described_class.new(request_timeout: 5) }
 
     it 'works outside an Async context (wraps in Sync internally)' do
       server.queue(status: 200, body: 'sync ok')

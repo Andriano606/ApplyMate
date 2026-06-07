@@ -36,6 +36,12 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :minio
 
+  # Serve attachments by streaming them through the app (same HTTPS origin) instead of
+  # redirecting to MinIO's http://localhost:9000 URL. bin/dev fronts the app with Caddy
+  # over HTTPS (dev.applymate.io); a redirect to a plain-http MinIO URL is blocked by the
+  # browser as mixed content, so images (avatars, logos) silently fail to load.
+  config.active_storage.resolve_model_to_route = :rails_storage_proxy
+
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false
 

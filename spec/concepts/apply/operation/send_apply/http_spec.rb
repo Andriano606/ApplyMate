@@ -203,6 +203,24 @@ RSpec.describe Apply::Operation::SendApply::Http do
           )
         end
 
+        context 'when the page captured a different (anonymous) sessionid' do
+          before do
+            apply.update!(cookies: 'csrftoken=xcW3TcF3; sessionid=anonymous-captured-id')
+          end
+
+          it 'keeps the authenticated sessionid and does not duplicate or let the captured one override it' do
+            run_operation
+            cookie = nil
+            expect(http_client).to have_received(:post_multipart) do |_action, headers:, **|
+              cookie = headers['Cookie']
+            end
+            expect(cookie.scan(/sessionid=/).size).to eq(1)
+            expect(cookie).to include('sessionid=test-session-id')
+            expect(cookie).not_to include('anonymous-captured-id')
+            expect(cookie).to include('csrftoken=xcW3TcF3')
+          end
+        end
+
         it 'sends the vacancy URL as the Referer' do
           run_operation
           expect(http_client).to have_received(:post_multipart).with(
