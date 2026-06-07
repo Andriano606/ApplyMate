@@ -16,7 +16,13 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
     @browser = Ferrum::Browser.new(
       # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
-      browser_options: { 'no-sandbox': nil }
+      timeout: 30,
+      process_timeout: 30,
+      browser_options: {
+        'no-sandbox': nil,
+        'disable-dev-shm-usage': nil,
+        'disable-gpu': nil
+      }
     )
   end
 
@@ -61,6 +67,7 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   ensure
     page&.close
     context&.dispose
+    @browser&.quit
   end
 
   def self.validate_api_key!(api_key:)
