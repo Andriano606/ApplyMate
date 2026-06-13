@@ -5,7 +5,10 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      # Host port 5434 avoids conflicting with other local Postgres/MySQL on 5432/5433.
+      # Container still listens on 5432; DB_PORT (read by config/database.yml) must match
+      # the host side. Compose reads DB_PORT from .env in the project directory.
+      - "${DB_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
   chrome:

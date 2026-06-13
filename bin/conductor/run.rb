@@ -19,7 +19,7 @@ def main
   puts ''
 
   compose_up!
-  wait_for_tcp('localhost', 5432, 'PostgreSQL')
+  wait_for_tcp('localhost', db_port, 'PostgreSQL')
   wait_for_tcp('localhost', 9200, 'Elasticsearch')
 
   puts ''

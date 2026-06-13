@@ -84,6 +84,13 @@ module ConductorHelpers
     )
   end
 
+  # Host port the shared Postgres container is published on. Defaults to 5434 (matches
+  # docker-compose.yml + config/database.yml) but honours DB_PORT from the workspace .env
+  # so the wait/connect target tracks the actual mapping.
+  def db_port
+    (read_env_value('.env', 'DB_PORT') || 5434).to_i
+  end
+
   def wait_for_tcp(host, port, label, timeout: 120)
     print "⏳ Waiting for #{label} (#{host}:#{port}) "
     deadline = Time.now + timeout

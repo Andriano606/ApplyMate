@@ -35,7 +35,7 @@ def main
   copy_secrets_from_root!
   write_env_files
   compose_up!
-  wait_for_tcp('localhost', 5432, 'PostgreSQL')
+  wait_for_tcp('localhost', db_port, 'PostgreSQL')
   install_dependencies
   prepare_databases
   build_assets
