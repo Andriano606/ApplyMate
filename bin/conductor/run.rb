@@ -26,6 +26,7 @@ def main
   puts "🗄️  Ensuring #{db_name} exists..."
   retry_system!('bin/rails', 'db:prepare')
 
+  clear_stale_server_pid!
   ensure_foreman!
 
   # We pass --env /dev/null so foreman skips loading .env (dotenv-rails does that at
@@ -37,6 +38,33 @@ def main
   puts ''
   puts "▶️  Starting dev server on http://localhost:#{port}"
   exec('foreman', 'start', '-f', 'Procfile.conductor', '--env', '/dev/null')
+end
+
+# A previous Run that wasn't stopped (or crashed / was `kill -9`'d) leaves
+# tmp/pids/server.pid behind. If it points at a LIVE process, `bin/rails server`
+# refuses to boot ("A server is already running"), exits 1, and foreman tears the
+# whole stack down. Stop a live previous server, or drop a stale pid file, so Run
+# is always idempotent.
+def clear_stale_server_pid!
+  pid_file = File.join(workspace_root, 'tmp/pids/server.pid')
+  return unless File.exist?(pid_file)
+
+  pid = File.read(pid_file).to_i
+  if pid.positive? && process_alive?(pid)
+    puts "🛑 Stopping previous dev server (pid #{pid})..."
+    Process.kill('TERM', pid)
+    sleep 1
+  end
+  File.delete(pid_file) if File.exist?(pid_file)
+end
+
+def process_alive?(pid)
+  Process.kill(0, pid)
+  true
+rescue Errno::ESRCH
+  false
+rescue Errno::EPERM
+  true
 end
 
 # Mirrors bin/dev: foreman is a global gem, installed on demand.
