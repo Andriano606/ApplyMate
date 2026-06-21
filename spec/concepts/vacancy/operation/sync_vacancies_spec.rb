@@ -25,7 +25,8 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     stub_const('Vacancy::Operation::SyncVacancies::LAST_PAGE_CONFIRMATIONS', 1)
     # Disable the in-memory proxy cooldown so the handful of test proxies can be
     # reused immediately instead of resting for 5s between requests.
-    stub_const('Vacancy::Operation::SyncVacancies::ProxyPool::BURST_COOLDOWN', 0)
+    allow(ApplyMate::Scraper::Dou).to receive(:burst_cooldown).and_return(0)
+    allow(ApplyMate::Scraper::Djinni).to receive(:burst_cooldown).and_return(0)
     # Stub Elasticsearch import on Vacancy relation
     without_partial_double_verification do
       allow_any_instance_of(ActiveRecord::Relation).to receive(:import)

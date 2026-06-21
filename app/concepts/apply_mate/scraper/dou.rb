@@ -15,6 +15,17 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     VACANCIES_URL
   end
 
+  # Dou's full description lives on each vacancy's detail page (fetch_description), so
+  # the listing must not write it and the detail pass only runs for missing ones.
+  def self.fetches_description?
+    true
+  end
+
+  # Behind Cloudflare and rate-sensitive — rest a touch longer between bursts.
+  def self.burst_cooldown
+    5
+  end
+
   def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::AsyncHttp.new)
     @source = source
     @client = client
@@ -77,7 +88,11 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     end
 
     nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
-    return if nodes.empty? || data['last'] == true
+    # data['last'] is Dou's explicit last-page flag — the only reliable end signal.
+    # Empty nodes WITHOUT it means the proxy got a blocked/rate-limited (but valid-JSON)
+    # response; retry on another IP instead of truncating pagination as if it were the end.
+    return if data['last'] == true
+    raise DeadProxyError, 'empty listing (proxy rate-limited)' if nodes.empty?
 
     @items_per_page ||= data['num']
     nodes.map { |el| extract_job_data(el) }.compact
@@ -111,11 +126,13 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     company_el = element.at_css('a.company')
     company_name = company_el&.children&.select(&:text?)&.map(&:text)&.join&.squish
 
+    # No description here on purpose: Dou's full description comes from the detail page
+    # in the second pass (fetches_description? == true). Leaving it nil lets the detail
+    # pass target only the vacancies that still need one (new + previously-failed).
     ApplyMate::Operation::Struct.new(
       source_id:        @source.id,
       title:,
       url:              full_url(path),
-      description:      sanitize_html(element.at_css('.sh-info')&.inner_html, compact: true),
       company_name:,
       company_icon_url: element.at_css('a.company img.f-i')&.[]('src'),
       external_id:

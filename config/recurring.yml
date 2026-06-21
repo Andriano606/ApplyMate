@@ -12,13 +12,12 @@
 fetch_proxies:
   class: Proxy::Job::FetchProxies
   schedule: every day at 0am
-# Disabled: Proxy::Operation::Validate now probes Cloudflare sources (Dou) through
-# ImpersonateHttp, which spawns a curl-impersonate subprocess per probe — far too
-# CPU-heavy to run unthrottled every 5 minutes (piled up and hung the queue).
-# Re-enable only with a small `limit:` arg and a lower IMPERSONATE_CONCURRENCY.
-# validate_proxies:
-#   class: Proxy::Job::Validate
-#   schedule: every 5 minutes
+# Validates untested proxies (fast pure-Ruby AsyncHttp, no subprocess) and records the
+# per-source result — promotes live ones into the "working" tier the sync uses, and keeps
+# the pool fresh as proxies churn. Concurrency-limited to 1 (see Proxy::Job::Validate).
+validate_proxies:
+  class: Proxy::Job::Validate
+  schedule: every 5 minutes
 #sync_vacancies:
 #  class: Vacancy::Job::SyncVacancies
 #  schedule: every day at 3am

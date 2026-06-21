@@ -8,6 +8,11 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     JOB_LIST_URL
   end
 
+  # No Cloudflare — rest briefly between bursts to keep listing throughput up.
+  def self.burst_cooldown
+    3
+  end
+
   def initialize(source, client)
     @source = source
     @client = client

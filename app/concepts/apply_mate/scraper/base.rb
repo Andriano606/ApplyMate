@@ -26,6 +26,21 @@ class ApplyMate::Scraper::Base
     source.base_url.to_s
   end
 
+  # Does this source fetch the full description from a per-vacancy detail page in the
+  # second pass (true), or does the listing already carry the final description (false)?
+  # When true, the listing must NOT write/overwrite `description` — the detail pass owns
+  # it — and the detail pass only runs for vacancies that don't have one yet.
+  def self.fetches_description?
+    false
+  end
+
+  # Seconds a proxy rests after a burst of requests to this source (sync ProxyPool).
+  # Override per source: Cloudflare-protected sites are rate-sensitive (a short cooldown
+  # triggers more blocks → proxy churn → slower), CF-free sites just want throughput.
+  def self.burst_cooldown
+    5
+  end
+
   def fetch_listing(page:)
     raise NotImplementedError
   end

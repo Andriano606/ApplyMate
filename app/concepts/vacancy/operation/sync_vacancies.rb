@@ -10,8 +10,8 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   NoProxiesError = Class.new(StandardError)
 
-  WORKERS_PER_SOURCE      = 50
-  DESCRIPTION_WORKERS     = 80    # matched to the proven-proxy throughput ceiling (~399 / COOLDOWN)
+  WORKERS_PER_SOURCE      = 100
+  DESCRIPTION_WORKERS     = 140   # bounded by live-proxy count × burst throughput
   MAX_PAGES               = 2000
   LAST_PAGE_CONFIRMATIONS = 50
   MAX_VACANCY_RETRIES     = 20
@@ -79,12 +79,10 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     Entry = Struct.new(:proxy, :available_at, :in_use, :burst)
 
     # Burst model (per-site, since each Source has its OWN pool): a proxy serves
-    # BURST_LIMIT requests back-to-back, then rests BURST_COOLDOWN seconds before it
-    # may be acquired again. Measured: a proxy sustains ~15 curl-impersonate requests
-    # against Cloudflare before being rate-blocked; resting lets the window reset.
-    # The same proxy may hit different sites concurrently (independent pools).
+    # BURST_LIMIT requests back-to-back, then rests `Scraper.burst_cooldown` seconds
+    # before it may be acquired again. The cooldown is a per-scraper property —
+    # Cloudflare-protected Dou rests longer than the CF-free Djinni.
     BURST_LIMIT     = 15
-    BURST_COOLDOWN  = 10
     MIN_LIVE        = 10    # refill only when the pool is nearly empty
     BATCH_SIZE      = 1500  # max proven proxies pulled per load (validation budget)
     DISCOVERY_BATCH = 300   # untested proxies pulled only to bootstrap a pool with no proven ones
@@ -93,6 +91,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     def initialize(db, source)
       @db            = db
       @source        = source
+      @burst_cooldown = source.scraper.constantize.burst_cooldown
       @validation_url = source.scraper.constantize.validation_url(source)
       @entries       = []
       @by_id         = {}
@@ -172,7 +171,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       entry.burst += 1
       if entry.burst >= BURST_LIMIT
         entry.burst = 0
-        entry.available_at = monotonic + BURST_COOLDOWN
+        entry.available_at = monotonic + @burst_cooldown
       else
         entry.available_at = monotonic
       end
@@ -376,10 +375,16 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       data = batch.compact.uniq(&:external_id)
       return if data.empty?
 
+      # Sources that fetch the description from a detail page in the 2nd pass must NOT
+      # let the listing overwrite it — otherwise an existing full description is clobbered
+      # by the listing snapshot and the (skip-if-present) detail pass never restores it.
+      update_cols = %i[title url company_name company_icon_url]
+      update_cols << :description unless @source.scraper.constantize.fetches_description?
+
       Vacancy.upsert_all(
         data.map(&:to_h),
         unique_by: [ :source_id, :external_id ],
-        update_only: [ :title, :description, :url, :company_name, :company_icon_url ],
+        update_only: update_cols,
         record_timestamps: true
       )
 
@@ -466,10 +471,12 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       loop do
         break if skip[0] || stop[0]
 
-        vacancies_queue = with_db do
-          source.vacancies.select(:id, :external_id, :url)
-                .where('vacancies.id > ?', last_id).order(:id).limit(VACANCY_FETCH_BATCH).to_a
-        end
+        scope = source.vacancies.select(:id, :external_id, :url).where('vacancies.id > ?', last_id)
+        # Skip vacancies that already have a description — only fetch the ones still missing
+        # one (new this run + any whose previous detail fetch failed). Huge win for Dou,
+        # whose detail pass otherwise re-fetches every vacancy through rate-limited proxies.
+        scope = scope.where(description: [ nil, '' ]) if source.scraper.constantize.fetches_description?
+        vacancies_queue = with_db { scope.order(:id).limit(VACANCY_FETCH_BATCH).to_a }
         break if vacancies_queue.empty?
 
         last_id = vacancies_queue.last.id

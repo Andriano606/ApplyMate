@@ -17,10 +17,15 @@ require 'kernel/sync'
 # Run recurringly (Proxy::Job::Validate): it churns through proxies not yet tested
 # for the sources, a batch at a time.
 class Proxy::Operation::Validate < ApplyMate::Operation::Base
-  CONCURRENCY     = 1200  # fibers; ulimit -n is high so socket FDs aren't the limit
-  REQUEST_TIMEOUT = 12    # catch slow-but-alive proxies a tight 5s would drop
-  CONNECT_TIMEOUT = 6
-  DEFAULT_LIMIT   = 5000
+  # Sized to run every 5 minutes on a Raspberry Pi 5 (4 cores, 16 GB) without heavy load.
+  # The probes are I/O-bound; the only real cost is concurrent TLS handshakes, so ~100 in
+  # flight keeps CPU/FDs light. DEFAULT_LIMIT bounds one run to a few minutes (each batch
+  # is probed against every source), well inside the 5-minute window. Bump CONCURRENCY via
+  # ENV on a beefier host.
+  CONCURRENCY     = ENV.fetch('PROXY_VALIDATE_CONCURRENCY', 100).to_i
+  REQUEST_TIMEOUT = 10
+  CONNECT_TIMEOUT = 5
+  DEFAULT_LIMIT   = 2000
 
   # scope:
   #   :untested (default) — grow: proxies with no per-source stats yet
