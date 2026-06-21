@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Installs curl-impersonate (Chrome TLS/HTTP2 fingerprint) into vendor/, used by
+# ApplyMate::Client::ImpersonateHttp to pass Cloudflare without a browser.
+# The binary is arch-specific and NOT committed; run this once per host.
+#   bin/install-curl-impersonate
+# Override the version/binary path via CURL_IMPERSONATE_VERSION / CURL_IMPERSONATE_BIN.
+set -euo pipefail
+
+VERSION="${CURL_IMPERSONATE_VERSION:-v1.5.6}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEST="$ROOT/vendor/curl-impersonate"
+
+case "$(uname -m)" in
+  x86_64)        ARCH="x86_64-linux-gnu" ;;
+  aarch64|arm64) ARCH="aarch64-linux-gnu" ;;
+  *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+esac
+
+URL="https://github.com/lexiforest/curl-impersonate/releases/download/${VERSION}/curl-impersonate-${VERSION}.${ARCH}.tar.gz"
+
+echo "Downloading curl-impersonate ${VERSION} (${ARCH})…"
+mkdir -p "$DEST"
+curl -fsSL "$URL" -o "$DEST/ci.tar.gz"
+tar xzf "$DEST/ci.tar.gz" -C "$DEST"
+rm -f "$DEST/ci.tar.gz"
+chmod +x "$DEST/curl-impersonate" "$DEST"/curl_chrome* 2>/dev/null || true
+
+if "$DEST/curl_chrome136" --version >/dev/null 2>&1; then
+  echo "OK — installed to $DEST (curl_chrome136 runnable)"
+else
+  echo "WARN — installed to $DEST but curl_chrome136 is not runnable on this host"
+fi

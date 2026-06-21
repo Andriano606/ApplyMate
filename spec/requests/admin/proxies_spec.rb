@@ -26,12 +26,14 @@ RSpec.describe 'Admin Proxies API', type: :request do
                      type: :object,
                      properties: {
                        id: { type: :string },
+                       source: { type: :string },
                        protocol: { type: :string },
                        host: { type: :string },
                        port: { type: :integer },
                        url: { type: :string },
                        success_count: { type: :integer },
                        fail_count: { type: :integer },
+                       reliability: { type: :number },
                        failed_at: { type: :string, nullable: true },
                        created_at: { type: :string },
                        updated_at: { type: :string }
@@ -49,7 +51,10 @@ RSpec.describe 'Admin Proxies API', type: :request do
                  }
                }
 
-        before { create_list(:proxy, 2) }
+        before do
+          source = create(:source)
+          create_list(:proxy, 2).each { |proxy| create(:proxy_source_stat, proxy: proxy, source: source) }
+        end
 
         run_test! do |response|
           body = JSON.parse(response.body)

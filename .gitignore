@@ -43,3 +43,6 @@
 /config/credentials/*.key
 
 .idea/*
+
+# curl-impersonate binary (arch-specific; install via bin/install-curl-impersonate)
+/vendor/curl-impersonate/

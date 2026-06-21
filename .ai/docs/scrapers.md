@@ -85,6 +85,45 @@ Use this in operations that need a scraper from an `apply` record:
 scraper = apply.vacancy.source.build_scraper
 ```
 
+## Cloudflare-protected sites — ImpersonateHttp (TLS fingerprint, no browser)
+
+Some sources (e.g. **Dou** = `jobs.dou.ua`) sit behind **Cloudflare**. A raw request
+(`AsyncHttp`/`Http`) gets a **403 "Just a moment…"** page regardless of HTTP headers —
+masking `Accept`/`Sec-*` does not help (measured: 22 vs 20 of 120 proxies). The discriminator
+is the **TLS/JA3 fingerprint**: Ruby's OpenSSL handshake isn't Chrome's, so Cloudflare blocks it.
+
+**`ApplyMate::Client::ImpersonateHttp`** solves this by shelling out to **curl-impersonate**
+(BoringSSL with Chrome's exact cipher/extension order + HTTP/2 settings). It passes the
+non-interactive Cloudflare challenge **without a browser, at HTTP speed**, and is a **drop-in
+for `AsyncHttp`** (same `Response`, `#get`/`#post`):
+
+```ruby
+client  = ApplyMate::Client::ImpersonateHttp.new(proxy: proxy.url)
+scraper = ApplyMate::Scraper::Dou.new(source, client)   # ImpersonateHttp stands in for AsyncHttp
+scraper.fetch_listing(page: 1)                          # GET CSRF + POST xhr-load — both via curl-impersonate
+scraper.fetch_description(url)                           # GET detail page
+```
+
+Measured (datacenter proxies that raw HTTP can't use): **~43%** become usable via the Chrome TLS
+fingerprint, and a usable proxy sustains **12–15/15** sequential requests (no quick ban). The
+remaining proxies split into a true JS-challenge minority and hard IP-blocks (1020) — see
+`.ai/docs/proxy.md`. Compare a real headless browser: it also passes CF but yields only **~2
+pages per proxy before a ban** and carries full Chrome overhead — so ImpersonateHttp is the
+primary path; `ApplyMate::Client::Browser` is reserved for the rare interactive JS challenge.
+
+**Install:** the curl-impersonate binary is arch-specific and NOT committed. Run
+`bin/install-curl-impersonate` once per host (downloads into `vendor/curl-impersonate/`, which is
+gitignored). Override the binary path with `CURL_IMPERSONATE_BIN` (e.g. a `curl_chrome136`
+wrapper already on the host).
+
+**Concurrency:** `ImpersonateHttp` shells out via `Open3`, but the `async` reactor hooks
+`process_wait`, so a fiber **yields** while its curl subprocess runs — 8 concurrent requests
+measured 0.07s vs 0.46s sequential. So it cooperates with the existing **50-fiber** model in
+`SyncVacancies`; no thread pool is needed. A source selects its client via
+`Scraper.http_client_class` (Dou → `ImpersonateHttp`, default → `AsyncHttp`); both share the
+`(proxy:, request_timeout:, connect_timeout:)` constructor, so the pool/workers build either one
+interchangeably.
+
 ## SyncVacancies job dispatch
 
 `Vacancy::Operation::SyncVacancies` calls `fetch_listing(page:)` per worker, treating `nil` as the stop signal:
