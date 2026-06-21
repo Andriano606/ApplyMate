@@ -1,0 +1,20 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "9a32eb89941b9431a0bc90b62571a1da088992b0a355731fa2353b05056b39d1",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/concepts/vacancy/operation/sync_vacancies.rb",
+      "line": 670,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "confidence": "High",
+      "cwe_id": [
+        89
+      ],
+      "note": "Safe bulk UPDATE ... FROM (VALUES ...). The only interpolated parts are vacancy ids coerced with Integer#to_i and descriptions escaped via ActiveRecord connection.quote, so no caller input reaches the SQL unescaped. upsert_all can't be used (it validates NOT NULL on the candidate insert tuple before conflict resolution, which a description-only update doesn't supply)."
+    }
+  ],
+  "brakeman_version": "8.0.5"
+}

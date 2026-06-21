@@ -69,7 +69,9 @@ gem 'image_processing', '~> 2.0'
 # image library binding must be present or every representation 500s with
 # "ImageProcessing::Vips requires the ruby-vips gem". Runtime needs the system
 # libvips too — already installed by the Dockerfile; locally: `apt-get install libvips`.
-gem 'ruby-vips', '~> 2.0'
+# require: false so booting (e.g. CI assets:precompile, which has no libvips) doesn't
+# load it — image_processing requires it lazily only when a variant is actually processed.
+gem 'ruby-vips', '~> 2.0', require: false
 
 # S3-compatible storage (used with MinIO on staging) [https://github.com/aws/aws-sdk-ruby]
 gem 'aws-sdk-s3', require: false
