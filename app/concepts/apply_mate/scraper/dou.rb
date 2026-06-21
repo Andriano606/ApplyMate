@@ -4,13 +4,15 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   VACANCIES_URL = 'https://jobs.dou.ua/vacancies/'
   XHR_URL       = 'https://jobs.dou.ua/vacancies/xhr-load/'
 
-  def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::Http.new)
+  def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::AsyncHttp.new)
     @source = source
     @client = client
   end
 
   def fetch_description(url)
-    html = @client.fetch_body(url)
+    response = via_proxy { @client.get(url) }
+
+    html = response.body
     return nil if html.blank?
 
     doc  = Nokogiri::HTML(html)
@@ -51,16 +53,16 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
 
   def fetch_listing(page:)
     initialize_session
-    check_termination!
 
-    count = (page - 1) * (@items_per_page || 40)
-    body  = @client.post_xhr(XHR_URL, URI.encode_www_form(count:), xhr_headers)
+    count    = (page - 1) * (@items_per_page || 40)
+    response = via_proxy { @client.post(XHR_URL, body: URI.encode_www_form(count:), headers: xhr_headers) }
+    body     = response.body
     return if body.blank?
 
     begin
       data = JSON.parse(body)
     rescue JSON::ParserError
-      raise ApplyMate::Client::Base::DeadProxyError, 'non-JSON response (proxy blocked)'
+      raise DeadProxyError, 'non-JSON response (proxy blocked)'
     end
 
     nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
@@ -73,10 +75,10 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   private
 
   def initialize_session
-    response   = @client.get(VACANCIES_URL)
-    csrf_match = response&.headers&.[]('set-cookie').to_s.match(/csrftoken=([^;,\s]+)/)
+    response   = via_proxy { @client.get(VACANCIES_URL) }
+    csrf_match = Array(response.headers['set-cookie']).join('; ').match(/csrftoken=([^;,\s]+)/)
     @csrf_token = csrf_match&.[](1)
-    raise ApplyMate::Client::Base::DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
+    raise DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
   end
 
   def xhr_headers

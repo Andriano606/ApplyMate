@@ -17,9 +17,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     proxy_count = Proxy.ready_for_use.count
     raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if proxy_count.zero?
 
-    log("Available proxies: #{proxy_count}", color: :green)
+    @session_id = (Time.current.to_f * 1000).to_i
 
-    log_time('SyncVacancies') do
+    log(event: 'vacancy_sync_started', session_id: @session_id, available_proxies: proxy_count, total_proxies: Proxy.count, started_at_ms: @session_id)
+
+    log(event: 'vacancy_sync_completed', session_id: @session_id) do
       Async do |top_task|
         Source.all.map { |source| top_task.async { sync_source(source) } }.each(&:wait)
       end
@@ -33,7 +35,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   private
 
   def sync_source(source)
-    log_time(source.name) do
+    log(event: 'vacancy_sync_source_completed', session_id: @session_id, source: source.name, phase: 'listing') do
       external_ids     = Concurrent::Array.new
       pages_queue      = (1..MAX_PAGES).to_a
       in_use_proxy_ids = Set.new
@@ -41,42 +43,53 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       scraped_pages    = Set.new
       active_fibers    = [ 0 ]
       stop             = [ false ]
+      deleted          = [ 0 ]
       barrier          = Async::Barrier.new
 
       WORKERS_PER_SOURCE.times do
-        barrier.async { scrape_pages(source, pages_queue, in_use_proxy_ids, external_ids, last_page, scraped_pages, active_fibers, stop) }
+        barrier.async { scrape_pages(source, pages_queue, in_use_proxy_ids, external_ids, last_page, scraped_pages, active_fibers, stop, deleted) }
       end
 
       barrier.wait
       raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
+
+      # external_ids could have duplicates
+      log(event: 'vacancy_sync_listing_summary', session_id: @session_id, source: source.name,
+          pages: scraped_pages.size, vacancies: external_ids.size, proxies_deleted: deleted[0])
 
       clean_old_vacancies(source, external_ids)
     end
   end
 
   def fetch_description_for_source(source)
-    log_time("#{source.name} description") do
-      vacancies_queue  = source.vacancies.order(:id).to_a
+    log(event: 'vacancy_sync_source_completed', session_id: @session_id, source: source.name, phase: 'description') do
+      vacancies_queue  = source.vacancies.select(:id, :external_id, :url).order(:id).to_a
       total            = vacancies_queue.size
       done             = [ 0 ]
       in_use_proxy_ids = Set.new
       updated_ids      = Concurrent::Array.new
       retry_counts     = Hash.new(0)
+      skipped          = [ 0 ]
+      deleted          = [ 0 ]
       stop             = [ false ]
       barrier          = Async::Barrier.new
 
       WORKERS_PER_SOURCE.times do
-        barrier.async { fetch_description_worker(source, vacancies_queue, in_use_proxy_ids, total, done, updated_ids, retry_counts, stop) }
+        barrier.async { fetch_description_worker(source, vacancies_queue, in_use_proxy_ids, total, done, updated_ids, retry_counts, stop, skipped, deleted) }
       end
 
       barrier.wait
       raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
 
+      log(event: 'vacancy_sync_description_summary', session_id: @session_id, source: source.name,
+          descriptions: done[0], total: total, skipped: skipped[0],
+          max_attempt: retry_counts.values.max || 0, proxies_deleted: deleted[0])
+
       Vacancy.where(id: updated_ids).import if updated_ids.any?
     end
   end
 
-  def fetch_description_worker(source, vacancies_queue, in_use_proxy_ids, total, done, updated_ids, retry_counts, stop)
+  def fetch_description_worker(source, vacancies_queue, in_use_proxy_ids, total, done, updated_ids, retry_counts, stop, skipped, deleted)
     loop do
       break if stop[0]
 
@@ -90,7 +103,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         unless proxy
           if with_db { Proxy.count.zero? }
             stop[0] = true
-            # log("#{ctx(source, vacancy.external_id)} #{I18n.t('vacancy.sync.no_proxies')}", color: :red)
+            log(event: 'vacancy_sync_no_proxies', source: source.name, phase: 'description', vacancy_external_id: vacancy.external_id, level: :error)
             vacancies_queue.unshift(vacancy)
             break
           end
@@ -104,7 +117,6 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         description = scraper.fetch_description(vacancy.url)
 
         if description == 'SKIPP'
-          log("#{ctx(source, vacancy.external_id, proxy)} no description, skipp...", color: :yellow)
           break
         elsif description.present?
           with_db do
@@ -113,22 +125,24 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           end
           updated_ids << vacancy.id
           done[0] += 1
-          log("#{ctx(source, vacancy.external_id, proxy)} #{done[0] * 100 / total}% (#{done[0]}/#{total})", color: :green)
         else
           count = retry_counts[vacancy.id] += 1
           if count >= MAX_VACANCY_RETRIES
-            log("#{ctx(source, vacancy.external_id, proxy)} no description after #{MAX_VACANCY_RETRIES} retries, giving up", color: :red)
+            skipped[0] += 1
           else
-            log("#{ctx(source, vacancy.external_id, proxy)} no description url(#{vacancy.url}), retry #{count}/#{MAX_VACANCY_RETRIES}...", color: :yellow)
             vacancies_queue.unshift(vacancy)
           end
         end
-      rescue ApplyMate::Client::Base::DeadProxyError
-        with_db { proxy&.increment_fail! }
+      rescue ApplyMate::Scraper::Base::DeadProxyError
+        deleted[0] += 1 if kill_proxy(proxy)
+        release_proxy(proxy, in_use_proxy_ids)
+        proxy = nil
         vacancies_queue.unshift(vacancy)
         retry
       rescue StandardError => e
-        # log("#{ctx(source, vacancy.external_id, proxy)} error: #{e.message}", color: :red)
+        log(event: 'vacancy_sync_description_error', source: source.name, host: proxy&.host, vacancy_external_id: vacancy&.external_id, error: e.message, error_class: e.class.name, level: :error)
+        release_proxy(proxy, in_use_proxy_ids)
+        proxy = nil
         vacancies_queue.unshift(vacancy)
         retry
       ensure
@@ -140,15 +154,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   def break_fiber_condition(scraped_pages, last_page, stop, page)
     return true if page.nil?
-
-    if with_db { Proxy.count.zero? }
-      stop[0] = true
-      return true
-    end
-
+    return true if stop[0]
     return false unless last_page[:boundary]
-    last_page = (last_page[:boundary] - 1)
-    true if scraped_pages.max == last_page && scraped_pages.size == last_page
+
+    last_page_num = last_page[:boundary] - 1
+    scraped_pages.max == last_page_num && scraped_pages.size == last_page_num
   end
 
   def next_fiber_condition(page, scraped_pages, last_page)
@@ -156,49 +166,26 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
                    (scraped_pages.any? && scraped_pages.include?(page))
   end
 
-  def clean_boundary_pages(scraped_pages, last_page)
-    last_page[:counts].delete_if { |p, _| scraped_pages.include?(p) || (!scraped_pages.max.nil? && scraped_pages.max >= p) }
-  end
-
-  def clean_pages_queue(pages_queue, last_page, scraped_pages)
-    pages_queue.sort!
-    return unless last_page[:boundary]
-    pages_queue.delete_if { |a| a >= last_page[:boundary] || scraped_pages.include?(a) }
-  end
-
-  def scrape_pages(source, pages_queue, in_use_proxy_ids, external_ids, last_page, scraped_pages, active_fibers, stop)
+  def scrape_pages(source, pages_queue, in_use_proxy_ids, external_ids, last_page, scraped_pages, active_fibers, stop, deleted)
     active_fibers[0] += 1
     loop do
       begin
         client = nil
         proxy  = nil
 
-        clean_boundary_pages(scraped_pages, last_page)
-        clean_pages_queue(pages_queue, last_page, scraped_pages)
-
-        page   = pages_queue.shift
+        page = pages_queue.shift
 
         break if break_fiber_condition(scraped_pages, last_page, stop, page)
         next if next_fiber_condition(page, scraped_pages, last_page)
 
-        # DEBUG LOG
-        fiber_id = Fiber.current.object_id.to_s.last(4)
-        upcoming = pages_queue.first(WORKERS_PER_SOURCE)
-        candidate_page, candidate_count = last_page[:counts].max_by { |_, v| v }
-        if source.name == 'Djinni'
-          log(
-    "[#{source.name} p(#{page}) f(#{fiber_id})] fibers:#{active_fibers[0]} " \
-            "scraped:#{scraped_pages.size}(#{scraped_pages.min || '-'}..#{scraped_pages.max || '-'}) " \
-            "boundary:#{last_page[:boundary] || '?'} " \
-            "candidate:#{candidate_page || '?'}(#{candidate_count || 0}/#{LAST_PAGE_CONFIRMATIONS}) " \
-            "queue_head[#{WORKERS_PER_SOURCE}]: first=#{upcoming.first} min=#{upcoming.min} max=#{upcoming.max}"
-          )
-          log("pages_queue (#{pages_queue.size}): #{pages_queue if pages_queue.size < 5}")
-        end
-
         proxy = acquire_proxy(in_use_proxy_ids)
         unless proxy
-          log("#{ctx(source, "p#{page}", proxy)} error: NO PROXY", color: :red)
+          if with_db { Proxy.count.zero? }
+            stop[0] = true
+            # log(event: 'vacancy_sync_no_proxies', source: source.name, phase: 'listing', page: page, level: :error)
+            pages_queue.unshift(page)
+            break
+          end
           pages_queue.unshift(page)
           sleep(5)
           next
@@ -210,11 +197,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
         if listing&.any?
           scraped_pages << page
+          last_page[:counts].delete_if { |p, _| p <= scraped_pages.max }
           with_db do
             proxy.increment_succeeded!
             sync_vacancies_batch(listing, source)
           end
-          # log("#{ctx(source, "p#{page}", proxy)} #{listing.size} items", color: :green)
           external_ids.concat(listing.map(&:external_id))
         else
           if scraped_pages.empty? || (scraped_pages.any? && page > scraped_pages.max)
@@ -223,6 +210,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
             if count >= LAST_PAGE_CONFIRMATIONS
               last_page[:boundary] = [ last_page[:boundary], page ].compact.min
+              pages_queue.delete_if { |a| a >= last_page[:boundary] || scraped_pages.include?(a) }
             elsif count == 1
               LAST_PAGE_CONFIRMATIONS.times { pages_queue.unshift(page) }
             end
@@ -230,13 +218,16 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
             pages_queue.unshift(page)
           end
         end
-      rescue ApplyMate::Client::Base::DeadProxyError => e
-        log("#{ctx(source, "p#{page}", proxy)} error: #{e.message}", color: :red)
-        with_db { proxy&.increment_fail! }
+      rescue ApplyMate::Scraper::Base::DeadProxyError
+        deleted[0] += 1 if kill_proxy(proxy)
+        release_proxy(proxy, in_use_proxy_ids)
+        proxy = nil
         pages_queue.unshift(page)
         retry
       rescue StandardError => e
-        log("#{ctx(source, "p#{page}", proxy)} error: #{e.message}", color: :red)
+        # log(event: 'vacancy_sync_listing_error', source: source.name, host: proxy&.host, page: page, error: e.message, error_class: e.class.name, level: :error)
+        release_proxy(proxy, in_use_proxy_ids)
+        proxy = nil
         pages_queue.unshift(page)
         retry
       ensure
@@ -271,19 +262,20 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     with_db { proxy.mark_used! }
   end
 
-  def with_db(&block)
-    ActiveRecord::Base.connection_pool.with_connection(&block)
+  def kill_proxy(proxy)
+    return false unless proxy
+    with_db { proxy.increment_fail! }
+    proxy.destroyed?
   end
 
-  def ctx(source, label, proxy = nil)
-    fiber_id = Fiber.current.object_id.to_s.last(4)
-    "[#{source.name}|#{label}|#{proxy&.host || '—'}|f#{fiber_id}]"
+  def with_db(&block)
+    ActiveRecord::Base.connection_pool.with_connection(&block)
   end
 
   def clean_old_vacancies(source, active_ids)
     return if active_ids.empty?
     deleted = source.vacancies.where.not(external_id: active_ids.uniq).destroy_all
-    # log("Deleted #{deleted.size} stale vacancies for #{source.name}", color: :gray)
+    log(event: 'vacancy_sync_stale_vacancies_deleted', source: source.name, count: deleted.size)
   end
 
   def sync_vacancies_batch(data, source)

@@ -5,17 +5,17 @@ require 'rails_helper'
 RSpec.describe Apply::Operation::SendApply::Http do
   def http_response(status, body: '', location: nil)
     headers = location ? { 'location' => location } : {}
-    ApplyMate::Client::Http::Response.new(body, headers, status)
+    ApplyMate::Client::AsyncHttp::Response.new(body, headers, status)
   end
 
   context 'DOU internal apply (Coidea Agency)' do
     include_context 'coidea dou'
 
-    let(:http_client) { instance_double(ApplyMate::Client::Http) }
+    let(:http_client) { instance_double(ApplyMate::Client::AsyncHttp) }
     let(:handler)     { instance_double(Apply::Handler::Base) }
 
     before do
-      allow(ApplyMate::Client::Http).to receive(:new).and_return(http_client)
+      allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
       allow(handler).to receive(:build_payload).and_return(
         'csrfmiddlewaretoken' => 'oT3J2ws9iVPG6NQGwgzRo2N0CGJ428nE87IOzxDNiX5OP907lcKlRKTxNt9843KR',
         'descr'               => 'I am an experienced UI/UX designer.'
@@ -162,11 +162,11 @@ RSpec.describe Apply::Operation::SendApply::Http do
   context 'Djinni internal apply (Art of Spin)' do
     include_context 'art of spin djinni'
 
-    let(:http_client) { instance_double(ApplyMate::Client::Http) }
+    let(:http_client) { instance_double(ApplyMate::Client::AsyncHttp) }
     let(:handler)     { instance_double(Apply::Handler::Base) }
 
     before do
-      allow(ApplyMate::Client::Http).to receive(:new).and_return(http_client)
+      allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
       allow(handler).to receive(:build_payload).and_return(
         'apply'               => 'true',
         'message'             => 'I am an experienced 2D animator with 3+ years in Spine and slot games.',
@@ -201,6 +201,24 @@ RSpec.describe Apply::Operation::SendApply::Http do
             payload:  anything,
             headers:  hash_including('Cookie' => include('sessionid=test-session-id', 'csrftoken=xcW3TcF3'))
           )
+        end
+
+        context 'when the page captured a different (anonymous) sessionid' do
+          before do
+            apply.update!(cookies: 'csrftoken=xcW3TcF3; sessionid=anonymous-captured-id')
+          end
+
+          it 'keeps the authenticated sessionid and does not duplicate or let the captured one override it' do
+            run_operation
+            cookie = nil
+            expect(http_client).to have_received(:post_multipart) do |_action, headers:, **|
+              cookie = headers['Cookie']
+            end
+            expect(cookie.scan(/sessionid=/).size).to eq(1)
+            expect(cookie).to include('sessionid=test-session-id')
+            expect(cookie).not_to include('anonymous-captured-id')
+            expect(cookie).to include('csrftoken=xcW3TcF3')
+          end
         end
 
         it 'sends the vacancy URL as the Referer' do

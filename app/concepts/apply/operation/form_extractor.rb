@@ -147,8 +147,9 @@ module Apply::Operation::FormExtractor
   end
 
   def extract_cookies(headers)
-    raw = headers['set-cookie'].to_s
-    raw.split(/,\s*(?=[a-zA-Z0-9_\-]+=)/).map { |c| c.split(';').first.strip }.join('; ')
+    raw = headers['set-cookie']
+    cookies = raw.is_a?(Array) ? raw : raw.to_s.split(/,\s*(?=[a-zA-Z0-9_\-]+=)/)
+    cookies.map { |c| c.split(';').first.to_s.strip }.reject(&:blank?).join('; ')
   end
 
   def resolve_url(href, base_url)

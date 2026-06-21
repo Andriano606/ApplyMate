@@ -64,7 +64,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
-gem 'image_processing', '~> 1.2'
+gem 'image_processing', '~> 2.0'
 
 # S3-compatible storage (used with MinIO on staging) [https://github.com/aws/aws-sdk-ruby]
 gem 'aws-sdk-s3', require: false
@@ -88,11 +88,15 @@ gem 'simple_form'
 # Pagination
 gem 'will_paginate'
 
-# Hashids for public-facing model IDs
-gem 'hashid-rails'
+# Structured single-line JSON logs for Loki ingestion
+gem 'lograge'
 
 # ZIP archive parsing for 3MF file format support
 gem 'rubyzip'
+
+# OpenAPI / Swagger API docs (UI served in /admin)
+gem 'rswag-api'
+gem 'rswag-ui'
 
 group :development, :test do
   # Load environment variables from .env
@@ -146,4 +150,7 @@ group :test do
 
   # Async waiting for RSpec
   gem 'rspec-wait'
+
+  # Generate OpenAPI docs from request specs
+  gem 'rswag-specs'
 end

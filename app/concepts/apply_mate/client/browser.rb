@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ApplyMate::Client::Browser < ApplyMate::Client::Base
+class ApplyMate::Client::Browser
   # CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
   # CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
 
@@ -18,6 +18,15 @@ class ApplyMate::Client::Browser < ApplyMate::Client::Base
       # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
       browser_options: {
+        # Chrome's sandbox needs unprivileged user namespaces, which the
+        # staging host (Raspberry Pi) blocks via AppArmor. Without these flags
+        # Chrome dies on boot with "No usable sandbox!" and never exposes its
+        # CDP websocket, surfacing as Ferrum::ProcessTimeoutError ("Browser did
+        # not produce websocket url within 10 seconds"). Required when launching
+        # a local browser inside the container; harmless when set.
+        'no-sandbox': nil,
+        # /dev/shm is only 64M inside the container — keep Chrome off it.
+        'disable-dev-shm-usage': nil,
         "disable-blink-features": 'AutomationControlled',
         "user-agent": 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
       }
@@ -30,8 +39,8 @@ class ApplyMate::Client::Browser < ApplyMate::Client::Base
   # Never mix both patterns on the same Browser instance.
 
   # Navigates to url, executes JS, and returns [final_url, body, cookies_string].
-  # Unlike fetch_body, does not reject redirected URLs — use for external pages
-  # that may redirect or require JS rendering (Vue/React apps).
+  # Unlike the HTTP clients, does not reject redirected URLs — use for external
+  # pages that may redirect or require JS rendering (Vue/React apps).
   def fetch_rendered(url)
     navigate_to(url)
     cookies = @browser.cookies.all.map { |_, c| "#{c.name}=#{c.value}" }.join('; ')

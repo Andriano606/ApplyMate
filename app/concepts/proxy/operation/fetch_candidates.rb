@@ -22,7 +22,7 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
   ].freeze
 
   def perform!(**)
-    proxies = log_time('Fetch') { fetch_from_sources }
+    proxies = log('Fetch') { fetch_from_sources }
     unique  = proxies.uniq { |p| [ p[:protocol], p[:host], p[:port] ] }.size
     log("Parsed #{unique}/#{proxies.size} unique candidates")
     self.model = proxies
@@ -90,7 +90,8 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
 
   def try_fetch(url)
     response = http_client.get(url)
-    return response.body if response.success?
+    return nil if response.nil?
+    return response.body if (200..299).cover?(response.status)
     log("HTTP #{response.status} fetching #{url}", level: :warn, color: :red)
     nil
   rescue StandardError => e

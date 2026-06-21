@@ -19,7 +19,7 @@ class Apply::Operation::FetchInternalForm < Apply::Operation::Base
     url        = apply.vacancy.url
 
     headers  = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
-    response = ApplyMate::Client::Http.new.get(url, headers:, follow_redirects: true)
+    response = ApplyMate::Client::AsyncHttp.new.get(url, headers:, follow_redirects: true)
     raise 'Failed to fetch vacancy page' if response.nil? || response.body.blank?
 
     cookies   = extract_cookies(response.headers)

@@ -5,13 +5,15 @@ require 'rails_helper'
 RSpec.describe Apply::Handler::Dou do
   include_context 'honeytech dou'
 
-  # ── HTTP stubs (WebMock) ─────────────────────────────────────────────────────
+  # ── HTTP stubs ───────────────────────────────────────────────────────────────
   before do
-    # DOU vacancy page — used by CheckApplyable, FetchApplyType, FetchDetails
-    stub_request(:get, HoneytechDou::VACANCY_URL)
-      .to_return(status: 200,
-                 body: dou_vacancy_html,
-                 headers: { 'Content-Type' => 'text/html; charset=utf-8' })
+    # DOU vacancy page — used by CheckApplyable, FetchApplyType, FetchDetails.
+    # Stubbed at the client level because AsyncHttp uses raw sockets and bypasses WebMock.
+    allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get)
+      .with(HoneytechDou::VACANCY_URL, any_args)
+      .and_return(
+        ApplyMate::Client::AsyncHttp::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
+      )
 
     # Gemini API — stubbed in call order:
     #   1. CheckFormPage  (FetchExternalForm — does the PeopleForce page have a form?)

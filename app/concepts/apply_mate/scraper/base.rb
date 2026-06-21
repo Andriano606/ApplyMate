@@ -2,6 +2,14 @@
 
 class ApplyMate::Scraper::Base
   include ApplyMate::Logging
+
+  # Raised when the proxy behind the HTTP client is unusable. The sync pipeline
+  # rescues this to drop the proxy and retry the same work on another IP.
+  class DeadProxyError < StandardError; end
+
+  # Upstream/proxy statuses that mean "this IP can't be used right now".
+  PROXY_DEAD_STATUSES = [ 502, 503, 504 ].freeze
+
   def fetch_listing(page:)
     raise NotImplementedError
   end
@@ -26,15 +34,27 @@ class ApplyMate::Scraper::Base
     raise NotImplementedError
   end
 
-  class TerminationError < Exception; end
-
   private
 
-  def check_termination!
-    return unless Thread.main.thread_variable_get(:solid_queue_terminating)
+  # Runs an HTTP client call made under proxy rotation and normalises every
+  # failure into DeadProxyError so the sync pipeline drops the proxy and retries
+  # on another IP. The client itself raises raw transport errors (Errno::*,
+  # SSLError, Async::TimeoutError, …) and returns nil / a 5xx Response for an
+  # unusable reply — all of which mean this proxy can't be used here. Without
+  # this, a failed request would look like an empty page and the pipeline would
+  # mistake it for the end of the listing.
+  def via_proxy
+    response =
+      begin
+        yield
+      rescue StandardError => e
+        raise DeadProxyError, "transport failure (#{e.class}: #{e.message})"
+      end
 
-    log 'Termination signal received. Raising error...', color: :red, level: :warn
-    raise TerminationError, 'Scraper terminated by system'
+    raise DeadProxyError, 'no response (proxy failed)' if response.nil?
+    raise DeadProxyError, "HTTP #{response.status} (proxy failed)" if PROXY_DEAD_STATUSES.include?(response.status)
+
+    response
   end
 
   def full_url(path)

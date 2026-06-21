@@ -43,9 +43,9 @@ client = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url)
 ### Constructor
 
 ```ruby
-ApplyMate::Client::AsyncHttp.new(timeout: 30, proxy:)
-# timeout: overall request deadline in seconds (default 30)
-# proxy:   proxy URL string — supports http://, https://, socks5://, socks5h://
+ApplyMate::Client::AsyncHttp.new(request_timeout: 30, proxy:)
+# request_timeout: overall request deadline in seconds (default 15)
+# proxy:           proxy URL string — supports http://, https://, socks5://, socks5h://
 ```
 
 The client must be called inside an `Async` block (uses `Async::Task.current.with_timeout`).
@@ -63,8 +63,8 @@ The proxy URL scheme selects only the tunnel method. TLS to the *target* is laye
 
 | | Default | Controls |
 |---|---|---|
-| `CONNECT_TIMEOUT` | 5 s | `Socket.tcp` connect to the proxy host |
-| `timeout:` | 30 s | `Async::Task.current.with_timeout` — entire request |
+| `TCP_CONNECT_TIMEOUT` | 5 s | `Socket.tcp` connect to the proxy host |
+| `request_timeout:` | 15 s | `Async::Task.current.with_timeout` — entire request |
 
 ### Request / Response
 
@@ -81,7 +81,7 @@ body = client.fetch_body(url)  # String or raises DeadProxyError
 
 ### Failure behavior
 
-Any tunnel or I/O failure returns `nil` internally. `get` and `post` raise `DeadProxyError` on `nil` — callers rescue it to mark the proxy dead and retry with another proxy. The `error_handler:` keyword is accepted on all public methods for interface compatibility with `Http` but is **not used internally** — proxy failures always fail fast rather than retrying.
+Any tunnel or I/O failure returns `nil` internally. `get` and `post` raise `DeadProxyError` on `nil` — callers rescue it to mark the proxy dead and retry with another proxy. The client does **not** retry internally — every failure fails fast, and retrying with a different proxy is the caller's responsibility.
 
 ```ruby
 rescue ApplyMate::Client::DeadProxyError
@@ -352,7 +352,7 @@ end
 
 ```ruby
 def ssl_connect(ssl)
-  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + TIMEOUT
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @request_timeout
   loop do
     ssl.connect_nonblock
     return true

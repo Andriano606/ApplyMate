@@ -45,7 +45,6 @@ end
 ```ruby
 # returns nil to signal the last page
 def fetch_listing(page:)
-  check_termination!
   # ... fetch one page ...
   nodes = doc.css('.job-list-item')
   return if nodes.empty?
@@ -113,7 +112,7 @@ end
 
 ## ApplyMate::Client::Http API
 
-All methods use the shared Faraday connection (browser User-Agent, follow redirects, 15s timeout) with exponential-backoff retries via `ApplyMate::Client::ErrorHandler` (5 retries, 1s base delay).
+All methods use the shared connection (browser User-Agent, follow redirects, 15s timeout). Requests fail fast — there is no internal retrying.
 
 Returns a `Response` struct: `.body`, `.headers`, `.status`.
 
@@ -212,10 +211,6 @@ log 'Could not extract CSRF token', color: :red, level: :warn        # red warn
 ```
 
 Never call `Rails.logger` directly inside a scraper.
-
-## Graceful termination
-
-Call `check_termination!` (inherited from `Base`) at the start of `fetch_listing`. It reads `Thread.main.thread_variable_get(:solid_queue_terminating)` and raises `TerminationError` if set. Because the pagination loop now lives in `SyncVacancies`, a single `check_termination!` per `fetch_listing` call is sufficient — no manual loop checks needed in the scraper itself.
 
 ## HTML sanitization
 

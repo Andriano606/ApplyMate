@@ -10,7 +10,7 @@ class Vacancy < ApplicationRecord
   has_many :vacancy_cvs,    dependent: :destroy
   has_many :vacancy_forms,  dependent: :destroy
 
-  index_name "vacancies_#{Rails.env}"
+  index_name [ 'vacancies', Rails.env, ENV['ES_INDEX_NAMESPACE'].presence ].compact.join('_')
 
   settings index: { number_of_shards: 1, number_of_replicas: 0, max_result_window: 50_000 } do
     mappings dynamic: false do

@@ -1,0 +1,480 @@
+{
+  "uid": "applymate-sync-vacancies",
+  "title": "Синхронізація вакансій",
+  "tags": ["applymate", "vacancy-sync"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 23,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-7d", "to": "now+1d" },
+  "templating": {
+    "list": [
+      {
+        "name": "source",
+        "label": "Джерело",
+        "type": "custom",
+        "query": "Усі : (Djinni|Dou), Djinni : Djinni, DOU : Dou",
+        "current": { "text": "Усі", "value": "(Djinni|Dou)", "selected": true },
+        "options": [
+          { "text": "Усі",    "value": "(Djinni|Dou)", "selected": true },
+          { "text": "Djinni", "value": "Djinni" },
+          { "text": "DOU",    "value": "Dou" }
+        ],
+        "includeAll": false,
+        "multi": false,
+        "skipUrlSync": false,
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Початок синхронізації",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "enable": true,
+        "iconColor": "blue",
+        "target": {
+          "expr": "{job=\"rails\"} | json | event=\"vacancy_sync_started\"",
+          "refId": "Anno"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Останній запуск SyncVacancies",
+      "description": "Коли востаннє стартувала джоба Vacancy::Operation::SyncVacancies. Береться поле started_at_ms (Unix ms) з події vacancy_sync_started, відображається як «N тому».",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 5 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "purple" },
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "expr": "max(last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | unwrap started_at_ms [24h]))"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "barchart",
+      "title": "Час sync_source за найновішу сесію дня — $source",
+      "description": "Тривалість sync_source (фаза listing) останньої сесії SyncVacancies кожного дня. sum by (session_id) сумує duration_s по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію (за started_at_ms). Подія: vacancy_sync_source_completed, phase=listing.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "dtdurations"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_source_completed\" | phase=\"listing\" | source=~\"$source\" | session_id != \"\" | unwrap duration_s [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "sync_source"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "barchart",
+      "title": "Час fetch_description_for_source за найновішу сесію дня — $source",
+      "description": "Тривалість fetch_description_for_source (фаза description) останньої сесії SyncVacancies кожного дня. sum by (session_id) сумує duration_s по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію за started_at_ms. Подія: vacancy_sync_source_completed, phase=description.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "dtdurations"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_source_completed\" | phase=\"description\" | source=~\"$source\" | session_id != \"\" | unwrap duration_s [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "fetch_description"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "barchart",
+      "title": "Пропущені вакансії за найновішу сесію дня — $source",
+      "description": "Поле skipped події vacancy_sync_description_summary за найновішу (за started_at_ms) сесію SyncVacancies кожного дня. sum by (session_id) групує per session, and on(session_id) topk(1, ... unwrap started_at_ms) лишає лише найновішу сесію.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap skipped [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "Пропущено"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "barchart",
+      "title": "Скрапнуто сторінок за найновішу сесію дня — $source",
+      "description": "Поле pages події vacancy_sync_listing_summary за найновішу сесію (за started_at_ms) SyncVacancies кожного дня. sum by (session_id) сумує pages по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_listing_summary\" | source=~\"$source\" | session_id != \"\" | unwrap pages [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "Сторінок"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "barchart",
+      "title": "Завантажено описів за найновішу сесію дня — $source",
+      "description": "Поле descriptions події vacancy_sync_description_summary за найновішу сесію (за started_at_ms) SyncVacancies кожного дня. sum by (session_id) групує per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap descriptions [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "Описів"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "barchart",
+      "title": "Скрапнуто вакансій за найновішу сесію дня — $source",
+      "description": "Поле vacancies події vacancy_sync_listing_summary за найновішу сесію (за started_at_ms) SyncVacancies кожного дня. sum by (session_id) сумує vacancies по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_listing_summary\" | source=~\"$source\" | session_id != \"\" | unwrap vacancies [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "Вакансій"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "barchart",
+      "title": "Всього проксі за найновішу сесію дня",
+      "description": "Значення total_proxies (Proxy.count) на момент запуску найновішої (за started_at_ms) сесії SyncVacancies кожного дня. and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію. Без розбивки за джерелом, бо total_proxies глобальний.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 41, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap total_proxies [1d]) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "Проксі"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "barchart",
+      "title": "Видалено проксі за найновішу сесію дня — $source",
+      "description": "Поле proxies_deleted подій vacancy_sync_listing_summary/vacancy_sync_description_summary за найновішу (за started_at_ms) сесію SyncVacancies кожного дня. sum by (session_id) сумує proxies_deleted по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 12, "y": 41, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=~\"vacancy_sync_listing_summary|vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap proxies_deleted [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "Видалено"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "barchart",
+      "title": "Макс. ретраїв опису за найновішу сесію дня — $source",
+      "description": "Поле max_attempt події vacancy_sync_description_summary за найновішу (за started_at_ms) сесію SyncVacancies кожного дня. max by (session_id) дає максимальний attempt per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію. Якщо значення близьке до MAX_VACANCY_RETRIES — окремі вакансії викликають багато fallback-ретраїв.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "gradientMode": "none"
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.97,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "refId": "A",
+          "queryType": "range",
+          "step": "1d",
+          "expr": "max by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap max_attempt [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
+          "legendFormat": "Макс. ретраї"
+        }
+      ]
+    }
+  ]
+}

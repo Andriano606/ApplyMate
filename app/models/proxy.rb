@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
 class Proxy < ApplicationRecord
-  MAX_FAIL_RATIO = 0.75
+  MAX_FAIL_RATIO = 0.45
   MAX_FAIL_COUNTER = 3
 
   scope :by_reliability, -> {
     order(
       Arel.sql(<<~SQL)
       (fail_count + success_count = 0) ASC,
-      COALESCE(success_count::float / NULLIF(fail_count + success_count, 0), 1.0) DESC
+      COALESCE(success_count::float / NULLIF(fail_count + success_count, 0), 1.0) DESC,
+      success_count DESC,
+      created_at ASC
     SQL
     )
   }

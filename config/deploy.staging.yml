@@ -13,7 +13,7 @@ builder:
   arch:
     - amd64
     - arm64
-  remote: ssh://andrii@192.168.31.58
+  remote: ssh://andrii@192.168.50.155
 
 proxy:
   app_port: 80
@@ -28,14 +28,14 @@ ssh:
 servers:
   web:
     hosts:
-      - 192.168.31.58
+      - 192.168.50.155
     options:
       ulimit:
         - "nofile=65536:65536"
 
   worker:
     hosts:
-      - 192.168.31.58
+      - 192.168.50.155
     cmd: bin/jobs
     options:
       ulimit:
@@ -44,9 +44,8 @@ servers:
       clear:
         SQ_QUEUES: "*"
         SQ_POLLING_INTERVAL: "1"
-        SQ_PROCESSES: "2"
+        SQ_PROCESSES: "4"
         SQ_THREADS: "2"
-        FETCH_PROXIES_SHARD_COUNT: "4"
 
 
 registry:
@@ -72,14 +71,17 @@ env:
     RAILS_MAX_THREADS: 2
     APP_HOST: staging.beapply.xyz
     # MinIO endpoint used by all containers via this IP.
-    MINIO_ENDPOINT: http://192.168.31.58:9002
+    MINIO_ENDPOINT: http://192.168.50.155:9002
     MINIO_BUCKET: apply-mate-staging
     ELASTICSEARCH_URL: http://apply_mate_staging-elasticsearch:9200
+    # Grafana is published on host port 3001 (see grafana accessory below).
+    # Adjust if Grafana is reverse-proxied behind a domain.
+    GRAFANA_URL: http://192.168.50.155:3001
 
 accessories:
   db:
     image: postgres:17
-    host: 192.168.31.58
+    host: 192.168.50.155
     # External port 5434 avoids conflict with print_mate_staging-db on 5433.
     port: "5434:5432"
     env:
@@ -93,8 +95,8 @@ accessories:
 
   minio:
     image: minio/minio
-    host: 192.168.31.58
-    # 9002 = S3 API, 9003 = web console (http://192.168.31.58:9003)
+    host: 192.168.50.155
+    # 9002 = S3 API, 9003 = web console (http://192.168.50.155:9003)
     # Offset by 2 from default to avoid conflict with print_mate_staging-minio on 9000/9001.
     options:
       publish:
@@ -110,7 +112,7 @@ accessories:
 
   elasticsearch:
     image: elasticsearch:8.13.0
-    host: 192.168.31.58
+    host: 192.168.50.155
     # External port 9201 avoids conflict if another app uses 9200.
     # App containers reach ES via Docker network on the internal port 9200.
     port: "9201:9200"
@@ -125,7 +127,7 @@ accessories:
 
   chrome_vnc:
     image: andriano606/apply_mate_chrome_vnc:latest
-    host: 192.168.31.58
+    host: 192.168.50.155
     options:
       shm-size: "2gb"
       security-opt: seccomp:unconfined
@@ -142,3 +144,60 @@ accessories:
         SCREEN_HEIGHT: "1080"
         SCREEN_DEPTH: "24"
         VNC_PASSWORD: ""
+
+  # ---- Observability stack: Loki + Promtail + Grafana ----
+  # Other Kamal-managed containers reach Loki via the internal Docker network
+  # at the accessory's hostname: apply_mate_staging-loki:3100.
+  loki:
+    image: grafana/loki:3.0.0
+    host: 192.168.50.155
+    cmd: -config.file=/etc/loki/loki-config.yml
+    files:
+      - docker/loki/loki-config.yml:/etc/loki/loki-config.yml
+    directories:
+      - data:/loki
+    # Run as root because Kamal's bind-mount host dir is owned by the SSH
+    # user (andrii), and Loki's default UID 10001 can't write to it.
+    options:
+      user: "0"
+
+  # Promtail scrapes Docker container logs (Rails web + worker write to STDOUT;
+  # captured by Docker's json-file driver) and forwards them to Loki.
+  # Requires read access to /var/run/docker.sock and /var/lib/docker/containers
+  # → runs as root.
+  promtail:
+    image: grafana/promtail:3.0.0
+    host: 192.168.50.155
+    cmd: -config.file=/etc/promtail/promtail-config.yml
+    files:
+      - docker/promtail/promtail-config.staging.yml:/etc/promtail/promtail-config.yml
+    directories:
+      - positions:/tmp/positions
+    options:
+      user: "root"
+      volume:
+        - "/var/run/docker.sock:/var/run/docker.sock:ro"
+        - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
+
+  # Grafana UI on host port 3001. Anonymous Admin access — keep this server
+  # off the public internet, or put it behind auth / reverse proxy.
+  grafana:
+    image: grafana/grafana:11.0.0
+    host: 192.168.50.155
+    port: "3001:3000"
+    env:
+      clear:
+        GF_AUTH_ANONYMOUS_ENABLED: "true"
+        GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+        GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    files:
+      - docker/grafana/provisioning/dashboards/applymate.yml:/etc/grafana/provisioning/dashboards/applymate.yml
+      - docker/grafana/provisioning/dashboards/sync_vacancies.json:/etc/grafana/provisioning/dashboards/sync_vacancies.json
+      - docker/grafana/provisioning/datasources/loki.staging.yml:/etc/grafana/provisioning/datasources/loki.yml
+      - docker/grafana/provisioning/alerting/proxy_validation.yml:/etc/grafana/provisioning/alerting/proxy_validation.yml
+    directories:
+      - data:/var/lib/grafana
+    # Run as root because Kamal's bind-mount host dir is owned by the SSH
+    # user (andrii), and Grafana's default UID 472 can't write to it.
+    options:
+      user: "0"

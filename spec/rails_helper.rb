@@ -71,6 +71,9 @@ RSpec.configure do |config|
   # Automatically include shared operation context for operation specs
   config.include_context 'with shared operation spec variables', type: :operation
 
+  # Time travel helpers (travel_to / freeze_time) available in every spec
+  config.include ActiveSupport::Testing::TimeHelpers
+
   # Job specs use have_been_enqueued matchers which require the :test adapter.
   # Switch to :test for the duration of each job example, then restore :async.
   config.around(:each, type: :job) do |example|

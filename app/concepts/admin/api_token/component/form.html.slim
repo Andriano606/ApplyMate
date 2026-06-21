@@ -1,0 +1,8 @@
+= form.input :user_id, \
+        as: :select, \
+        collection: user_options, \
+        label: I18n.t('admin.api_token.form.user'), \
+        include_blank: I18n.t('admin.api_token.form.user_prompt'), \
+        input_html: { data: { controller: 'select2' } }
+
+= form.input :name, label: I18n.t('admin.api_token.form.name'), required: false
