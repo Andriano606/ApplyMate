@@ -212,22 +212,13 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       candidates.each do |proxy|
         semaphore.async do
           client   = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
-          live << proxy if alive_or_cf_challenge?(client.get(@validation_url))
+          live << proxy if client.get(@validation_url)&.alive_or_cf_challenge?
         rescue StandardError
           nil
         end
       end
       barrier.wait
       live.to_a
-    end
-
-    def alive_or_cf_challenge?(response)
-      return false unless response&.status
-      return true if response.status.between?(200, 399)
-
-      response.status == 403 &&
-        response.body.present? &&
-        ApplyMate::Client::Browser::CLOUDFLARE_MARKERS.any? { |marker| response.body.include?(marker) }
     end
 
     # Refill mid-run also validates (like seed) — so when the pool depletes during a
@@ -401,8 +392,19 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     # One proxy pool per source, each seeded with proxies validated against THAT
     # source's host — the alive sets barely overlap (dou blocks proxies djinni
     # allows and vice-versa), so a shared pool starves whichever source it wasn't
-    # validated for. Raises NoProxiesError if a source has no working proxies.
-    @pools = sources.to_h { |source| [ source.id, ProxyPool.new(@db, source) ] }
+    # validated for. A source with zero working proxies (e.g. a transient
+    # Cloudflare block during seed) is skipped and logged, not fatal — the other
+    # sources still sync. Only an empty run overall raises NoProxiesError.
+    @pools  = {}
+    sources = sources.select do |source|
+      @pools[source.id] = ProxyPool.new(@db, source)
+      true
+    rescue NoProxiesError
+      log(event: 'vacancy_sync_source_skipped', session_id: @session_id,
+          source: source.name, reason: 'no_proxies', level: :warn)
+      false
+    end
+    raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if sources.empty?
 
     log(event: 'vacancy_sync_started', session_id: @session_id,
         available_proxies: @pools.values.sum(&:size), total_proxies: Proxy.count, started_at_ms: @session_id)

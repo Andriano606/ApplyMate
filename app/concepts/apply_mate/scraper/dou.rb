@@ -26,7 +26,7 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     5
   end
 
-  def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::AsyncHttp.new)
+  def initialize(source, client)
     @source = source
     @client = client
   end

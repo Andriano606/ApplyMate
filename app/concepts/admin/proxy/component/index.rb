@@ -44,7 +44,9 @@ class Admin::Proxy::Component::Index < ApplyMate::Component::Base
     gray:   'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
   }.freeze
 
-  def badge_css(color) = "#{BADGE_BASE} #{BADGE_COLORS[color]}"
+  def badge_css(color)
+    "#{BADGE_BASE} #{BADGE_COLORS[color]}"
+  end
 
   def header_opts
     {

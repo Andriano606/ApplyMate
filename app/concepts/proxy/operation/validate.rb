@@ -87,18 +87,10 @@ class Proxy::Operation::Validate < ApplyMate::Operation::Base
   #     challenge — so the proxy is genuinely usable. A plain 403 with no challenge
   #     markers (e.g. a 1020 IP firewall block) is NOT accepted.
   def reachable?(proxy, url)
-    client   = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url, request_timeout: REQUEST_TIMEOUT, connect_timeout: CONNECT_TIMEOUT)
-    response = client.get(url)
-    return false unless response&.status
-    return true if response.status.between?(200, 399)
-
-    response.status == 403 && cloudflare_challenge?(response.body)
+    client = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url, request_timeout: REQUEST_TIMEOUT, connect_timeout: CONNECT_TIMEOUT)
+    client.get(url)&.alive_or_cf_challenge? || false
   rescue StandardError
     false
-  end
-
-  def cloudflare_challenge?(body)
-    body.present? && ApplyMate::Client::Browser::CLOUDFLARE_MARKERS.any? { |marker| body.include?(marker) }
   end
 
   def record(candidates, sources, alive_by_source)

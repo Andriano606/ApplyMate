@@ -17,7 +17,7 @@ require 'tempfile'
 # `bin/install-curl-impersonate` (downloads the right build into vendor/, gitignored)
 # or point CURL_IMPERSONATE_BIN at a wrapper (e.g. curl_chrome136) on the host.
 class ApplyMate::Client::ImpersonateHttp
-  Response = Struct.new(:body, :headers, :status, :final_url)
+  Response = ApplyMate::Client::Response
 
   class RequestError < StandardError; end
 

@@ -25,13 +25,10 @@ class ApplyMate::Client::Browser
     };
   JS
 
-  # Substrings that mean Cloudflare is still showing its "Just a moment…" JS
-  # challenge instead of the real page.
-  CLOUDFLARE_MARKERS = [ 'Just a moment', 'challenge-platform', 'cf-chl-', '_cf_chl_opt' ].freeze
-  CHALLENGE_POLLS    = 6 # how many times to re-check while the challenge solves
-  CHALLENGE_WAIT     = 3 # seconds between checks (≈18s total budget)
+  CHALLENGE_POLLS = 6 # how many times to re-check while the challenge solves
+  CHALLENGE_WAIT  = 3 # seconds between checks (≈18s total budget)
 
-  Response = Struct.new(:body, :headers, :status, :final_url)
+  Response = ApplyMate::Client::Response
 
   # proxy: optional proxy URL string ("http://host:port" / "socks5://host:port").
   # Routes Chrome through it so Cloudflare-protected sites see the proxy IP while a
@@ -311,7 +308,7 @@ class ApplyMate::Client::Browser
   end
 
   def cloudflare_challenge?(body)
-    body.present? && CLOUDFLARE_MARKERS.any? { |marker| body.include?(marker) }
+    body.present? && Response::CLOUDFLARE_MARKERS.any? { |marker| body.include?(marker) }
   end
 
   def body_of(page)
