@@ -4,6 +4,17 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   VACANCIES_URL = 'https://jobs.dou.ua/vacancies/'
   XHR_URL       = 'https://jobs.dou.ua/vacancies/xhr-load/'
 
+  # Dou is behind Cloudflare; a Chrome TLS fingerprint (curl-impersonate) passes the
+  # challenge that OpenSSL-based AsyncHttp cannot. See .ai/docs/scrapers.md.
+  def self.http_client_class
+    ApplyMate::Client::ImpersonateHttp
+  end
+
+  # Validate against the real vacancies listing (not the less-protected homepage).
+  def self.validation_url(_source)
+    VACANCIES_URL
+  end
+
   def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::AsyncHttp.new)
     @source = source
     @client = client

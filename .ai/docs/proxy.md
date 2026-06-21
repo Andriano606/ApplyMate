@@ -1,6 +1,38 @@
 # Proxy Validation
 
-## Proxy model — fail tracking and success scoring
+## Per-source stats (`proxy_source_stats`) — current model
+
+A proxy that works for one site is often blocked on another (Dou's anti-scraping is
+aggressive), so reliability is tracked **per (proxy, source)**, not globally.
+
+- **Table `proxy_source_stats`** — one row per `(proxy_id, source_id)` (unique index)
+  with `success_count`, `fail_count`, `failed_at`, `reliability`. Model:
+  `ProxySourceStat` (`ready_for_use` / `by_reliability` scopes, `reliability_for`).
+- **`Proxy::Operation::Validate`** — probes a batch of proxies against **each** source's
+  `base_url`, **using that source's own client** (`Scraper.http_client_class`: Cloudflare
+  sources like Dou use `ImpersonateHttp`, others `AsyncHttp`), and accepts only **2xx/3xx**.
+  Upserts the per-source result (reachable → `success_count += 1`, else `fail_count += 1`).
+  Scope `:untested` grows the pool; `:working` refreshes. Run recurringly via
+  `Proxy::Job::Validate` (`every 5 minutes`). Impersonate probes are capped at
+  `IMPERSONATE_CONCURRENCY` (curl subprocess per probe — avoids a fork storm).
+- **`Vacancy::Operation::SyncVacancies`** — each source has its own in-memory pool seeded
+  from **its** `proxy_source_stats` (working, by reliability), validated live at seed with
+  the same per-source client, and records successes/fails back per source. See
+  `.ai/docs/sync_vacancies.md`.
+- The same proxy can appear in several sources' pools with independent stats and
+  independent burst budgets.
+
+> **Why per-source + 2xx/3xx:** a proxy alive for one site is often blocked on another,
+> and Cloudflare returns 403 ("Just a moment…") to a proxy IP whose TLS fingerprint
+> isn't a real browser's. Validating each source's `base_url` with its real client (Chrome
+> TLS via `ImpersonateHttp` for Dou) and accepting only 2xx/3xx makes "working" mean
+> "actually scrape-usable", not just "responded".
+
+The legacy global stat columns on `proxies` (`success_count`, `fail_count`,
+`reliability`, `failed_at`) are no longer written by the sync/validation pipeline —
+per-source stats supersede them.
+
+## Proxy model — fail tracking and success scoring (legacy global)
 
 `Proxy` tracks consecutive failures and recent successes (5-minute sliding window).
 

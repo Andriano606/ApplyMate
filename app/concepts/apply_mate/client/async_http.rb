@@ -15,8 +15,9 @@ class ApplyMate::Client::AsyncHttp
   DNS_CACHE = Concurrent::Map.new
   DNS_TTL_S = 300
 
-  def initialize(request_timeout: 15, proxy: nil)
+  def initialize(request_timeout: 15, connect_timeout: TCP_CONNECT_TIMEOUT, proxy: nil)
     @request_timeout = request_timeout
+    @connect_timeout = connect_timeout
     @proxy_uri       = proxy.present? ? URI.parse(proxy) : nil
     @ssl_ctx         = OpenSSL::SSL::SSLContext.new.tap(&:set_params)
   end
@@ -119,9 +120,9 @@ class ApplyMate::Client::AsyncHttp
   end
 
   def open_tunnel(host, port)
-    return Socket.tcp(resolve(host), port.to_i, connect_timeout: TCP_CONNECT_TIMEOUT) if @proxy_uri.nil?
+    return Socket.tcp(resolve(host), port.to_i, connect_timeout: @connect_timeout) if @proxy_uri.nil?
 
-    sock        = Socket.tcp(resolve(@proxy_uri.host), @proxy_uri.port.to_i, connect_timeout: TCP_CONNECT_TIMEOUT)
+    sock        = Socket.tcp(resolve(@proxy_uri.host), @proxy_uri.port.to_i, connect_timeout: @connect_timeout)
     established = false
     result      = case @proxy_uri.scheme.to_s.downcase
     when *HTTP_PROTOCOLS   then http_connect_tunnel(sock, host, port)

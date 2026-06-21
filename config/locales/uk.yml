@@ -62,12 +62,17 @@ uk:
     proxy:
       index:
         empty: Проксі не знайдено
+        stats:
+          dead: мертві
+          flaky: нестабільні
+          untested: неперевірені
+          working: робочі
         table:
           actions: Дії
-          created_at: Додано
           fail_count: Помилки
           failed_at: Остання помилка
           ratio: Надійність
+          source: Джерело
           success_count: Успіхи
           url: URL
         title: Проксі

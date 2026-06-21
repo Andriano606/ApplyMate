@@ -65,6 +65,11 @@ gem 'thruster', require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 gem 'image_processing', '~> 2.0'
+# Variant processor backend. image_processing only declares the API; the actual
+# image library binding must be present or every representation 500s with
+# "ImageProcessing::Vips requires the ruby-vips gem". Runtime needs the system
+# libvips too — already installed by the Dockerfile; locally: `apt-get install libvips`.
+gem 'ruby-vips', '~> 2.0'
 
 # S3-compatible storage (used with MinIO on staging) [https://github.com/aws/aws-sdk-ruby]
 gem 'aws-sdk-s3', require: false
@@ -131,6 +136,13 @@ group :development do
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem 'web-console'
   gem 'memory_profiler'
+
+  # Safety net against silent dev hangs: with code reloading on, a single request
+  # stuck in a no-timeout blocking call holds the reloader's load interlock and
+  # parks every Puma thread on the next reload — the page then loads forever with
+  # nothing in the log. rack-timeout raises such requests so the server self-heals
+  # and logs the offending backtrace. See config/initializers/rack_timeout.rb.
+  gem 'rack-timeout'
 
   # Git hooks manager
   gem 'lefthook'

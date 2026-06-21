@@ -2,23 +2,26 @@
 
 class Admin::Proxy::Serializer::Index < ApplyMate::Serializer::Base
   def call
-    { data: @model.map { |proxy| serialize(proxy) }, pagination: }
+    { data: @model.map { |stat| serialize(stat) }, pagination: }
   end
 
   private
 
-  def serialize(proxy)
+  def serialize(stat)
+    proxy = stat.proxy
     {
       id: proxy.to_param,
+      source: stat.source.name,
       protocol: proxy.protocol,
       host: proxy.host,
       port: proxy.port,
       url: proxy.url,
-      success_count: proxy.success_count,
-      fail_count: proxy.fail_count,
-      failed_at: proxy.failed_at,
-      created_at: proxy.created_at,
-      updated_at: proxy.updated_at
+      success_count: stat.success_count,
+      fail_count: stat.fail_count,
+      reliability: stat.reliability,
+      failed_at: stat.failed_at,
+      created_at: stat.created_at,
+      updated_at: stat.updated_at
     }
   end
 
