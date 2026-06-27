@@ -94,6 +94,10 @@ def write_env_files
   write_env_file('.env.development.local',
                  'APP_DB_NAME' => db_name,
                  'ES_INDEX_NAMESPACE' => es_index_namespace,
+                 # Per-worktree ActiveRecord primary pool. The shared Docker Postgres is
+                 # capped at max_connections=500; keep N_worktrees × pool under that so
+                 # worktrees can't exhaust connections and wedge each other.
+                 'APP_DB_POOL' => '25',
                  'PORT' => pick_port_for_workspace)
   write_env_file('.env.test.local',
                  'APP_TEST_DB_NAME' => test_db_name,

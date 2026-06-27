@@ -1,6 +1,18 @@
 services:
   postgres:
     image: postgres:17-alpine
+    # Shared by ALL Conductor worktrees → must hold several worktrees' pools at once
+    # (puma threads + solid_queue workers + cable/cache pollers per worktree). The
+    # default max_connections=100 is far too low; one worktree's primary pool alone
+    # can exceed it, which exhausts Postgres and makes every worktree's requests block
+    # on connection checkout (progressive slowdown → freeze). ~8MB/conn → 500 ≈ 4GB
+    # worst case (rarely all active at once).
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=500"
+      - "-c"
+      - "shared_buffers=256MB"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
