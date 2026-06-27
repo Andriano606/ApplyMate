@@ -65,6 +65,10 @@ gem 'thruster', require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 gem 'image_processing', '~> 2.0'
+# libvips binding — the processor image_processing/Active Storage default to (`:vips`). Without it,
+# variant processing raises mid-stream inside the Active Storage proxy controller (ActionController::Live),
+# which leaks the Puma thread forever and freezes the dev server under repeated reloads.
+gem 'ruby-vips', '~> 2.2'
 
 # S3-compatible storage (used with MinIO on staging) [https://github.com/aws/aws-sdk-ruby]
 gem 'aws-sdk-s3', require: false
