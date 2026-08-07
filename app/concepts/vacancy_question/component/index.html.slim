@@ -1,0 +1,13 @@
+= VacancyQuestion::TurboHandler::Index.frame_tag(@vacancy, helpers) do
+  = VacancyQuestion::TurboHandler::Index.stream_from(@vacancy, page_user, helpers)
+  - @vacancy_questions.select { |vq| vq.answer.blank? }.each do |vacancy_question|
+    = VacancyQuestion::TurboHandler::AnswerReady.stream_from(vacancy_question, page_user, helpers)
+
+  .mt-4
+    = link(url: helpers.new_vacancy_vacancy_question_path(@vacancy), label: I18n.t('vacancy.show.generate_answer'), \
+        variant: :primary, data: { turbo_stream: true })
+
+  - if @vacancy_questions.any?
+    .mt-4.space-y-3
+      - @vacancy_questions.each do |vacancy_question|
+        = render VacancyQuestion::Component::AnswerContent.new(vacancy_question:)

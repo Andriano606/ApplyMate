@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_05_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -108,9 +108,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_05_000001) do
     t.datetime "last_used_at"
     t.integer "port", null: false
     t.string "protocol", default: "http", null: false
+    t.float "reliability", default: 1.0, null: false
     t.integer "success_count", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.index ["failed_at"], name: "index_proxies_on_failed_at"
     t.index ["host", "port", "protocol"], name: "index_proxies_on_host_and_port_and_protocol", unique: true
+    t.index ["last_used_at"], name: "index_proxies_on_last_used_at"
+    t.index ["reliability"], name: "index_proxies_on_reliability"
+  end
+
+  create_table "proxy_source_stats", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "fail_count", default: 0, null: false
+    t.datetime "failed_at"
+    t.bigint "proxy_id", null: false
+    t.float "reliability", default: 1.0, null: false
+    t.bigint "source_id", null: false
+    t.integer "success_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["proxy_id", "source_id"], name: "index_proxy_source_stats_on_proxy_id_and_source_id", unique: true
+    t.index ["proxy_id"], name: "index_proxy_source_stats_on_proxy_id"
+    t.index ["source_id", "failed_at"], name: "index_proxy_source_stats_on_source_id_and_failed_at"
+    t.index ["source_id", "reliability"], name: "index_proxy_source_stats_on_source_id_and_reliability"
+    t.index ["source_id"], name: "index_proxy_source_stats_on_source_id"
   end
 
   create_table "solid_cable_messages", force: :cascade do |t|
@@ -336,6 +356,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_05_000001) do
     t.index ["vacancy_id"], name: "index_vacancy_cvs_on_vacancy_id"
   end
 
+  create_table "vacancy_questions", force: :cascade do |t|
+    t.bigint "ai_integration_id", null: false
+    t.text "answer"
+    t.datetime "created_at", null: false
+    t.bigint "fill_form_prompt_id", null: false
+    t.text "question", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_profile_id", null: false
+    t.bigint "vacancy_id", null: false
+    t.index ["ai_integration_id"], name: "index_vacancy_questions_on_ai_integration_id"
+    t.index ["fill_form_prompt_id"], name: "index_vacancy_questions_on_fill_form_prompt_id"
+    t.index ["user_profile_id"], name: "index_vacancy_questions_on_user_profile_id"
+    t.index ["vacancy_id"], name: "index_vacancy_questions_on_vacancy_id"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_integrations", "users"
@@ -348,6 +383,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_05_000001) do
   add_foreign_key "applies", "users"
   add_foreign_key "applies", "vacancies"
   add_foreign_key "prompts", "users"
+  add_foreign_key "proxy_source_stats", "proxies"
+  add_foreign_key "proxy_source_stats", "sources"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
@@ -366,4 +403,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_05_000001) do
   add_foreign_key "vacancy_cvs", "prompts", column: "generate_cv_prompt_id"
   add_foreign_key "vacancy_cvs", "user_profiles"
   add_foreign_key "vacancy_cvs", "vacancies"
+  add_foreign_key "vacancy_questions", "ai_integrations"
+  add_foreign_key "vacancy_questions", "prompts", column: "fill_form_prompt_id"
+  add_foreign_key "vacancy_questions", "user_profiles"
+  add_foreign_key "vacancy_questions", "vacancies"
 end

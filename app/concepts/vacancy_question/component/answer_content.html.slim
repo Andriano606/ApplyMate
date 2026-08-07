@@ -1,0 +1,16 @@
+= VacancyQuestion::TurboHandler::AnswerReady.frame_tag(@vacancy_question, helpers) do
+  = accordion(title:, loading: @vacancy_question.answer.blank?) do |a|
+    .px-6.py-4
+      - if @vacancy_question.answer.present?
+        = tabs(base_url: helpers.vacancy_vacancy_questions_path(@vacancy), \
+            id: "tabs_vacancy_question_#{@vacancy_question.hashid}") do |t|
+          - t.with_tab(label: I18n.t('vacancy_question.tab_answer')) do
+            .text-sm.text-gray-700.dark:text-gray-300.whitespace-pre-wrap.leading-relaxed
+              = @vacancy_question.answer
+          - t.with_tab(label: I18n.t('vacancy_question.tab_prompt')) do
+            .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.font-mono.leading-relaxed
+              = VacancyQuestion::Ai::Prompt::AnswerQuestion.call(@vacancy_question)
+      - else
+        p.text-sm.text-gray-500.dark:text-gray-400.mb-3 = I18n.t('vacancy_question.generating')
+        .w-full.bg-gray-200.dark:bg-gray-700.rounded-full.h-1.5
+          .bg-indigo-500.h-1.5.rounded-full.animate-pulse style="width: 60%"

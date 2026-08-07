@@ -446,14 +446,24 @@ en:
       save_as_default: Save as default
     show:
       back: До вакансій
+      generate_answer: Згенерувати відповідь на питання
       generate_cv: Згенерувати резюме
     sync:
       no_proxies: No proxies available — sync stopped
     total_vacancies: vacancies
     update:
+      generate_answer_started: Генерацію відповіді розпочато
       generate_cv_started: Генерацію резюме розпочато
   vacancy_cv:
     generating: Генерація резюме...
+  vacancy_question:
+    generating: Генерація відповіді...
+    new:
+      form:
+        question: Питання
+        question_placeholder: Введіть питання з форми подачі заявки...
+    tab_answer: Відповідь
+    tab_prompt: Промпт
   will_paginate:
     next_label: Next &raquo;
     page_gap: "&hellip;"
