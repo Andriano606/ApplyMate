@@ -28,7 +28,12 @@ development:
   primary:
     <<: *default
     database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
-    max_connections: 300 # covers SyncVacancies fibers (WORKERS_PER_SOURCE × N_sources) + Puma threads
+    # Per-worktree primary pool. SyncVacancies wraps every query in
+    # connection_pool.with_connection, so its ~15×N_sources fibers hold a connection
+    # only during brief DB bursts (the rest is pure HTTP I/O) — the pool need NOT be
+    # 15×N_sources. Size for puma dev threads (12) + sync-burst headroom. Conductor
+    # sets APP_DB_POOL per worktree so N_worktrees × pools stays under Postgres's cap.
+    max_connections: <%= ENV.fetch("APP_DB_POOL", 25) %>
   cache:
     <<: *default
     database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>

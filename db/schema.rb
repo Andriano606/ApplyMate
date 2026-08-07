@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_20_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -356,6 +356,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_20_000001) do
     t.index ["vacancy_id"], name: "index_vacancy_cvs_on_vacancy_id"
   end
 
+  create_table "vacancy_questions", force: :cascade do |t|
+    t.bigint "ai_integration_id", null: false
+    t.text "answer"
+    t.datetime "created_at", null: false
+    t.bigint "fill_form_prompt_id", null: false
+    t.text "question", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_profile_id", null: false
+    t.bigint "vacancy_id", null: false
+    t.index ["ai_integration_id"], name: "index_vacancy_questions_on_ai_integration_id"
+    t.index ["fill_form_prompt_id"], name: "index_vacancy_questions_on_fill_form_prompt_id"
+    t.index ["user_profile_id"], name: "index_vacancy_questions_on_user_profile_id"
+    t.index ["vacancy_id"], name: "index_vacancy_questions_on_vacancy_id"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_integrations", "users"
@@ -388,4 +403,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_20_000001) do
   add_foreign_key "vacancy_cvs", "prompts", column: "generate_cv_prompt_id"
   add_foreign_key "vacancy_cvs", "user_profiles"
   add_foreign_key "vacancy_cvs", "vacancies"
+  add_foreign_key "vacancy_questions", "ai_integrations"
+  add_foreign_key "vacancy_questions", "prompts", column: "fill_form_prompt_id"
+  add_foreign_key "vacancy_questions", "user_profiles"
+  add_foreign_key "vacancy_questions", "vacancies"
 end

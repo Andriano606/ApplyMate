@@ -1,0 +1,6 @@
+= turbo_form_modal( \
+    model: @vacancy_question, \
+    endpoint: [ @vacancy, @vacancy_question ], \
+    header_text: I18n.t('vacancy.show.generate_answer'), \
+    submit_text: I18n.t('vacancy.show.generate_answer')) do |modal|
+  = render VacancyQuestion::Component::Form.new(form: modal.form)
