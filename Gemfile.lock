@@ -302,7 +302,7 @@ GEM
       logger
     highline (3.1.2)
       reline
-    html2text (0.4.0)
+    html2text (0.5.0)
       nokogiri (>= 1.0, < 2.0)
     http-cookie (1.1.6)
       domain_name (~> 0.5)
@@ -930,7 +930,7 @@ CHECKSUMS
   hashids (1.0.6) sha256=a344c05f249417492bf48451a93770558834ff7a445e1b64ef112954a0293019
   hashie (5.1.0) sha256=c266471896f323c446ea8207f8ffac985d2718df0a0ba98651a3057096ca3870
   highline (3.1.2) sha256=67cbd34d19f6ef11a7ee1d82ffab5d36dfd5b3be861f450fc1716c7125f4bb4a
-  html2text (0.4.0) sha256=b1becfa0b9150739633f7dc6d8637a49d7e38c3223bcb3afa3cebf59960afdc5
+  html2text (0.5.0) sha256=3f60488256641d6f6d55d79be5535dc1d665b3a41e532cf0609e834c7798e9aa
   http-cookie (1.1.6) sha256=ba4b82be64de61dc281243dac70e3c382c45142f20268ed9276a3670c93feaa9
   i18n (1.15.2) sha256=00f9eb62412fe593b2a65a97daa75300d37abb8f7202ec748e94b6d46a9dd1b5
   i18n-tasks (1.1.2) sha256=4dcfba49e52a623f30661cb316cb80d84fbba5cb8c6d88ef5e02545fffa3637a
