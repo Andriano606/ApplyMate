@@ -122,6 +122,19 @@ RSpec.describe Apply::Operation::ResolveValues do
         expect(filled_value('amount')).to eq('1200.50')
       end
 
+      # The same trap applies to a freshly generated answer: the model is asked
+      # for a bare number but is not bound by it.
+      it 'normalises a number the AI returns as text, not only a cached one' do
+        user_profile.answer_banks.where(role: 'salary_expectation').destroy_all
+        apply.update!(inputs: [ build_input(name: 'salary2', role: 'salary_expectation') ])
+        field = apply.reload.inputs.first
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_json_response("```json\n#{{ field['fingerprint'] => '3500 USD gross' }.to_json}\n```"))
+
+        run_operation
+        expect(filled_value('salary2')).to eq('3500')
+      end
+
       it 'leaves ordinary text answers alone' do
         run_operation
         expect(filled_value('city')).to eq('Lviv, Ukraine (Remote)')
