@@ -32,6 +32,10 @@ class Apply::Component::Show < ApplyMate::Component::Base
       end
   end
 
+  def bookmarklet
+    @bookmarklet ||= Apply::Bookmarklet.for(@apply)
+  end
+
   # The stored value is what a form field needs, not what a person reads: a
   # ticked consent is "on" and a chosen option can arrive as "Man=on".
   def human_answer(field)
