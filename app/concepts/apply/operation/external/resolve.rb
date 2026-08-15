@@ -27,7 +27,25 @@ class Apply::Operation::External::Resolve < Apply::Operation::Base
 
     resolved_url = browser.current_url.presence || external_url
     ats          = Apply::AtsDetector.call(url: resolved_url, html: browser.body)
+    resolved_url, ats = follow_embedded_form(browser, resolved_url, ats)
 
     apply.update!(external_url:, resolved_url:, ats:)
+  end
+
+  # An employer page that embeds its ATS form in an iframe has no fields of its
+  # own — the parent document cannot see into a cross-origin frame. Follow the
+  # embed to a standalone form page so every later step works on a normal
+  # top-level document.
+  def follow_embedded_form(browser, resolved_url, ats)
+    return [ resolved_url, ats ] unless browser.field_count.zero?
+
+    embedded = Apply::EmbeddedForm.locate(browser.iframe_sources)
+    return [ resolved_url, ats ] if embedded.blank?
+
+    Rails.logger.info("Resolve: following embedded form #{embedded}")
+    browser.navigate_to(embedded)
+
+    followed_url = browser.current_url.presence || embedded
+    [ followed_url, Apply::AtsDetector.call(url: followed_url, html: browser.body) || ats ]
   end
 end

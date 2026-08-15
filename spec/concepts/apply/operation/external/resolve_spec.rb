@@ -37,6 +37,57 @@ RSpec.describe Apply::Operation::External::Resolve do
       end
     end
 
+    context 'when the employer page only embeds the form in an iframe (Preply/Ashby)' do
+      let(:embed_page)  { 'https://preply.com/en/careers/apply?ashby_jid=a9419d80' }
+      let(:form_page)   { 'https://jobs.ashbyhq.com/preply/a9419d80/application' }
+
+      before do
+        allow(browser).to receive(:current_url).and_return(embed_page, form_page)
+        allow(browser).to receive(:field_count).and_return(0)
+        allow(browser).to receive(:iframe_sources).and_return(
+          [ 'https://jobs.ashbyhq.com/preply/a9419d80?embed=js',
+            'https://web.cmp.usercentrics.eu/cdcs/index.html' ]
+        )
+      end
+
+      it 'follows the embed to the standalone form page' do
+        run_operation
+        expect(browser).to have_received(:navigate_to).with(form_page)
+        expect(apply.reload.resolved_url).to eq(form_page)
+      end
+
+      it 'records the ATS detected on the embed page' do
+        run_operation
+        expect(apply.reload.ats).to eq('ashby')
+      end
+    end
+
+    context 'when the page has its own fields' do
+      before do
+        allow(browser).to receive(:field_count).and_return(6)
+        allow(browser).to receive(:iframe_sources).and_return([ 'https://jobs.ashbyhq.com/x/y?embed=js' ])
+      end
+
+      it 'does not follow any iframe' do
+        run_operation
+        expect(browser).to have_received(:navigate_to).once
+        expect(apply.reload.resolved_url).to eq(HoneytechDou::PEOPLEFORCE_URL)
+      end
+    end
+
+    context 'when the page has no fields and no usable iframe' do
+      before do
+        allow(browser).to receive(:field_count).and_return(0)
+        allow(browser).to receive(:iframe_sources).and_return([ 'https://consent.cookiebot.com/x.html' ])
+      end
+
+      it 'keeps the resolved URL and lets the browser path continue' do
+        run_operation
+        expect(browser).to have_received(:navigate_to).once
+        expect(apply.reload.resolved_url).to eq(HoneytechDou::PEOPLEFORCE_URL)
+      end
+    end
+
     context 'when the vacancy has no external URL' do
       let(:vacancy_external_url) { nil }
 

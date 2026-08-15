@@ -99,6 +99,8 @@ RSpec.shared_context 'honeytech dou' do
 
     allow(browser).to receive(:navigate_to)
     allow(browser).to receive(:current_url).and_return(HoneytechDou::PEOPLEFORCE_URL)
+    allow(browser).to receive(:field_count).and_return(raw_inputs.size)
+    allow(browser).to receive(:iframe_sources).and_return([])
     allow(browser).to receive(:page_digest).and_return(browser_page_digest)
     allow(browser).to receive(:observe_state).and_return(browser_observe_state)
     allow(browser).to receive(:alive?).and_return(true)

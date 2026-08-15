@@ -54,4 +54,30 @@ RSpec.describe Apply::AtsDetector do
       expect(described_class.call(url: 'https://careers.acme.com', html: '<form></form>')).to be_nil
     end
   end
+
+  describe '.call with embed query parameters' do
+    it 'detects Ashby on an employer-hosted apply page (Preply case)' do
+      url = 'https://preply.com/en/careers/apply?ashby_jid=a9419d80-5cf1-4dba-a3d3-e90e5c464495'
+      expect(described_class.call(url:)).to eq('ashby')
+    end
+
+    it 'detects Greenhouse from gh_jid' do
+      expect(described_class.call(url: 'https://acme.com/careers?gh_jid=4045807008')).to eq('greenhouse')
+    end
+
+    it 'ignores unrelated query parameters' do
+      expect(described_class.call(url: 'https://acme.com/careers?utm_source=dou')).to be_nil
+    end
+
+    it 'still prefers the host rule over a parameter' do
+      expect(described_class.call(url: 'https://jobs.lever.co/acme/uuid?ashby_jid=x')).to eq('lever')
+    end
+  end
+
+  describe '.call with an Ashby iframe in the HTML' do
+    it 'detects Ashby from the embed iframe src' do
+      html = '<iframe src="https://jobs.ashbyhq.com/preply/a9419d80?embed=js"></iframe>'
+      expect(described_class.call(url: 'https://preply.com/en/careers/apply', html:)).to eq('ashby')
+    end
+  end
 end

@@ -124,6 +124,42 @@ RSpec.describe ApplyMate::Client::Browser do
     end
   end
 
+  describe 'ATS widget form without a <form> tag or type="submit"' do
+    before(:all) do
+      @browser.navigate_to(fixture_url('ats_no_form_tag.html'))
+      @ats_snapshot = @browser.snapshot_fields
+    end
+
+    it 'extracts the fields even though there is no form element' do
+      names = @ats_snapshot['fields'].map { |f| f['accessible_name'] }
+      expect(names).to include('Full Name*', 'Email*', 'Phone Number', 'Resume*')
+    end
+
+    it 'finds the submit button by its wording, not by type=submit' do
+      expect(@ats_snapshot['submit']).to include('handle' => 'submit', 'text' => 'Submit Application')
+    end
+
+    it 'reports the fillable field count for embed detection' do
+      expect(@browser.field_count).to eq(4)
+    end
+  end
+
+  describe 'page that only embeds its form in an iframe' do
+    before(:all) { @browser.navigate_to(fixture_url('embedded_iframe.html')) }
+
+    it 'sees no fields of its own' do
+      expect(@browser.field_count).to eq(0)
+      expect(@browser.snapshot_fields['fields']).to eq([])
+    end
+
+    it 'lists the iframe sources so the embed can be followed' do
+      srcs = @browser.iframe_sources
+      expect(srcs).to include(a_string_including('jobs.ashbyhq.com'))
+      expect(Apply::EmbeddedForm.locate(srcs))
+        .to eq('https://jobs.ashbyhq.com/acme/a9419d80-5cf1-4dba-a3d3-e90e5c464495/application')
+    end
+  end
+
   describe '#observe_state' do
     context 'with a two-step wizard (dynamic steps, validation, success status)' do
       before(:all) { @browser.navigate_to(fixture_url('wizard.html')) }

@@ -125,6 +125,26 @@ class ApplyMate::Client::Browser
     @page.current_url
   end
 
+  # Sources of every iframe on the page — used to follow embedded ATS forms,
+  # whose contents are invisible to the parent document (cross-origin).
+  def iframe_sources
+    @page.evaluate(<<~JS)
+      Array.from(document.querySelectorAll('iframe'))
+        .map(function(f) { return f.src })
+        .filter(function(src) { return src && src.indexOf('http') === 0 })
+    JS
+  end
+
+  # Number of fillable fields visible on the page — zero means the form is not
+  # in this document (embedded elsewhere or not rendered yet).
+  def field_count
+    @page.evaluate(<<~JS)
+      document.querySelectorAll(
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select'
+      ).length
+    JS
+  end
+
   def screenshot
     @page.screenshot(encoding: :binary)
   end
@@ -288,8 +308,19 @@ class ApplyMate::Client::Browser
           fields.push(entry);
         });
 
-        var submitEl = scope.querySelector('button[type="submit"], input[type="submit"]') ||
-                       (scope !== document ? document.querySelector('button[type="submit"], input[type="submit"]') : null);
+        // Modern ATS forms (Ashby, many SPAs) render no <form> tag and no
+        // type="submit" — fall back to a visible button whose text says submit.
+        function amFindSubmit(root) {
+          var typed = root.querySelector('button[type="submit"], input[type="submit"]');
+          if (typed) return typed;
+          var wording = /submit|apply|send|надісл|відгук|застосув|подати|откликн|отправ/i;
+          return Array.from(root.querySelectorAll('button, [role="button"], input[type="button"]'))
+            .filter(amVisible)
+            .find(function(b) { return wording.test((b.textContent || b.value || '').trim()); }) || null;
+        }
+
+        var submitEl = amFindSubmit(scope) ||
+                       (scope !== document ? amFindSubmit(document) : null);
         var submit = null;
         if (submitEl) {
           submitEl.setAttribute('data-am-field', 'submit');

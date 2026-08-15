@@ -41,7 +41,12 @@ class Apply::Operation::External::PrepareSession < Apply::Operation::Base
     end
 
     snapshot = browser.snapshot_fields(scope_selector: form_selector)
-    fields   = enrich_fields(merge_radio_groups(snapshot['fields'] || []))
+    # The AI-picked container can be wrong or too narrow (SPA forms without a
+    # <form> tag) — a scoped snapshot that finds nothing is not proof the page
+    # has no form, so retry across the whole document before giving up.
+    snapshot = browser.snapshot_fields if snapshot['fields'].blank? && form_selector.present?
+
+    fields = enrich_fields(merge_radio_groups(snapshot['fields'] || []))
     raise 'No form fields found on employer page' if fields.empty?
 
     submit = snapshot['submit'] || {}

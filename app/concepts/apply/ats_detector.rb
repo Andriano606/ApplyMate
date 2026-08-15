@@ -20,16 +20,38 @@ module Apply::AtsDetector
     'workday'         => [ /\.myworkdayjobs\.com\z/ ]
   }.freeze
 
+  # Query parameters ATS widgets append to the employer's own apply page — the
+  # only marker available before the embed iframe loads (e.g. Preply's
+  # preply.com/en/careers/apply?ashby_jid=...).
+  PARAM_RULES = {
+    'ashby_jid' => 'ashby',
+    'gh_jid'    => 'greenhouse',
+    'gh_src'    => 'greenhouse',
+    'lever_jid' => 'lever'
+  }.freeze
+
   # Embed scripts and DOM markers left by ATS widgets on employer-hosted pages.
   HTML_RULES = {
     'greenhouse' => [ /boards\.greenhouse\.io\/embed/i, /grnhse/i ],
     'lever'      => [ /lever-jobs-embed/i, /jobs\.lever\.co\/embed/i, /class="lever-/i ],
     'workable'   => [ /workable\.com\/assets\/embed/i, /whr\.js/i, /whr-embed/i ],
-    'recruitee'  => [ /\.recruitee\.com\/(embed|widget)/i, /rtee-embed/i ]
+    'recruitee'  => [ /\.recruitee\.com\/(embed|widget)/i, /rtee-embed/i ],
+    'ashby'      => [ /jobs\.ashbyhq\.com/i, /ashby_embed/i ]
   }.freeze
 
   def self.call(url:, html: nil)
-    by_host(url) || by_html(html)
+    by_host(url) || by_param(url) || by_html(html)
+  end
+
+  def self.by_param(url)
+    query = URI.parse(url.to_s).query
+    return nil if query.blank?
+
+    params = Rack::Utils.parse_query(query)
+    PARAM_RULES.each { |param, ats| return ats if params[param].present? }
+    nil
+  rescue URI::InvalidURIError
+    nil
   end
 
   def self.by_host(url)
