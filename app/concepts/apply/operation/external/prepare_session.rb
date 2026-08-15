@@ -34,13 +34,15 @@ class Apply::Operation::External::PrepareSession < Apply::Operation::Base
     # Give an SPA time to paint before judging the page (see wait_for_fields).
     browser.wait_for_fields
 
+    snapshot         = browser.snapshot_fields
     form_selector    = nil
     trigger_selector = nil
 
-    # The AI is only needed to FIND a form — when the page already renders
-    # fields there is nothing to find, and asking anyway once turned a working
-    # Ashby form into "AI could not locate an application form page".
-    if browser.field_count.zero?
+    # The AI is only needed to FIND a form. Asking when one is already on screen
+    # once reported a working Ashby form as missing — but a stray field is not a
+    # form either: a vacancy page with a single language <select> was taken for
+    # one, and the application (behind an "Apply now" link) was never reached.
+    unless application_form?(snapshot['fields'])
       check_result  = check_form_page(apply, browser)
       form_selector = check_result['form_selector'].presence
 
@@ -49,13 +51,13 @@ class Apply::Operation::External::PrepareSession < Apply::Operation::Base
         browser.wait_for_fields
         form_selector = check_form_page(apply, browser)['form_selector'].presence
       end
-    end
 
-    snapshot = browser.snapshot_fields(scope_selector: form_selector)
-    # The AI-picked container can be wrong or too narrow (SPA forms without a
-    # <form> tag) — a scoped snapshot that finds nothing is not proof the page
-    # has no form, so retry across the whole document before giving up.
-    snapshot = browser.snapshot_fields if snapshot['fields'].blank? && form_selector.present?
+      snapshot = browser.snapshot_fields(scope_selector: form_selector)
+      # The AI-picked container can be wrong or too narrow (SPA forms without a
+      # <form> tag) — a scoped snapshot that finds nothing is not proof the page
+      # has no form, so retry across the whole document before giving up.
+      snapshot = browser.snapshot_fields if snapshot['fields'].blank? && form_selector.present?
+    end
 
     fields = enrich_fields(merge_radio_groups(snapshot['fields'] || []))
     raise 'No form fields found on employer page' if fields.empty?
@@ -70,6 +72,20 @@ class Apply::Operation::External::PrepareSession < Apply::Operation::Base
       submit_text:      submit['text'].presence,
       inputs:           fields
     )
+  end
+
+  # Controls an application asks for. Any one of them means the page is asking
+  # a candidate for something, not merely offering a filter or a language picker.
+  APPLICATION_TYPES = %w[email file textarea tel].freeze
+  APPLICATION_WORDS = /name|email|phone|resume|cv|letter|ім'я|прізвищ|пошт|телефон|резюме|лист/i
+
+  def application_form?(fields)
+    fillable = Array(fields).map { |f| f.to_h.stringify_keys }.reject { |f| f['type'] == 'hidden' }
+    return false if fillable.size < 2
+
+    fillable.any? { |f| APPLICATION_TYPES.include?(f['type']) } ||
+      fillable.any? { |f| "#{f['accessible_name']} #{f['name']}".match?(APPLICATION_WORDS) } ||
+      fillable.size >= 4
   end
 
   def check_form_page(apply, browser)

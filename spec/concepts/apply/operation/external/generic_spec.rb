@@ -221,6 +221,26 @@ RSpec.describe Apply::Operation::External::Generic do
       end
     end
 
+    context 'when the AI reports an unnamed reason' do
+      before do
+        allow(browser).to receive(:observe_state).and_return(
+          browser_observe_state.merge('alerts' => [], 'form_present' => true,
+                                      'url' => 'https://employer.com/apply')
+        )
+        plan = { 'actions' => [], 'status' => 'blocked', 'blocked_reason' => 'other' }
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_json_response("```json\n#{plan.to_json}\n```"))
+      end
+
+      # A bare "cannot be automated" leaves the user with nothing to act on.
+      it 'hands over to manual submission and names the page' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        reloaded = apply.reload
+        expect(reloaded.status).to eq('needs_review')
+        expect(reloaded.error).to include('https://employer.com/apply')
+      end
+    end
+
     context 'when the AI itself reports an account wall' do
       before do
         allow(browser).to receive(:observe_state).and_return(

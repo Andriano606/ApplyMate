@@ -62,7 +62,7 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
       give_up!(state, "Form not submitted after #{MAX_ITERATIONS} iterations") if iteration > MAX_ITERATIONS
 
       plan = plan_actions(state)
-      check_blocked_plan!(plan)
+      check_blocked_plan!(plan, state)
       give_up!(state, 'AI returned no actions to progress the form') if plan['actions'].blank?
 
       execute_actions(plan['actions'], state)
@@ -167,14 +167,19 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
     give_up!(state, "Сайт відхилив автоматичну відправку: #{alerts.uniq.join(' — ').truncate(400)}")
   end
 
-  def check_blocked_plan!(plan)
+  def check_blocked_plan!(plan, state)
     return unless plan['status'] == 'blocked'
 
     case plan['blocked_reason']
     when 'captcha_v2'        then raise BlockedError.new(:blocked_captcha, 'AI reported a captcha challenge')
     when 'requires_account'  then raise BlockedError.new(:blocked_requires_account, 'AI reported an account wall')
     when 'login_wall'        then raise BlockedError.new(:blocked_login, 'AI reported a login wall')
-    else raise 'AI reported the page cannot be automated'
+    else
+      # "cannot be automated" for an unnamed reason is a dead end for the user
+      # unless we say WHERE it happened and hand over the answers — so this ends
+      # as needs_review with the page named, not as a bare failure.
+      give_up!(state, "Не вдалося заповнити форму автоматично на сторінці #{state['url']}. " \
+                      'Скористайтесь ручною подачею нижче.')
     end
   end
 

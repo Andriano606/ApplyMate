@@ -9,6 +9,15 @@ RSpec.describe Apply::Operation::External::PrepareSession do
   let(:vacancy_external_url) { HoneytechDou::DOU_REDIRECT }
   let(:handler) { Apply::Handler::Dou.new(apply:) }
 
+  # A vacancy page can carry a stray control (a language picker) without being
+  # an application form — taking one for the other skipped the AI navigation and
+  # snapshotted the description page instead of the form behind "Apply now".
+  let(:vacancy_page_snapshot) do
+    { 'fields' => [ { 'handle' => 0, 'name' => 'lang', 'type' => 'select', 'tag' => 'select',
+                      'accessible_name' => '', 'value' => '' } ],
+      'submit' => nil }
+  end
+
   describe '#call' do
     subject(:run_operation) { described_class.call(apply:, handler:) }
 
@@ -50,6 +59,21 @@ RSpec.describe Apply::Operation::External::PrepareSession do
       expect(browser).not_to have_received(:page_digest)
     end
 
+    context 'when the page only carries a stray control' do
+      before do
+        allow(browser).to receive(:snapshot_fields).and_return(vacancy_page_snapshot, browser_snapshot)
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_check_form_page)
+      end
+
+      it 'still asks the AI where the form is' do
+        run_operation
+        expect(browser).to have_received(:page_digest)
+        expect(apply.reload.inputs.map { |i| i['name'] })
+          .to include('career_application_form[full_name]')
+      end
+    end
+
     it 'waits for the form to render before judging the page' do
       run_operation
       expect(browser).to have_received(:wait_for_fields)
@@ -83,9 +107,8 @@ RSpec.describe Apply::Operation::External::PrepareSession do
       end
 
       before do
-        # Nothing rendered even after waiting — this is when the AI earns its keep.
-        allow(browser).to receive(:field_count).and_return(0)
-        allow(browser).to receive(:wait_for_fields).and_return(false)
+        # Only a stray control on the page — this is when the AI earns its keep.
+        allow(browser).to receive(:snapshot_fields).and_return(vacancy_page_snapshot, browser_snapshot)
 
         stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
           .to_return(gemini_check_form_page_no_form, gemini_check_form_page)
@@ -117,8 +140,7 @@ RSpec.describe Apply::Operation::External::PrepareSession do
       end
 
       before do
-        allow(browser).to receive(:field_count).and_return(0)
-        allow(browser).to receive(:wait_for_fields).and_return(false)
+        allow(browser).to receive(:snapshot_fields).and_return(vacancy_page_snapshot)
 
         stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
           .to_return(gemini_check_form_page_nothing)
