@@ -39,7 +39,11 @@ Rails.application.routes.draw do
   resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :ai_integrations, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :applies, only: [ :index, :show, :new, :create, :destroy ] do
-    member { post :retry, action: :retry_apply }
+    member do
+      post :retry, action: :retry_apply
+      post :assisted_fill
+      post :confirm_manual_submit
+    end
   end
   resources :source_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :prompts, only: [ :index, :new, :create, :edit, :update, :destroy ]

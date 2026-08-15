@@ -16,6 +16,17 @@ class Apply::Component::Show < ApplyMate::Component::Base
       'dark:bg-red-900/20 rounded-lg p-3 font-mono whitespace-pre-wrap'
   end
 
+  # Offered whenever automation stopped short but the answers exist — the user
+  # can have the form typed out for them and just press submit.
+  def assisted_available?
+    @apply.filled_inputs.present? &&
+      (@apply.awaiting_manual_submit? || @apply.needs_review? || @apply.blocked? || @apply.failed?)
+  end
+
+  def viewer_url
+    ApplyMate::Client::Browser.viewer_url
+  end
+
   # Open fields the user is asked to answer: fillable, still blank, not files.
   def review_fields
     Array(@apply.review_fields)

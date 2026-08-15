@@ -53,6 +53,26 @@
       .px-6.py-4
         p.mt-2.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.show.no_data')
 
+  / Assisted mode — fill the form in a visible browser, user submits it
+  - if assisted_available?
+    = accordion(title: I18n.t('apply.assisted.title'), open: true) do
+      .px-6.py-4.space-y-3
+        p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.hint')
+        - if @apply.awaiting_manual_submit?
+          .flex.flex-wrap.items-center.gap-3
+            - if viewer_url
+              = link(url: viewer_url, size: :md, target: '_blank') do
+                = I18n.t('apply.assisted.viewer')
+            = helpers.button_to I18n.t('apply.assisted.submitted'), \
+                helpers.confirm_manual_submit_apply_path(@apply), method: :post, \
+                class: 'inline-flex items-center justify-center rounded-lg bg-green-600 ' \
+                       'text-white text-sm px-4 py-2 hover:bg-green-700 font-medium'
+        - else
+          = helpers.button_to I18n.t('apply.assisted.open'), \
+              helpers.assisted_fill_apply_path(@apply), method: :post, \
+              class: 'inline-flex items-center justify-center rounded-lg bg-blue-600 ' \
+                     'text-white text-sm px-4 py-2 hover:bg-blue-700 font-medium'
+
   / Manual answers when automation gave up (needs_review)
   - if @apply.needs_review? && review_fields.any?
     = accordion(title: I18n.t('apply.retry.title'), open: true) do

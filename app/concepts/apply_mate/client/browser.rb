@@ -1,8 +1,20 @@
 # frozen_string_literal: true
 
 class ApplyMate::Client::Browser
-  # CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
-  # CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
+  # A shared Chrome the user can watch and drive (the chrome_vnc accessory, seen
+  # through noVNC). Set CHROME_HOST to route assisted sessions there; without it
+  # assisted mode opens a visible Chrome window next to the Rails process.
+  CHROME_HOST = ENV['CHROME_HOST'].presence
+  CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
+
+  # Where a human can watch that browser (noVNC web UI), shown in the UI.
+  def self.viewer_url
+    ENV['CHROME_VIEW_URL'].presence
+  end
+
+  def self.shared_chrome?
+    CHROME_HOST.present?
+  end
 
   USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
@@ -33,9 +45,27 @@ class ApplyMate::Client::Browser
   # proxy: optional proxy URL string ("http://host:port" / "socks5://host:port").
   # Routes Chrome through it so Cloudflare-protected sites see the proxy IP while a
   # real browser solves the JS challenge that the raw HTTP client cannot.
-  def initialize(proxy: nil)
+  # headless: false opens a window a person can see and finish by hand.
+  # shared: true joins the chrome_vnc instance the user watches through noVNC —
+  # OPT-IN per session: the automatic pipeline must keep launching its own
+  # throwaway Chrome even where CHROME_HOST is configured. Falls back to a local
+  # visible browser when the shared one cannot be reached.
+  def initialize(headless: true, shared: false, proxy: nil)
+    options = { window_size: [ 1920, 1080 ], process_timeout: 20 }
+
+    if shared && self.class.shared_chrome?
+      begin
+        @browser = Ferrum::Browser.new(**options, url: "http://#{CHROME_HOST}:#{CHROME_PORT}")
+        @shared  = true
+        return
+      rescue StandardError => e
+        Rails.logger.warn("Browser: shared Chrome unavailable (#{e.message}), launching a local one")
+      end
+    end
+
     @browser = Ferrum::Browser.new(
-      window_size: [ 1920, 1080 ],
+      **options,
+      headless: headless,
       **proxy_option(proxy),
       browser_options: {
         # Chrome's sandbox needs unprivileged user namespaces, which the staging
@@ -831,6 +861,18 @@ class ApplyMate::Client::Browser
 
   def quit
     @browser.quit
+  end
+
+  # Leaves the browser running with its page open — the whole point of assisted
+  # mode, where the person reviews the filled form and presses submit. Never
+  # call quit on such a session: it would close the window under their hands.
+  def detach
+    @detached = true
+    self
+  end
+
+  def detached?
+    @detached == true
   end
 
   private

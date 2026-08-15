@@ -27,6 +27,19 @@ class AppliesController < ApplicationController
     endpoint Apply::Operation::Destroy
   end
 
+  # Assisted mode: fill the form in a visible browser, user presses submit.
+  def assisted_fill
+    endpoint Apply::Operation::AssistedFill, Apply::Component::Show do |m|
+      m.success { |result| redirect_to apply_path(result.model), notice: result.notice[:text] }
+    end
+  end
+
+  def confirm_manual_submit
+    endpoint Apply::Operation::ConfirmManualSubmit, Apply::Component::Show do |m|
+      m.success { |result| redirect_to apply_path(result.model), notice: result.notice[:text] }
+    end
+  end
+
   # "retry" is a Ruby keyword — routed here via action: :retry_apply
   def retry_apply
     endpoint Apply::Operation::RetryWithAnswers, Apply::Component::Show do |m|

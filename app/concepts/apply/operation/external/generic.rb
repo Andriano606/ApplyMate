@@ -104,15 +104,7 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
   # ── First pass: pre-resolved values ────────────────────────────────────────
 
   def initial_fill_and_submit
-    inputs = fillable_inputs
-
-    inputs.each do |input|
-      next if input['type'] == 'file' || input['value'].blank?
-
-      fill_input(input)
-    end
-
-    attach_cv(inputs)
+    form_filler.fill(fillable_inputs)
     @browser.attempt_recaptcha_refresh
     click_submit
   end
@@ -129,75 +121,6 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
               fresh.find { |f| f['label'].presence && f['label'] == input['label'] } ||
               fresh.find { |f| f['form_index'] == input['form_index'] }
       match ? input.merge('handle' => match['handle'], 'selector' => match['selector']) : input
-    end
-  end
-
-  # Values that mean "tick this box" once a consent question has been answered.
-  CHECKED_VALUES = %w[on true yes 1 y так так. згоден agree accept checked].freeze
-
-  def fill_input(input)
-    type    = input['type'].to_s
-    options = Array(input['options'])
-
-    return choose_option(input) if type == 'button_group' || type == 'radio'
-    return toggle_checkbox(input) if type == 'checkbox' && options.size <= 1
-    return choose_option(input) if type == 'checkbox'
-
-    if input['handle'].present?
-      @browser.fill_by_handle(input['handle'], input['value'].to_s, input['tag'].to_s)
-    else
-      @browser.fill_field(input['selector'], input['value'].to_s, input['tag'].to_s, form_index: input['form_index'])
-    end
-  end
-
-  # A lone checkbox (consents, opt-outs) is driven by its checked state.
-  def toggle_checkbox(input)
-    handle = input['handle'].presence || Array(input['options']).first.to_h.stringify_keys['handle']
-    return if handle.blank?
-
-    @browser.set_checkbox_by_handle(handle, CHECKED_VALUES.include?(input['value'].to_s.strip.downcase))
-  end
-
-  # Button-built choice questions (Ashby's Yes/No) and radio groups are answered
-  # by clicking the matching option, not by writing a value anywhere.
-  def choose_option(input)
-    wanted  = input['value'].to_s.strip.downcase
-    options = Array(input['options']).map { |o| o.to_h.stringify_keys }
-    option  = options.find { |o| o['label'].to_s.strip.downcase == wanted } ||
-              options.find { |o| o['value'].to_s.strip.downcase == wanted } ||
-              options.find { |o| wanted.present? && o['label'].to_s.downcase.include?(wanted) }
-
-    if option.nil? || option['handle'].blank?
-      Rails.logger.info("Generic: no option matching #{input['value'].inspect} for #{input['name'].inspect}")
-      return
-    end
-
-    @browser.click_by_handle(option['handle'])
-  end
-
-  # Ashby offers a second file input ("Autofill from resume") that re-parses the
-  # CV and overwrites everything already typed — never upload there. Prefer the
-  # real resume field; fall back to the last file input, which is the actual
-  # attachment in every layout seen so far.
-  AUTOFILL_LABEL = /autofill|auto-fill|parse|заповнити з резюме/i
-  RESUME_LABEL   = /resume|cv|résumé|резюме/i
-
-  def attach_cv(inputs)
-    return if @cv_tempfile.nil?
-
-    file_inputs = inputs.select { |i| i['type'] == 'file' }
-    return if file_inputs.empty?
-
-    named      = ->(i) { "#{i['accessible_name']} #{i['label']} #{i['name']}" }
-    candidates = file_inputs.reject { |i| named.call(i).match?(AUTOFILL_LABEL) }
-    file_input = candidates.find { |i| named.call(i).match?(RESUME_LABEL) } ||
-                 candidates.last || file_inputs.last
-    return if file_input.nil?
-
-    if file_input['handle'].present?
-      @browser.attach_file_by_handle(file_input['handle'], @cv_tempfile.path)
-    else
-      @browser.attach_file(file_input, @cv_tempfile.path)
     end
   end
 
@@ -314,13 +237,19 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
     return if field.nil?
 
     field = field.merge('role' => action['role']) if action['role'].present?
-    value = value_resolver.resolve([ field ]).first['value']
-    @browser.fill_by_handle(field['handle'], value.to_s, field['tag'].to_s) if value.present?
+    resolved = value_resolver.resolve([ field ]).first
+    return if resolved['value'].blank?
+
+    form_filler.fill([ resolved ])
   end
 
   def execute_select(action, fields_by_handle)
-    field = fields_by_handle[action['handle']]
-    @browser.fill_by_handle(action['handle'], action['value'].to_s, field ? field['tag'].to_s : 'select')
+    field = (fields_by_handle[action['handle']] || { 'tag' => 'select', 'type' => 'select' }).dup
+    form_filler.fill([ field.merge('value' => action['value'].to_s) ])
+  end
+
+  def form_filler
+    @form_filler ||= Apply::FormFiller.new(browser: @browser, cv_path: @cv_tempfile&.path)
   end
 
   def value_resolver
