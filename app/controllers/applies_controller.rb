@@ -26,4 +26,13 @@ class AppliesController < ApplicationController
   def destroy
     endpoint Apply::Operation::Destroy
   end
+
+  # "retry" is a Ruby keyword — routed here via action: :retry_apply
+  def retry_apply
+    endpoint Apply::Operation::RetryWithAnswers, Apply::Component::Show do |m|
+      m.success do |result|
+        redirect_to apply_path(result.model), notice: result.notice[:text]
+      end
+    end
+  end
 end

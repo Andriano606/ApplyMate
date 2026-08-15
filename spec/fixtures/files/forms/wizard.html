@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"><title>Two-step Apply Wizard</title></head>
+<body>
+  <h1>Backend Engineer</h1>
+  <div id="flow">
+    <div id="step1">
+      <label>Ім'я *<input type="text" id="wiz-name"></label>
+      <button type="button" id="continue-btn">Продовжити</button>
+    </div>
+    <div id="step2" style="display:none">
+      <label>Email *<input type="email" id="wiz-email" required></label>
+      <div id="email-error" class="field-error" role="alert" style="display:none">Вкажіть email</div>
+      <button type="submit" id="submit-btn">Надіслати</button>
+    </div>
+    <div id="done" role="status" style="display:none">Дякуємо! Заявку отримано.</div>
+  </div>
+  <script>
+    document.getElementById('continue-btn').addEventListener('click', function() {
+      document.getElementById('step1').style.display = 'none';
+      document.getElementById('step2').style.display = 'block';
+    });
+    document.getElementById('submit-btn').addEventListener('click', function() {
+      var email = document.getElementById('wiz-email');
+      if (!email.value) {
+        email.setAttribute('aria-invalid', 'true');
+        document.getElementById('email-error').style.display = 'block';
+        return;
+      }
+      document.getElementById('step2').style.display = 'none';
+      document.getElementById('done').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

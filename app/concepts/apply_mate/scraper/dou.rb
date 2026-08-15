@@ -4,6 +4,13 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   VACANCIES_URL = 'https://jobs.dou.ua/vacancies/'
   XHR_URL       = 'https://jobs.dou.ua/vacancies/xhr-load/'
 
+  # DOU internal apply form — field meanings known from the board's markup.
+  ROLE_OVERRIDES = {
+    'descr'               => 'cover_letter',
+    'user_cv'             => 'cv_file',
+    'csrfmiddlewaretoken' => 'hidden_passthrough'
+  }.freeze
+
   def initialize(source = Source.find_by(name: 'Dou'), client = ApplyMate::Client::AsyncHttp.new)
     @source = source
     @client = client

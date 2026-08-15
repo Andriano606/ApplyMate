@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_14_020314) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -53,6 +53,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
     t.index ["user_id"], name: "index_ai_integrations_on_user_id"
   end
 
+  create_table "answer_banks", force: :cascade do |t|
+    t.text "answer", null: false
+    t.datetime "created_at", null: false
+    t.text "question"
+    t.string "role", null: false
+    t.integer "source", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_profile_id", null: false
+    t.index ["user_profile_id", "question"], name: "index_answer_banks_on_user_profile_id_and_question"
+    t.index ["user_profile_id", "role"], name: "index_answer_banks_on_user_profile_id_and_role"
+    t.index ["user_profile_id"], name: "index_answer_banks_on_user_profile_id"
+  end
+
   create_table "api_tokens", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "last_used_at"
@@ -90,6 +103,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
   end
 
+  create_table "form_recipes", force: :cascade do |t|
+    t.string "ats"
+    t.datetime "created_at", null: false
+    t.integer "fail_count", default: 0, null: false
+    t.jsonb "field_map", default: [], null: false
+    t.string "form_fingerprint", null: false
+    t.string "host", null: false
+    t.datetime "last_success_at"
+    t.jsonb "navigation", default: [], null: false
+    t.jsonb "submit_meta", default: {}, null: false
+    t.integer "success_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["host", "form_fingerprint"], name: "index_form_recipes_on_host_and_form_fingerprint", unique: true
+    t.index ["host"], name: "index_form_recipes_on_host"
+  end
+
   create_table "prompts", force: :cascade do |t|
     t.text "content", null: false
     t.datetime "created_at", null: false
@@ -108,9 +137,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
     t.datetime "last_used_at"
     t.integer "port", null: false
     t.string "protocol", default: "http", null: false
+    t.float "reliability", default: 1.0, null: false
     t.integer "success_count", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.index ["failed_at"], name: "index_proxies_on_failed_at"
     t.index ["host", "port", "protocol"], name: "index_proxies_on_host_and_port_and_protocol", unique: true
+    t.index ["last_used_at"], name: "index_proxies_on_last_used_at"
+    t.index ["reliability"], name: "index_proxies_on_reliability"
+  end
+
+  create_table "proxy_source_stats", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "fail_count", default: 0, null: false
+    t.datetime "failed_at"
+    t.bigint "proxy_id", null: false
+    t.float "reliability", default: 1.0, null: false
+    t.bigint "source_id", null: false
+    t.integer "success_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["proxy_id", "source_id"], name: "index_proxy_source_stats_on_proxy_id_and_source_id", unique: true
+    t.index ["proxy_id"], name: "index_proxy_source_stats_on_proxy_id"
+    t.index ["source_id", "failed_at"], name: "index_proxy_source_stats_on_source_id_and_failed_at"
+    t.index ["source_id", "reliability"], name: "index_proxy_source_stats_on_source_id_and_reliability"
+    t.index ["source_id"], name: "index_proxy_source_stats_on_source_id"
   end
 
   create_table "solid_cable_messages", force: :cascade do |t|
@@ -354,6 +403,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_integrations", "users"
+  add_foreign_key "answer_banks", "user_profiles"
   add_foreign_key "api_tokens", "users"
   add_foreign_key "applies", "ai_integrations"
   add_foreign_key "applies", "prompts", column: "fill_form_prompt_id"
@@ -363,6 +413,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
   add_foreign_key "applies", "users"
   add_foreign_key "applies", "vacancies"
   add_foreign_key "prompts", "users"
+  add_foreign_key "proxy_source_stats", "proxies"
+  add_foreign_key "proxy_source_stats", "sources"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

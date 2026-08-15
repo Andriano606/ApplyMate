@@ -1,0 +1,50 @@
+{
+  "id": 4045807008,
+  "title": "Senior Ruby Engineer",
+  "questions": [
+    {
+      "label": "First Name",
+      "required": true,
+      "fields": [{ "name": "first_name", "type": "input_text", "values": [] }]
+    },
+    {
+      "label": "Last Name",
+      "required": true,
+      "fields": [{ "name": "last_name", "type": "input_text", "values": [] }]
+    },
+    {
+      "label": "Email",
+      "required": true,
+      "fields": [{ "name": "email", "type": "input_text", "values": [] }]
+    },
+    {
+      "label": "Resume/CV",
+      "required": true,
+      "fields": [{ "name": "resume", "type": "input_file", "values": [] }]
+    },
+    {
+      "label": "Cover Letter",
+      "required": false,
+      "fields": [{ "name": "cover_letter", "type": "textarea", "values": [] }]
+    },
+    {
+      "label": "How many years of Ruby experience do you have?",
+      "required": true,
+      "fields": [{ "name": "job_application[answers_attributes][0][text_value]", "type": "input_text", "values": [] }]
+    },
+    {
+      "label": "Are you authorized to work in Ukraine?",
+      "required": true,
+      "fields": [
+        {
+          "name": "job_application[answers_attributes][1][boolean_value]",
+          "type": "multi_value_single_select",
+          "values": [
+            { "label": "Yes", "value": 1 },
+            { "label": "No", "value": 0 }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -57,17 +57,59 @@ RSpec.shared_context 'honeytech dou' do
   # ── Browser double ────────────────────────────────────────────────────────────
   let(:browser) { instance_double(ApplyMate::Client::Browser) }
 
+  # Live-session snapshot as PrepareSession stores it: raw fields with handles
+  # plus the stamped submit button.
+  let(:browser_snapshot) do
+    {
+      'fields' => raw_inputs,
+      'submit' => { 'handle' => 'submit', 'text' => 'Застосувати',
+                    'selector' => 'button[type="submit"].btn.btn-primary' }
+    }
+  end
+
+  # Compact page digest as Browser#page_digest returns it for the PeopleForce
+  # apply page — the AI-navigation (CheckFormPage) input.
+  let(:browser_page_digest) do
+    {
+      'title'    => 'AI Animator / Motion Designer — HoneyTech',
+      'url'      => HoneytechDou::PEOPLEFORCE_URL,
+      'headings' => [ { 'level' => 'h1', 'text' => 'AI Animator / Motion Designer' } ],
+      'forms'    => [
+        { 'selector' => 'form', 'hidden' => false, 'submit_text' => 'Застосувати',
+          'field_names' => [ 'career_application_form[full_name]', 'career_application_form[email]' ] }
+      ],
+      'fields_container' => nil,
+      'buttons' => [ { 'selector' => 'form > button:nth-of-type(1)', 'text' => 'Застосувати', 'hidden' => false } ],
+      'links'   => []
+    }
+  end
+
+  # Post-submit observation: positive alert → deterministic success, no AI verify.
+  let(:browser_observe_state) do
+    {
+      'url' => "#{HoneytechDou::PEOPLEFORCE_URL}/thank-you",
+      'fields' => [], 'buttons' => [], 'errors' => [],
+      'alerts' => [ 'Дякуємо за заявку!' ],
+      'form_present' => false, 'captcha' => false, 'password_field' => false
+    }
+  end
+
   before do
     allow(ApplyMate::Client::Browser).to receive(:new).and_return(browser)
 
-    allow(browser).to receive(:fetch_rendered)
-      .with(HoneytechDou::DOU_REDIRECT)
-      .and_return([ HoneytechDou::PEOPLEFORCE_URL, honeytech_apply_html, '' ])
-
     allow(browser).to receive(:navigate_to)
+    allow(browser).to receive(:current_url).and_return(HoneytechDou::PEOPLEFORCE_URL)
+    allow(browser).to receive(:page_digest).and_return(browser_page_digest)
+    allow(browser).to receive(:observe_state).and_return(browser_observe_state)
+    allow(browser).to receive(:alive?).and_return(true)
     allow(browser).to receive(:click).and_return(true)
+    allow(browser).to receive(:click_with_unique_path) { |selector| selector }
+    allow(browser).to receive(:snapshot_fields).and_return(browser_snapshot)
     allow(browser).to receive(:fill_field)
+    allow(browser).to receive(:fill_by_handle)
     allow(browser).to receive(:attach_file)
+    allow(browser).to receive(:attach_file_by_handle).and_return(true)
+    allow(browser).to receive(:click_by_handle).and_return(true)
     allow(browser).to receive(:attempt_recaptcha_refresh)
     allow(browser).to receive(:wait_for_idle)
     allow(browser).to receive(:body).and_return('<p>Дякуємо за заявку!</p>')
@@ -98,18 +140,28 @@ RSpec.shared_context 'honeytech dou' do
     )
   end
 
+  # AI maps only the ambiguous fields (full_name is type=text, cover_letter is a
+  # textarea); email and resume resolve deterministically by input type.
+  let(:gemini_map_fields) do
+    mapping = {
+      fingerprint_of(raw_inputs[0]) => 'full_name',
+      fingerprint_of(raw_inputs[2]) => 'cover_letter'
+    }
+    gemini_json_response("```json\n#{mapping.to_json}\n```")
+  end
+
+  # The generation batch contains only the cover letter — contact fields come
+  # from profile defaults, never from the AI.
   let(:gemini_fill_form) do
-    gemini_json_response(
-      '```json' "\n" \
-      '{"career_application_form[full_name]":"Jane Doe",' \
-      '"career_application_form[email]":"dev@example.com",' \
-      '"career_application_form[phone_numbers][]":"+380501234567",' \
-      '"career_application_form[cover_letter]":"I am an experienced motion designer ' \
-      'passionate about AI-driven animation.",' \
-      '"career_application_form[telegram_username]":"@janedoe",' \
-      '"career_application_form[urls][]":"https://github.com/janedoe"}' "\n" \
-      '```'
-    )
+    answers = {
+      fingerprint_of(raw_inputs[2]) =>
+        'I am an experienced motion designer passionate about AI-driven animation.'
+    }
+    gemini_json_response("```json\n#{answers.to_json}\n```")
+  end
+
+  def fingerprint_of(input)
+    Apply::FieldFingerprint.call(input)
   end
 
   # Canonical set of PeopleForce fields filled by AI for this vacancy.
@@ -117,15 +169,20 @@ RSpec.shared_context 'honeytech dou' do
     [
       { 'name' => 'career_application_form[full_name]',
         'selector' => '[name="career_application_form[full_name]"]',
-        'tag' => 'input', 'type' => 'text', 'form_index' => 0,
+        'tag' => 'input', 'type' => 'text', 'form_index' => 0, 'handle' => 0,
         'label' => "Повне ім'я", 'placeholder' => '', 'value' => 'Jane Doe' },
       { 'name' => 'career_application_form[email]',
         'selector' => '[name="career_application_form[email]"]',
-        'tag' => 'input', 'type' => 'email', 'form_index' => 1,
+        'tag' => 'input', 'type' => 'email', 'form_index' => 1, 'handle' => 1,
         'label' => 'Електронна пошта', 'placeholder' => '', 'value' => 'dev@example.com' },
+      { 'name' => 'career_application_form[cover_letter]',
+        'selector' => '[name="career_application_form[cover_letter]"]',
+        'tag' => 'textarea', 'type' => 'textarea', 'form_index' => 2, 'handle' => 2,
+        'label' => 'Супровідний лист', 'placeholder' => '', 'value' =>
+          'I am an experienced motion designer passionate about AI-driven animation.' },
       { 'name' => 'career_application_form[resume]',
         'selector' => '[name="career_application_form[resume]"]',
-        'tag' => 'input', 'type' => 'file', 'form_index' => 4,
+        'tag' => 'input', 'type' => 'file', 'form_index' => 4, 'handle' => 4,
         'label' => 'Резюме', 'placeholder' => '', 'value' => '' }
     ]
   end

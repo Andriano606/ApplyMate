@@ -34,6 +34,16 @@ class ApplyMate::Scraper::Base
     raise NotImplementedError
   end
 
+  # Board-specific field-name → canonical role mapping, applied deterministically
+  # BEFORE the AI mapping step (see Apply::Operation::Ai::MapFields). Subclasses
+  # override ROLE_OVERRIDES for fields whose meaning is known from the board's
+  # markup (e.g. Djinni's save_msg_template checkbox).
+  ROLE_OVERRIDES = {}.freeze
+
+  def role_overrides
+    self.class::ROLE_OVERRIDES
+  end
+
   private
 
   # Runs an HTTP client call made under proxy rotation and normalises every

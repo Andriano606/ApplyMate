@@ -48,10 +48,31 @@
             = render Apply::Component::FilledFormPreview.new(filled_inputs: @apply.filled_inputs)
           - t.with_tab(label: I18n.t('apply.show.cv_tab_prompt')) do
             .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.font-mono.leading-relaxed
-              = Apply::Ai::Prompt::FillForm.call(@apply)
+              = Apply::Ai::Prompt::FillForm.call(@apply, @apply.inputs)
     - else
       .px-6.py-4
         p.mt-2.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.show.no_data')
+
+  / Manual answers when automation gave up (needs_review)
+  - if @apply.needs_review? && review_fields.any?
+    = accordion(title: I18n.t('apply.retry.title'), open: true) do
+      .px-6.py-4.space-y-4
+        p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.retry.hint')
+        = helpers.form_with url: helpers.retry_apply_path(@apply), method: :post, \
+              class: 'space-y-3' do |f|
+          - review_fields.each do |field|
+            .flex.flex-col.gap-1
+              label.text-sm.font-medium.text-gray-700.dark:text-gray-300(for="answer-#{field['fingerprint']}")
+                = field['accessible_name'].presence || field['label'].presence || field['name']
+              - if field['tag'] == 'textarea'
+                textarea.rounded-lg.border.border-gray-300.dark:border-gray-600.dark:bg-gray-800.text-sm.px-3.py-2(
+                  id="answer-#{field['fingerprint']}" name="answers[#{field['fingerprint']}]" rows='3')
+              - else
+                input.rounded-lg.border.border-gray-300.dark:border-gray-600.dark:bg-gray-800.text-sm.px-3.py-2(
+                  type='text' id="answer-#{field['fingerprint']}" name="answers[#{field['fingerprint']}]")
+          button.inline-flex.items-center.justify-center.rounded-lg.bg-blue-600.text-white.text-sm.px-4.py-2(
+            class='hover:bg-blue-700 font-medium transition-colors' type='submit')
+            = I18n.t('apply.retry.submit')
 
   / Error
   - if @apply.error.present?

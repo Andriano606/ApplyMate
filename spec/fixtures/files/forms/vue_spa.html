@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"><title>SPA Careers</title></head>
+<body>
+  <div id="app">
+    <h1>Motion Designer</h1>
+    <button type="button" class="hero-apply">Відгукнутися</button>
+    <div class="application-widget">
+      <div class="field">
+        <label>Ваше ім'я *<input type="text" data-rand-id></label>
+      </div>
+      <div class="field">
+        <label>Ваш email *<input type="email" data-rand-id></label>
+      </div>
+      <div class="field">
+        <input type="text" placeholder="Телефон">
+      </div>
+      <button type="submit" class="widget-submit">Надіслати</button>
+    </div>
+  </div>
+  <script>
+    // Emulates Vue/React: ids are regenerated with a random suffix on every load.
+    document.querySelectorAll('[data-rand-id]').forEach(function(el) {
+      el.id = 'input-' + Math.floor(Math.random() * 100000);
+    });
+  </script>
+</body>
+</html>

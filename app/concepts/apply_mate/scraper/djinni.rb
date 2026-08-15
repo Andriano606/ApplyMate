@@ -3,6 +3,18 @@
 class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   JOB_LIST_URL = 'https://djinni.co/jobs/'
 
+  # Djinni internal apply form — field meanings known from the board's markup.
+  ROLE_OVERRIDES = {
+    'message'             => 'cover_letter',
+    'save_msg_template'   => 'constant_false',
+    'msg_template_name'   => 'constant_empty',
+    'save_profile_cv'     => 'constant_false',
+    'salary_changed'      => 'salary_expectation',
+    'apply'               => 'constant_true',
+    'csrfmiddlewaretoken' => 'hidden_passthrough',
+    'cv_file'             => 'cv_file'
+  }.freeze
+
   def initialize(source, client)
     @source = source
     @client = client
