@@ -42,6 +42,33 @@ RSpec.describe Apply::FormFiller do
     end
   end
 
+  describe 'autocomplete fields' do
+    let(:combo) { { 'name' => 'source', 'type' => 'combobox', 'tag' => 'input', 'handle' => 7 } }
+
+    it 'picks the option from the list instead of typing a value' do
+      allow(browser).to receive(:select_from_combobox).with(7, 'Linkedin').and_return('Linkedin')
+      filler.fill([ combo.merge('value' => 'Linkedin') ])
+      expect(browser).to have_received(:select_from_combobox).with(7, 'Linkedin')
+      expect(browser).not_to have_received(:fill_by_handle)
+    end
+
+    # Closed lists rarely offer our wording ("DOU" among Preply's sources), and
+    # such forms pair the list with a free-text field we already answered.
+    it 'falls back to "Other" when the answer is not on the list' do
+      allow(browser).to receive(:select_from_combobox).with(7, 'DOU').and_return(nil)
+      allow(browser).to receive(:select_from_combobox).with(7, 'Other').and_return('Other')
+
+      filler.fill([ combo.merge('value' => 'DOU') ])
+      expect(browser).to have_received(:select_from_combobox).with(7, 'Other')
+    end
+
+    it 'leaves nothing behind when even "Other" is missing' do
+      allow(browser).to receive(:select_from_combobox).and_return(nil)
+      filler.fill([ combo.merge('value' => 'DOU') ])
+      expect(browser).to have_received(:fill_by_handle).with(7, '', 'input')
+    end
+  end
+
   describe '.remap' do
     let(:stored) do
       [ { 'fingerprint' => 'fp-email', 'name' => 'old_email_name', 'value' => 'dev@example.com', 'role' => 'email' } ]

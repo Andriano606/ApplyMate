@@ -60,12 +60,36 @@ class Apply::FormFiller
     return choose_option(input) if type == 'button_group' || type == 'radio'
     return toggle_checkbox(input) if type == 'checkbox' && options.size <= 1
     return choose_option(input) if type == 'checkbox'
+    return select_from_list(input) if type == 'combobox'
 
     if input['handle'].present?
       @browser.fill_by_handle(input['handle'], input['value'].to_s, input['tag'].to_s)
     else
       @browser.fill_field(input['selector'], input['value'].to_s, input['tag'].to_s, form_index: input['form_index'])
     end
+  end
+
+  # Autocomplete: the widget only counts a CHOSEN option, so typing the answer
+  # is not enough. When nothing in the list matches (our answer may simply not
+  # be one of the offered sources), the typed text is cleared rather than left
+  # looking like an answer — assisted mode lets the user pick properly.
+  # Answers a fixed list may not contain verbatim ("DOU" among Preply's sources).
+  OTHER_OPTIONS = [ 'Other', 'Інше' ].freeze
+
+  def select_from_list(input)
+    handle = input['handle']
+    return if handle.blank?
+
+    chosen = @browser.select_from_combobox(handle, input['value'].to_s)
+    return if chosen.present?
+
+    # A closed list rarely offers our exact wording, and such forms pair the
+    # list with a free-text "if you chose other" field we have already answered.
+    chosen = OTHER_OPTIONS.lazy.filter_map { |label| @browser.select_from_combobox(handle, label) }.first
+    return if chosen.present?
+
+    Rails.logger.info("FormFiller: no list option matches #{input['value'].inspect} for #{input['accessible_name'].inspect}")
+    @browser.fill_by_handle(handle, '', 'input')
   end
 
   # A lone checkbox (consents, opt-outs) is driven by its checked state.

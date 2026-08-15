@@ -173,6 +173,43 @@ class ApplyMate::Client::Browser
     JS
   end
 
+  # Selects whatever the focused field holds so the next keystrokes replace it.
+  # Never fatal: an empty field (the usual case) needs no clearing at all.
+  def clear_field
+    @page.keyboard.type([ :ctrl, 'a' ])
+  rescue StandardError => e
+    Rails.logger.debug { "Browser: could not clear field before typing: #{e.message}" }
+  end
+
+  # Polls the dropdown a combobox opens and marks the best match for clicking:
+  # exact text first, then a partial match either way (the answer may be broader
+  # or narrower than the option's wording).
+  def wait_for_option(value, timeout: 4)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+
+    loop do
+      chosen = @page.evaluate(<<~JS)
+        (function(wanted) {
+          var opts = Array.from(document.querySelectorAll('[role="option"]'))
+            .filter(function(o){ var cs = window.getComputedStyle(o); return cs.display !== 'none' && cs.visibility !== 'hidden'; });
+          if (!opts.length) return null;
+          var norm = function(s){ return (s || '').replace(/\\s+/g, ' ').trim().toLowerCase(); };
+          var w = norm(wanted);
+          var hit = opts.find(function(o){ return norm(o.textContent) === w; }) ||
+                    (w ? opts.find(function(o){ return norm(o.textContent).indexOf(w) !== -1; }) : null) ||
+                    (w ? opts.find(function(o){ return w.indexOf(norm(o.textContent)) !== -1; }) : null);
+          if (!hit) return null;
+          hit.setAttribute('data-am-option', '1');
+          return (hit.textContent || '').replace(/\\s+/g, ' ').trim();
+        })(#{value.to_s.to_json})
+      JS
+      return chosen if chosen.present?
+      return nil if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep 0.25
+    end
+  end
+
   # Waits until the page actually renders a field. Network idle is not enough:
   # an SPA (Ashby, Vue/React careers pages) finishes its requests and only then
   # paints the form, so judging "this page has no form" right after navigation
@@ -358,6 +395,13 @@ class ApplyMate::Client::Browser
           if (['submit', 'button', 'image', 'reset'].includes(type)) return;
           // hidden inputs carry tokens the form needs — keep them; skip only invisible visual fields
           if (type !== 'hidden' && !amVisible(el)) return;
+
+          // An autocomplete input ignores a written value — it tracks a chosen
+          // option, so it must be filled by typing and picking from the list.
+          if (native && el.getAttribute('role') === 'combobox' ||
+              el.getAttribute('aria-autocomplete') === 'list') {
+            type = 'combobox';
+          }
 
           var accName = amAccessibleName(el);
           var name    = (el.name || el.id || el.placeholder || accName || '').trim();
@@ -658,6 +702,32 @@ class ApplyMate::Client::Browser
     JS
   end
 
+  # Fills an autocomplete: types the text with real keystrokes so the widget
+  # filters its list, then clicks the matching option. Writing the value alone
+  # leaves such a field "empty" for the site, which rejects it as unanswered.
+  # Returns the chosen option's text, or nil when nothing matched.
+  def select_from_combobox(handle, value)
+    node = @page.at_css(%([data-am-field="#{handle}"]))
+    return nil if node.nil?
+
+    node.focus
+    clear_field
+    @page.keyboard.type(value.to_s)
+
+    chosen = wait_for_option(value)
+    return nil if chosen.blank?
+
+    option = @page.at_css('[data-am-option="1"]')
+    return nil if option.nil?
+
+    option.click
+    @page.evaluate("document.querySelectorAll('[data-am-option]').forEach(function(e){e.removeAttribute('data-am-option')})")
+    chosen
+  rescue StandardError => e
+    Rails.logger.warn("Browser: combobox selection failed: #{e.message}")
+    nil
+  end
+
   # Checks or unchecks the checkbox stamped with the given handle. A checkbox is
   # driven by its `checked` property — writing `value` (what fill_by_handle does)
   # leaves it untouched, which silently skips required consent boxes.
@@ -886,14 +956,16 @@ class ApplyMate::Client::Browser
   def close_stale_tabs(url)
     return if !@shared || url.blank?
 
-    targets = @browser.command('Target.getTargets')['targetInfos'] || []
-    targets.each do |target|
-      next unless target['type'] == 'page'
-      next unless target['url'].to_s.start_with?(url)
-      next if @page && target['targetId'] == @page.target_id
-
-      @browser.command('Target.closeTarget', targetId: target['targetId'])
+    targets = (@browser.command('Target.getTargets')['targetInfos'] || []).select { |t| t['type'] == 'page' }
+    stale   = targets.select do |target|
+      target['url'].to_s.start_with?(url) && !(@page && target['targetId'] == @page.target_id)
     end
+
+    # Chrome exits when its last page closes — that killed the shared browser
+    # once. Always leave one page standing.
+    stale.pop while targets.size - stale.size < 1 && stale.any?
+
+    stale.each { |target| @browser.command('Target.closeTarget', targetId: target['targetId']) }
   rescue StandardError => e
     Rails.logger.warn("Browser: could not close stale tabs: #{e.message}")
   end

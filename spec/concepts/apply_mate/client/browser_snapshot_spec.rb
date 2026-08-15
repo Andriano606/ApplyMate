@@ -146,6 +146,12 @@ RSpec.describe ApplyMate::Client::Browser do
       expect(group['options'].map { |o| o['handle'] }).to all(match(/\Aopt-\d+-\d+\z/))
     end
 
+    it 'marks an autocomplete input as a combobox, not a text field' do
+      combo = @ats_snapshot['fields'].find { |f| f['name'] == 'src-combo' }
+      expect(combo['type']).to eq('combobox')
+      expect(combo['accessible_name']).to eq('Where did you hear about us?')
+    end
+
     it 'takes the real label over a placeholder when the two disagree' do
       combobox = @ats_snapshot['fields'].find { |f| f['name'] == 'src-9931' }
       expect(combobox['accessible_name']).to eq('How did you get to know Preply?')
@@ -159,7 +165,7 @@ RSpec.describe ApplyMate::Client::Browser do
     # Counts every non-hidden control (incl. radios and the yes/no state
     # checkbox) — it only answers "does this page host a form at all?".
     it 'reports a non-zero fillable field count for embed detection' do
-      expect(@browser.field_count).to eq(9)
+      expect(@browser.field_count).to eq(10)
     end
   end
 
