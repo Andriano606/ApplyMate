@@ -37,13 +37,16 @@ class Apply::Operation::External::Resolve < Apply::Operation::Base
   # embed to a standalone form page so every later step works on a normal
   # top-level document.
   def follow_embedded_form(browser, resolved_url, ats)
-    return [ resolved_url, ats ] unless browser.field_count.zero?
+    # Wait before concluding the page has no fields — an SPA that simply has not
+    # painted yet must not be mistaken for an embed-only page.
+    return [ resolved_url, ats ] if browser.wait_for_fields(timeout: 8)
 
     embedded = Apply::EmbeddedForm.locate(browser.iframe_sources)
     return [ resolved_url, ats ] if embedded.blank?
 
     Rails.logger.info("Resolve: following embedded form #{embedded}")
     browser.navigate_to(embedded)
+    browser.wait_for_fields
 
     followed_url = browser.current_url.presence || embedded
     [ followed_url, Apply::AtsDetector.call(url: followed_url, html: browser.body) || ats ]

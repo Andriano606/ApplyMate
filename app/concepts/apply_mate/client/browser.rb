@@ -135,6 +135,24 @@ class ApplyMate::Client::Browser
     JS
   end
 
+  # Waits until the page actually renders a field. Network idle is not enough:
+  # an SPA (Ashby, Vue/React careers pages) finishes its requests and only then
+  # paints the form, so judging "this page has no form" right after navigation
+  # is a race — one that reported a perfectly good form as missing.
+  # Returns true if fields appeared, false on timeout (a genuinely fieldless page).
+  def wait_for_fields(timeout: 10)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+
+    loop do
+      return true if field_count.positive?
+      return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep 0.25
+    end
+  rescue StandardError
+    false
+  end
+
   # Number of fillable fields visible on the page — zero means the form is not
   # in this document (embedded elsewhere or not rendered yet).
   def field_count

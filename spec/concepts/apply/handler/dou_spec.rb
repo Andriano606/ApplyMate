@@ -16,15 +16,14 @@ RSpec.describe Apply::Handler::Dou do
         ApplyMate::Client::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
       )
 
-    # Gemini API — stubbed in call order:
-    #   1. CheckFormPage  (PrepareSession — page digest → does the page have a form?)
-    #   2. MapFields      (AI maps ambiguous fields to canonical roles)
-    #   3. FillForm       (generation batch: cover letter only)
-    #   4. GenerateCv     (AI produces HTML → Grover converts to PDF)
-    #   5. CheckSubmitResult (verifies the submit was successful)
+    # Gemini API — stubbed in call order. There is no CheckFormPage call: the
+    # page already renders fields, so PrepareSession has nothing to ask about.
+    #   1. MapFields      (AI maps ambiguous fields to canonical roles)
+    #   2. FillForm       (generation batch: cover letter only)
+    #   3. GenerateCv     (AI produces HTML → Grover converts to PDF)
+    #   4. CheckSubmitResult (verifies the submit was successful)
     stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
       .to_return(
-        gemini_check_form_page,
         gemini_map_fields,
         gemini_fill_form,
         gemini_json_response(

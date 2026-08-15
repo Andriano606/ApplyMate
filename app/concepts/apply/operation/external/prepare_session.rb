@@ -31,13 +31,24 @@ class Apply::Operation::External::PrepareSession < Apply::Operation::Base
       browser.navigate_to(external_url)
     end
 
-    check_result     = check_form_page(apply, browser)
-    form_selector    = check_result['form_selector'].presence
+    # Give an SPA time to paint before judging the page (see wait_for_fields).
+    browser.wait_for_fields
+
+    form_selector    = nil
     trigger_selector = nil
 
-    unless check_result['has_form']
-      trigger_selector = reveal_form(browser, check_result)
-      form_selector    = check_form_page(apply, browser)['form_selector'].presence
+    # The AI is only needed to FIND a form — when the page already renders
+    # fields there is nothing to find, and asking anyway once turned a working
+    # Ashby form into "AI could not locate an application form page".
+    if browser.field_count.zero?
+      check_result  = check_form_page(apply, browser)
+      form_selector = check_result['form_selector'].presence
+
+      unless check_result['has_form']
+        trigger_selector = reveal_form(browser, check_result)
+        browser.wait_for_fields
+        form_selector = check_form_page(apply, browser)['form_selector'].presence
+      end
     end
 
     snapshot = browser.snapshot_fields(scope_selector: form_selector)

@@ -44,6 +44,7 @@ RSpec.describe Apply::Operation::External::Resolve do
       before do
         allow(browser).to receive(:current_url).and_return(embed_page, form_page)
         allow(browser).to receive(:field_count).and_return(0)
+        allow(browser).to receive(:wait_for_fields).and_return(false)
         allow(browser).to receive(:iframe_sources).and_return(
           [ 'https://jobs.ashbyhq.com/preply/a9419d80?embed=js',
             'https://web.cmp.usercentrics.eu/cdcs/index.html' ]
@@ -78,6 +79,7 @@ RSpec.describe Apply::Operation::External::Resolve do
     context 'when the page has no fields and no usable iframe' do
       before do
         allow(browser).to receive(:field_count).and_return(0)
+        allow(browser).to receive(:wait_for_fields).and_return(false)
         allow(browser).to receive(:iframe_sources).and_return([ 'https://consent.cookiebot.com/x.html' ])
       end
 

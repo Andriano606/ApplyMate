@@ -9,11 +9,6 @@ RSpec.describe Apply::Operation::External::PrepareSession do
   let(:vacancy_external_url) { HoneytechDou::DOU_REDIRECT }
   let(:handler) { Apply::Handler::Dou.new(apply:) }
 
-  before do
-    stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
-      .to_return(gemini_check_form_page)
-  end
-
   describe '#call' do
     subject(:run_operation) { described_class.call(apply:, handler:) }
 
@@ -47,10 +42,17 @@ RSpec.describe Apply::Operation::External::PrepareSession do
       expect(inputs.map { |i| i['fingerprint'] }).to all(match(/\A[0-9a-f]{40}\z/))
     end
 
-    it 'sends the page digest to the AI, not raw HTML' do
+    # The AI exists to FIND a form. A page that already renders fields has
+    # nothing to find, and asking anyway once turned a working Ashby form into
+    # "AI could not locate an application form page".
+    it 'asks the AI nothing when the page already renders fields' do
+      run_operation # WebMock would raise on any unstubbed Gemini request
+      expect(browser).not_to have_received(:page_digest)
+    end
+
+    it 'waits for the form to render before judging the page' do
       run_operation
-      expect(browser).to have_received(:page_digest)
-      expect(browser).not_to have_received(:body)
+      expect(browser).to have_received(:wait_for_fields)
     end
 
     it 'stores the stamped submit button data' do
@@ -81,6 +83,10 @@ RSpec.describe Apply::Operation::External::PrepareSession do
       end
 
       before do
+        # Nothing rendered even after waiting — this is when the AI earns its keep.
+        allow(browser).to receive(:field_count).and_return(0)
+        allow(browser).to receive(:wait_for_fields).and_return(false)
+
         stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
           .to_return(gemini_check_form_page_no_form, gemini_check_form_page)
 
@@ -111,6 +117,9 @@ RSpec.describe Apply::Operation::External::PrepareSession do
       end
 
       before do
+        allow(browser).to receive(:field_count).and_return(0)
+        allow(browser).to receive(:wait_for_fields).and_return(false)
+
         stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
           .to_return(gemini_check_form_page_nothing)
       end
