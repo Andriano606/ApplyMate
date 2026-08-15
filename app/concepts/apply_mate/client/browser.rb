@@ -7,9 +7,17 @@ class ApplyMate::Client::Browser
   CHROME_HOST = ENV['CHROME_HOST'].presence
   CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
 
-  # Where a human can watch that browser (noVNC web UI), shown in the UI.
+  # Where a human can watch that browser (noVNC web UI). Without it an assisted
+  # session fills a form the user cannot find — the browser runs inside the
+  # chrome_vnc container, not on their desktop — so fall back to the standard
+  # noVNC port on the same host rather than showing nothing.
+  NOVNC_PORT = ENV.fetch('CHROME_VIEW_PORT', 6081)
+
   def self.viewer_url
-    ENV['CHROME_VIEW_URL'].presence
+    return ENV['CHROME_VIEW_URL'] if ENV['CHROME_VIEW_URL'].present?
+    return nil if CHROME_HOST.blank?
+
+    "http://#{CHROME_HOST}:#{NOVNC_PORT}/vnc.html?autoconnect=1&resize=scale"
   end
 
   def self.shared_chrome?
@@ -859,8 +867,43 @@ class ApplyMate::Client::Browser
     # ignore pending third-party requests
   end
 
+  # Closing a SHARED session must only close its own tab: quitting would kill the
+  # chrome_vnc browser everyone else (and every other apply) is using.
   def quit
-    @browser.quit
+    if @shared
+      @page&.close
+    else
+      @browser.quit
+    end
+  rescue StandardError => e
+    Rails.logger.warn("Browser: quit failed: #{e.message}")
+  end
+
+  # Closes tabs left in the SHARED browser by earlier assisted sessions for the
+  # same page. Without this every retry (or app restart, which loses the session
+  # registry) leaves another copy of the form behind, and the user has to guess
+  # which tab is the live one.
+  def close_stale_tabs(url)
+    return if !@shared || url.blank?
+
+    targets = @browser.command('Target.getTargets')['targetInfos'] || []
+    targets.each do |target|
+      next unless target['type'] == 'page'
+      next unless target['url'].to_s.start_with?(url)
+      next if @page && target['targetId'] == @page.target_id
+
+      @browser.command('Target.closeTarget', targetId: target['targetId'])
+    end
+  rescue StandardError => e
+    Rails.logger.warn("Browser: could not close stale tabs: #{e.message}")
+  end
+
+  # Raises this session's tab in the shared browser so the person watching
+  # through noVNC lands on it instead of hunting through other tabs.
+  def bring_to_front
+    @page&.command('Page.bringToFront')
+  rescue StandardError => e
+    Rails.logger.warn("Browser: bring_to_front failed: #{e.message}")
   end
 
   # Leaves the browser running with its page open — the whole point of assisted

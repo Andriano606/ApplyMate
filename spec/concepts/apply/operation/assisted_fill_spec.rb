@@ -10,6 +10,8 @@ RSpec.describe Apply::Operation::AssistedFill, type: :operation do
 
   before do
     allow(browser).to receive(:detach).and_return(browser)
+    allow(browser).to receive(:close_stale_tabs)
+    allow(browser).to receive(:bring_to_front)
     allow(browser).to receive(:set_checkbox_by_handle)
     allow(Apply::AssistedSession).to receive(:store)
 
@@ -28,6 +30,12 @@ RSpec.describe Apply::Operation::AssistedFill, type: :operation do
     expect(result).to be_success
     expect(browser).to have_received(:detach)
     expect(browser).not_to have_received(:quit)
+  end
+
+  it 'clears tabs left by earlier attempts and raises its own to the front' do
+    expect(result).to be_success
+    expect(browser).to have_received(:close_stale_tabs).with(HoneytechDou::PEOPLEFORCE_URL)
+    expect(browser).to have_received(:bring_to_front)
   end
 
   it 'fills the form with the answers already resolved for this apply' do

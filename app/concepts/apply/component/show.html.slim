@@ -59,10 +59,14 @@
       .px-6.py-4.space-y-3
         p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.hint')
         - if @apply.awaiting_manual_submit?
+          - if viewer_url
+            p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.viewer_hint')
           .flex.flex-wrap.items-center.gap-3
             - if viewer_url
-              = link(url: viewer_url, size: :md, target: '_blank') do
-                = I18n.t('apply.assisted.viewer')
+              = helpers.link_to I18n.t('apply.assisted.viewer'), viewer_url, target: '_blank', \
+                  rel: 'noopener noreferrer', \
+                  class: 'inline-flex items-center justify-center rounded-lg bg-indigo-600 ' \
+                         'text-white text-sm px-4 py-2 hover:bg-indigo-700 font-medium'
             = helpers.button_to I18n.t('apply.assisted.submitted'), \
                 helpers.confirm_manual_submit_apply_path(@apply), method: :post, \
                 class: 'inline-flex items-center justify-center rounded-lg bg-green-600 ' \

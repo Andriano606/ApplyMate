@@ -20,6 +20,7 @@ class Apply::Operation::AssistedFill < ApplyMate::Operation::Base
 
     browser = open_session(apply)
     fill_form(apply, browser)
+    browser.bring_to_front # the shared browser may hold many tabs
 
     apply.update!(status: :awaiting_manual_submit, error: nil)
     Apply::TurboHandler::StatusUpdate.broadcast(apply)
@@ -42,7 +43,9 @@ class Apply::Operation::AssistedFill < ApplyMate::Operation::Base
   end
 
   def fill_form(apply, browser)
-    browser.navigate_to(apply.resolved_url.presence || apply.external_url)
+    target_url = apply.resolved_url.presence || apply.external_url
+    browser.navigate_to(target_url)
+    browser.close_stale_tabs(target_url) # copies left by earlier attempts
     browser.wait_for_fields
 
     follow_embedded_form(browser)

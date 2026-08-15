@@ -42,7 +42,9 @@ class Apply::FormFiller
       answer = stored.find { |s| s['fingerprint'].present? && s['fingerprint'] == field['fingerprint'] } ||
                stored.find { |s| s['name'].present? && s['name'] == field['name'] } ||
                stored.find { |s| s['accessible_name'].present? && s['accessible_name'] == field['accessible_name'] } ||
-               stored.find { |s| s['form_index'] == field['form_index'] }
+               # Position is the last resort and only when both sides really have
+               # one — nil == nil would hand a brand-new field someone else's answer.
+               stored.find { |s| !s['form_index'].nil? && s['form_index'] == field['form_index'] }
       next if answer.nil?
 
       field.merge('value' => answer['value'], 'role' => answer['role'])
@@ -77,11 +79,13 @@ class Apply::FormFiller
   # Button-built choice questions (Ashby's Yes/No) and radio groups are answered
   # by clicking the matching option, not by writing a value anywhere.
   def choose_option(input)
-    wanted  = input['value'].to_s.strip.downcase
     options = Array(input['options']).map { |o| o.to_h.stringify_keys }
-    option  = options.find { |o| o['label'].to_s.strip.downcase == wanted } ||
-              options.find { |o| o['value'].to_s.strip.downcase == wanted } ||
-              options.find { |o| wanted.present? && o['label'].to_s.downcase.include?(wanted) }
+    # Options are shown to the AI as "label=value", and it sometimes answers with
+    # the whole pair ("Man=on") — accept either half rather than losing the answer.
+    wanted = wanted_variants(input['value'])
+    option = options.find { |o| wanted.include?(o['label'].to_s.strip.downcase) } ||
+             options.find { |o| wanted.include?(o['value'].to_s.strip.downcase) } ||
+             options.find { |o| wanted.any? { |w| o['label'].to_s.downcase.include?(w) } }
 
     if option.nil? || option['handle'].blank?
       Rails.logger.info("FormFiller: no option matching #{input['value'].inspect} for #{input['name'].inspect}")
@@ -89,6 +93,13 @@ class Apply::FormFiller
     end
 
     @browser.click_by_handle(option['handle'])
+  end
+
+  def wanted_variants(value)
+    raw = value.to_s.strip.downcase
+    return [] if raw.blank?
+
+    [ raw, raw.split('=').first, raw.split('=').last ].compact.map(&:strip).reject(&:blank?).uniq
   end
 
   def attach_cv(inputs)
