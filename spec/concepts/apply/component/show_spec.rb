@@ -7,6 +7,24 @@ RSpec.describe Apply::Component::Show do
 
   subject(:component) { described_class.new(apply:) }
 
+  # The fill button used to be replaced by the viewer link after the first run,
+  # leaving no way to redo a fill whose tab was lost to a restart.
+  describe 'assisted buttons' do
+    before { apply.update!(filled_inputs: [ { 'name' => 'email', 'type' => 'email', 'value' => 'x@y.z' } ]) }
+
+    it 'offers filling as the main action before a session exists' do
+      apply.update!(status: :needs_review)
+      expect(component.send(:assisted_button_label)).to eq(I18n.t('apply.assisted.open'))
+      expect(component.send(:assisted_button_class)).to include('bg-blue-600')
+    end
+
+    it 'keeps filling available once a session is open, as a repeat' do
+      apply.update!(status: :awaiting_manual_submit)
+      expect(component.send(:assisted_button_label)).to eq(I18n.t('apply.assisted.refill'))
+      expect(component.send(:assisted_button_class)).not_to include('bg-blue-600')
+    end
+  end
+
   describe '#manual_answers' do
     before { apply.update!(filled_inputs: inputs) }
 

@@ -75,6 +75,20 @@ class Apply::Component::Show < ApplyMate::Component::Base
     ApplyMate::Client::Browser.viewer_url
   end
 
+  # Once a session is open, filling again is a repeat, not the main action —
+  # it stays available (tabs get lost to restarts) but steps back visually.
+  def assisted_button_label
+    I18n.t(@apply.awaiting_manual_submit? ? 'apply.assisted.refill' : 'apply.assisted.open')
+  end
+
+  def assisted_button_class
+    base = 'inline-flex items-center justify-center rounded-lg text-sm px-4 py-2 font-medium '
+    return "#{base}bg-blue-600 text-white hover:bg-blue-700" unless @apply.awaiting_manual_submit?
+
+    "#{base}border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 " \
+      'hover:bg-gray-50 dark:hover:bg-gray-700'
+  end
+
   # Open fields the user is asked to answer: fillable, still blank, not files.
   def review_fields
     Array(@apply.review_fields)

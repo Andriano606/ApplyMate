@@ -90,10 +90,15 @@
     = accordion(title: I18n.t('apply.assisted.title'), open: true) do
       .px-6.py-4.space-y-3
         p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.hint')
-        - if @apply.awaiting_manual_submit?
-          - if viewer_url
-            p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.viewer_hint')
-          .flex.flex-wrap.items-center.gap-3
+        - if @apply.awaiting_manual_submit? && viewer_url
+          p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.viewer_hint')
+        .flex.flex-wrap.items-center.gap-3
+          / Filling stays available after the first run: the tab can be lost to a
+          / restart, or the form may need doing over.
+          = helpers.button_to assisted_button_label, \
+              helpers.assisted_fill_apply_path(@apply), method: :post, \
+              class: assisted_button_class
+          - if @apply.awaiting_manual_submit?
             - if viewer_url
               = helpers.link_to I18n.t('apply.assisted.viewer'), viewer_url, target: '_blank', \
                   rel: 'noopener noreferrer', \
@@ -103,11 +108,6 @@
                 helpers.confirm_manual_submit_apply_path(@apply), method: :post, \
                 class: 'inline-flex items-center justify-center rounded-lg bg-green-600 ' \
                        'text-white text-sm px-4 py-2 hover:bg-green-700 font-medium'
-        - else
-          = helpers.button_to I18n.t('apply.assisted.open'), \
-              helpers.assisted_fill_apply_path(@apply), method: :post, \
-              class: 'inline-flex items-center justify-center rounded-lg bg-blue-600 ' \
-                     'text-white text-sm px-4 py-2 hover:bg-blue-700 font-medium'
 
   / Manual answers when automation gave up (needs_review)
   - if @apply.needs_review? && review_fields.any?
