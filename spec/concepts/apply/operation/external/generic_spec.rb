@@ -82,6 +82,55 @@ RSpec.describe Apply::Operation::External::Generic do
       end
     end
 
+    context 'when the site refuses the submission (Ashby anti-spam)' do
+      let(:rejected_state) do
+        browser_observe_state.merge(
+          'alerts' => [ "We couldn't submit your application",
+                        'Your application submission was flagged as possible spam. ' \
+                        'If you believe this was a mistake please submit your application again' ],
+          'form_present' => true,
+          'url' => 'https://jobs.ashbyhq.com/preply/a9419d80/application'
+        )
+      end
+
+      before { allow(browser).to receive(:observe_state).and_return(rejected_state) }
+
+      it 'stops immediately instead of re-clicking submit' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        # exactly one click: the initial submit, none from the loop
+        expect(browser).to have_received(:click_by_handle).with('submit').once
+      end
+
+      it 'hands the apply to the user with the site message preserved' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        reloaded = apply.reload
+        expect(reloaded.status).to eq('needs_review')
+        expect(reloaded.error).to include('відхилив автоматичну відправку')
+        expect(reloaded.error).to include('flagged as possible spam')
+      end
+
+      it 'spends no AI tokens on planning further actions' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        # WebMock would raise on an unstubbed Gemini request
+      end
+    end
+
+    context 'when a rejection notice also contains success-looking wording' do
+      before do
+        allow(browser).to receive(:observe_state).and_return(
+          browser_observe_state.merge(
+            'alerts' => [ 'Your application was not submitted — submission was rejected' ],
+            'form_present' => true, 'url' => HoneytechDou::PEOPLEFORCE_URL
+          )
+        )
+      end
+
+      it 'is never mistaken for a completed application' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        expect(apply.reload.status).not_to eq('completed')
+      end
+    end
+
     context 'when a captcha challenge is visible' do
       before do
         allow(browser).to receive(:observe_state).and_return(

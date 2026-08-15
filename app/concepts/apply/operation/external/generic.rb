@@ -13,6 +13,19 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
   SUCCESS_URL    = /thank|success|confirm|applied/i
   LOGIN_URL      = /login|signin|sign-in|auth/i
 
+  # The site explicitly refused the submission (spam heuristics, rate limits,
+  # server-side validation). Retrying is wrong on two counts: any retry that
+  # slips through creates a DUPLICATE application, and repeated submits are
+  # themselves the behaviour these filters look for. Checked before the success
+  # patterns — "your application was not submitted" must never read as success.
+  REJECTION_TEXT = /
+    flagged\s+as\s+possible\s+spam | possible\s+spam | as\s+spam |
+    couldn.?t\s+submit | could\s+not\s+submit | unable\s+to\s+submit | failed\s+to\s+submit |
+    submission\s+(was\s+)?(rejected|blocked|flagged) |
+    too\s+many\s+(attempts|requests) | rate\s+limit | try\s+again\s+later |
+    не\s+вдалося\s+(надіслати|відправити) | спробуйте\s+ще\s+раз\s+пізніше
+  /xi
+
   def start_status
     :sending_cv
   end
@@ -42,6 +55,7 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
     loop do
       state = @browser.observe_state
       check_blockers!(state)
+      check_rejection!(state)
       break if submitted?(state, initial_url)
 
       iteration += 1
@@ -168,6 +182,18 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
   def give_up!(state, message)
     @apply.update!(review_fields: Array(state['fields']))
     raise BlockedError.new(:needs_review, message)
+  end
+
+  # Stop the moment the site says it refused the submission — never re-click
+  # submit, since a retry that succeeds would file a duplicate application.
+  # The user finishes this one by hand (their answers are already in the bank).
+  def check_rejection!(state)
+    alerts = Array(state['alerts']).map { |text| text.to_s.squish }.reject(&:blank?)
+    return if alerts.none? { |text| text.match?(REJECTION_TEXT) }
+
+    # Keep every notice, not just the matching one — sites split the refusal
+    # into a short headline plus the sentence that explains what to do next.
+    give_up!(state, "Сайт відхилив автоматичну відправку: #{alerts.uniq.join(' — ').truncate(400)}")
   end
 
   def check_blocked_plan!(plan)
