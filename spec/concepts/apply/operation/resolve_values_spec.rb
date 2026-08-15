@@ -65,10 +65,22 @@ RSpec.describe Apply::Operation::ResolveValues do
         expect(filled_value('notice_period')).to eq('2 тижні')
       end
 
-      it 'fills contact fields from profile defaults, never from AI' do
+      # The applicant's name comes from the account, never from the profile —
+      # UserProfile#name is a label ("Ruby on Rails developer") and once went out
+      # to an employer as the candidate's full name.
+      it 'fills contact fields from the account, never from AI or the profile label' do
         run_operation
-        expect(filled_value('full_name')).to eq('Jane Doe')
+        expect(filled_value('full_name')).to eq(user.name).and eq('Jane Doe')
+        expect(filled_value('full_name')).not_to eq(user_profile.name)
         expect(filled_value('email')).to eq('dev@example.com')
+      end
+
+      it 'splits the account name for forms that ask for parts' do
+        apply.update!(inputs: inputs + [ build_input(name: 'first', role: 'first_name'),
+                                         build_input(name: 'last', role: 'last_name') ])
+        run_operation
+        expect(filled_value('first')).to eq('Jane')
+        expect(filled_value('last')).to eq('Doe')
       end
 
       it 'completes without an error' do

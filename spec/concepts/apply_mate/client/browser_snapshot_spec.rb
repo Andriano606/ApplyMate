@@ -173,7 +173,7 @@ RSpec.describe ApplyMate::Client::Browser do
     # Counts every non-hidden control (incl. radios and the yes/no state
     # checkbox) — it only answers "does this page host a form at all?".
     it 'reports a non-zero fillable field count for embed detection' do
-      expect(@browser.field_count).to eq(10)
+      expect(@browser.field_count).to eq(11)
     end
   end
 
@@ -190,6 +190,78 @@ RSpec.describe ApplyMate::Client::Browser do
       expect(srcs).to include(a_string_including('jobs.ashbyhq.com'))
       expect(Apply::EmbeddedForm.locate(srcs))
         .to eq('https://jobs.ashbyhq.com/acme/a9419d80-5cf1-4dba-a3d3-e90e5c464495/application')
+    end
+  end
+
+  # Filling was only ever asserted through doubles: the specs proved which method
+  # gets called, never that the browser actually does it. These drive real Chrome.
+  describe 'entering values for real' do
+    before(:all) do
+      @browser.navigate_to(fixture_url('ats_no_form_tag.html'))
+      @input_snapshot = @browser.snapshot_fields
+    end
+
+    def handle_for(name)
+      @input_snapshot['fields'].find { |f| f['name'] == name }['handle']
+    end
+
+    def page
+      @browser.instance_variable_get(:@page)
+    end
+
+    it 'types into a field so the DOM holds the value' do
+      expect(@browser.type_by_handle(handle_for('_systemfield_email'), 'dev@example.com')).to be(true)
+      expect(page.evaluate("document.querySelector('[name=\"_systemfield_email\"]').value"))
+        .to eq('dev@example.com')
+    end
+
+    it 'replaces what is already there instead of appending' do
+      handle = handle_for('_systemfield_name')
+      @browser.type_by_handle(handle, 'First Value')
+      @browser.type_by_handle(handle, 'Second Value')
+      expect(page.evaluate("document.querySelector('[name=\"_systemfield_name\"]').value"))
+        .to eq('Second Value')
+    end
+
+    # Writing `value` leaves a checkbox untouched — the bug that let a required
+    # consent go out unticked.
+    it 'ticks and unticks a checkbox through its checked state' do
+      handle = @input_snapshot['fields'].find { |f| f['type'] == 'checkbox' && f['name'].present? }['handle']
+      @browser.set_checkbox_by_handle(handle, true)
+      expect(@browser.checkbox_checked?(handle)).to be(true)
+      @browser.set_checkbox_by_handle(handle, false)
+      expect(@browser.checkbox_checked?(handle)).to be(false)
+    end
+
+    it 'clicks an element for real, which also ticks a checkbox' do
+      handle = @input_snapshot['fields'].find { |f| f['type'] == 'checkbox' && f['name'].present? }['handle']
+      @browser.set_checkbox_by_handle(handle, false)
+      expect(@browser.click_element_by_handle(handle)).to be(true)
+      expect(@browser.checkbox_checked?(handle)).to be(true)
+    end
+
+    it 'reports failure for a handle that is not on the page' do
+      expect(@browser.type_by_handle('nope-999', 'x')).to be(false)
+      expect(@browser.click_element_by_handle('nope-999')).to be(false)
+    end
+  end
+
+  describe '#select_from_combobox' do
+    before(:all) { @browser.navigate_to(fixture_url('combobox.html')) }
+
+    it 'types and chooses the matching option' do
+      snapshot = @browser.snapshot_fields
+      handle   = snapshot['fields'].find { |f| f['type'] == 'combobox' }['handle']
+      expect(@browser.select_from_combobox(handle, 'Linkedin')).to eq('Linkedin')
+      page = @browser.instance_variable_get(:@page)
+      expect(page.evaluate("document.querySelector('#chosen').textContent")).to eq('Linkedin')
+    end
+
+    it 'returns nil when nothing on the list matches' do
+      @browser.navigate_to(fixture_url('combobox.html'))
+      snapshot = @browser.snapshot_fields
+      handle   = snapshot['fields'].find { |f| f['type'] == 'combobox' }['handle']
+      expect(@browser.select_from_combobox(handle, 'DOU')).to be_nil
     end
   end
 

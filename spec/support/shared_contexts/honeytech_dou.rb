@@ -37,8 +37,11 @@ RSpec.shared_context 'honeytech dou' do
                           auth_method: :session_id, session_id: 'test-session-id')
   end
 
+  # UserProfile#name is the profile's LABEL, not a person's name — users name
+  # profiles by specialisation. Deliberately different from User#name so a spec
+  # asserting the applicant's name cannot pass by coincidence.
   let(:user_profile) do
-    UserProfile.create!(user:, name: 'Jane Doe',
+    UserProfile.create!(user:, name: 'Motion Designer profile',
                         cv: 'Senior Motion Designer with 5 years of experience in AI animation.')
   end
 
