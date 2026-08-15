@@ -354,8 +354,11 @@ class ApplyMate::Client::Browser
             type = (el.getAttribute('role') || 'textbox').toLowerCase();
           }
           if (['submit', 'button', 'image', 'reset'].includes(type)) return;
-          // hidden inputs carry tokens the form needs — keep them; skip only invisible visual fields
-          if (type !== 'hidden' && !amVisible(el)) return;
+          // Hidden inputs carry tokens the form needs, and a file input is
+          // routinely display:none behind a styled dropzone — we attach to it
+          // through DataTransfer, which does not care whether it is on screen.
+          // Everything else must be visible to count.
+          if (type !== 'hidden' && type !== 'file' && !amVisible(el)) return;
 
           // An autocomplete input ignores a written value — it tracks a chosen
           // option, so it must be filled by typing and picking from the list.

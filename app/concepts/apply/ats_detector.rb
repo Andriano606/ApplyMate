@@ -17,7 +17,8 @@ module Apply::AtsDetector
     'bamboohr'        => [ /\.bamboohr\.com\z/ ],
     'breezy'          => [ /\.breezy\.hr\z/ ],
     'join'            => [ /(\A|\.)join\.com\z/ ],
-    'workday'         => [ /\.myworkdayjobs\.com\z/ ]
+    'workday'         => [ /\.myworkdayjobs\.com\z/ ],
+    'talentlyft'      => [ /\.talentlyft\.com\z/ ]
   }.freeze
 
   # Query parameters ATS widgets append to the employer's own apply page — the

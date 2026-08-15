@@ -16,7 +16,8 @@ RSpec.describe Apply::AtsDetector do
       'https://acme.bamboohr.com/careers/33'                => 'bamboohr',
       'https://acme.breezy.hr/p/slug'                       => 'breezy',
       'https://join.com/companies/acme/123'                 => 'join',
-      'https://acme.wd3.myworkdayjobs.com/en-US/ext/job/x'  => 'workday'
+      'https://acme.wd3.myworkdayjobs.com/en-US/ext/job/x'  => 'workday',
+      'https://acme.talentlyft.com/matchmatch/jobs/x/new'   => 'talentlyft'
     }.each do |url, expected|
       it "detects #{expected} from #{url}" do
         expect(described_class.call(url:)).to eq(expected)

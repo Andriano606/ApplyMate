@@ -135,6 +135,14 @@ RSpec.describe ApplyMate::Client::Browser do
       expect(names).to include('Full Name*', 'Email*', 'Phone Number', 'Resume*')
     end
 
+    # ATS forms put the CV input behind a styled dropzone (display:none). It was
+    # skipped as invisible, so applications went out with no CV attached.
+    it 'keeps a hidden file input — DataTransfer does not need it on screen' do
+      resume = @ats_snapshot['fields'].find { |f| f['type'] == 'file' }
+      expect(resume['name']).to eq('_systemfield_resume')
+      expect(resume['accessible_name']).to eq('Resume*')
+    end
+
     it 'finds the submit button by its wording, not by type=submit' do
       expect(@ats_snapshot['submit']).to include('handle' => 'submit', 'text' => 'Submit Application')
     end
