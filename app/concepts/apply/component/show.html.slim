@@ -53,6 +53,38 @@
       .px-6.py-4
         p.mt-2.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.show.no_data')
 
+  / Submit from your own browser — for sites that refuse automated ones
+  - if manual_answers.any?
+    = accordion(title: I18n.t('apply.manual.title'), open: @apply.needs_review?) do
+      .px-6.py-4.space-y-4
+        p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.manual.hint')
+        .flex.flex-wrap.items-center.gap-3
+          - if @apply.resolved_url.present?
+            = helpers.link_to I18n.t('apply.manual.open_form'), @apply.resolved_url, \
+                target: '_blank', rel: 'noopener noreferrer', \
+                class: 'inline-flex items-center justify-center rounded-lg bg-blue-600 ' \
+                       'text-white text-sm px-4 py-2 hover:bg-blue-700 font-medium'
+          - if @apply.cv.attached?
+            = helpers.link_to I18n.t('apply.manual.download_cv'), \
+                helpers.rails_blob_path(@apply.cv, disposition: 'attachment'), \
+                class: 'inline-flex items-center justify-center rounded-lg border ' \
+                       'border-gray-300 dark:border-gray-600 text-sm px-4 py-2 ' \
+                       'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+        .divide-y.divide-gray-100.dark:divide-gray-700
+          - manual_answers.each do |field|
+            .flex.items-start.gap-3.py-2(data-controller='clipboard')
+              .min-w-0.flex-1
+                p.text-xs.font-medium.text-gray-500.dark:text-gray-400
+                  = field[:question]
+                p.text-sm.text-gray-900.dark:text-gray-100.whitespace-pre-wrap.break-words(
+                  data-clipboard-target='source')
+                  = field[:answer]
+              button.shrink-0.rounded-md.border.px-2.py-1.text-xs(
+                type='button' data-action='clipboard#copy' data-clipboard-target='button'
+                class='border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                title=I18n.t('apply.manual.copy'))
+                = I18n.t('apply.manual.copy')
+
   / Assisted mode — fill the form in a visible browser, user submits it
   - if assisted_available?
     = accordion(title: I18n.t('apply.assisted.title'), open: true) do
