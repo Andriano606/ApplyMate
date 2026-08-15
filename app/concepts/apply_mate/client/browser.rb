@@ -187,7 +187,50 @@ class ApplyMate::Client::Browser
         if (node.tagName === 'LABEL') return node.textContent.trim();
         node = node.parentElement;
       }
+      // Widget libraries render the question as a sibling <label>/heading with no
+      // "for" attribute (Ashby's comboboxes) — the placeholder would otherwise
+      // become the field's name ("Start typing...").
+      var nearby = amNearbyLabel(el);
+      if (nearby) return nearby;
       return el.placeholder ? el.placeholder.trim() : '';
+    }
+
+    // Question text of the block wrapping exactly this one control. Walks up a
+    // few levels and stops as soon as the block holds another field, so a label
+    // is never stolen from a neighbouring question.
+    function amNearbyLabel(el) {
+      var node = el.parentElement;
+      for (var depth = 0; node && depth < 4 && node !== document.body; depth++) {
+        var fields = node.querySelectorAll('input:not([type="hidden"]), textarea, select');
+        if (fields.length > 1) return '';
+        var labelNode = node.querySelector('label, legend, h1, h2, h3, h4, h5, h6');
+        if (labelNode) {
+          var text = (labelNode.textContent || '').replace(/\\s+/g, ' ').trim();
+          if (text && text.length < 200) return text;
+        }
+        node = node.parentElement;
+      }
+      return '';
+    }
+
+    // Shared question of a radio/checkbox group: the label of the closest block
+    // that contains every option, so the merged field reads "Which of the
+    // following best describes your gender identity?" and not "Woman".
+    function amGroupLabel(el, groupName) {
+      if (!groupName) return '';
+      var node = el.parentElement;
+      for (var depth = 0; node && depth < 6 && node !== document.body; depth++) {
+        var members = node.querySelectorAll('[name="' + (window.CSS && CSS.escape ? CSS.escape(groupName) : groupName) + '"]');
+        if (members.length > 1) {
+          var labelNode = node.querySelector('legend, label, h1, h2, h3, h4, h5, h6');
+          if (labelNode) {
+            var text = (labelNode.textContent || '').replace(/\\s+/g, ' ').trim();
+            if (text && text.length < 200) return text;
+          }
+        }
+        node = node.parentElement;
+      }
+      return '';
     }
 
     function amCssSelector(el) {
@@ -298,12 +341,68 @@ class ApplyMate::Client::Browser
           }
 
           if (type === 'radio' || type === 'checkbox') {
+            // Each option keeps its own handle so a merged group can be answered
+            // by clicking the right member — setting a value on a radio does
+            // nothing at all.
             entry.options = [{
-              label: (accName || el.id || el.value || '').toString(),
-              value: el.value || ''
+              label:  (accName || el.id || el.value || '').toString(),
+              value:  el.value || '',
+              handle: idx
             }];
+            entry.group_label = amGroupLabel(el, el.name);
           }
 
+          idx += 1;
+          fields.push(entry);
+        });
+
+        // Choice questions built from plain buttons (Ashby's Yes/No toggles):
+        // no input, no name, no ARIA role — invisible to every selector above,
+        // so the question would silently vanish from the form. Each option gets
+        // its own handle; answering means clicking one.
+        var groupIdx = 0;
+        var actionWording = /submit|apply|upload|drag|next|back|continue|cancel|close|sign|log/i;
+        Array.from(scope.querySelectorAll('div, fieldset, span')).forEach(function(box) {
+          var options = Array.from(box.children).filter(function(child) {
+            if (child.tagName !== 'BUTTON' && child.getAttribute('role') !== 'button') return false;
+            var text = (child.textContent || '').replace(/\\s+/g, ' ').trim();
+            return text.length > 0 && text.length <= 40 && !actionWording.test(text) && amVisible(child);
+          });
+          if (options.length < 2) return;
+          // A VISIBLE field inside means this is a layout wrapper, not a choice
+          // group. The widget's own state holder (Ashby keeps a hidden checkbox
+          // behind the Yes/No buttons) is invisible and must not disqualify it.
+          var visibleFields = Array.from(
+            box.querySelectorAll('input:not([type="hidden"]), textarea, select')
+          ).filter(amVisible);
+          if (visibleFields.length > 0) return;
+          if (box.getAttribute('data-am-group')) return;
+
+          box.setAttribute('data-am-group', String(groupIdx));
+          var entry = {
+            handle:          'grp-' + groupIdx,
+            name:            '',
+            selector:        '[data-am-group="' + groupIdx + '"]',
+            form_index:      idx,
+            position:        idx,
+            tag:             'buttongroup',
+            type:            'button_group',
+            accessible_name: amNearbyLabel(options[0]) || amGroupLabel(box, null),
+            label:           '',
+            placeholder:     '',
+            required:        false,
+            autocomplete:    '',
+            fieldset:        '',
+            value:           '',
+            options:         options.map(function(opt, i) {
+              var text = (opt.textContent || '').replace(/\\s+/g, ' ').trim();
+              opt.setAttribute('data-am-field', 'opt-' + groupIdx + '-' + i);
+              return { label: text, value: text, handle: 'opt-' + groupIdx + '-' + i };
+            })
+          };
+          entry.label = entry.accessible_name;
+          entry.name  = entry.accessible_name || ('choice_' + groupIdx);
+          groupIdx += 1;
           idx += 1;
           fields.push(entry);
         });
@@ -499,6 +598,26 @@ class ApplyMate::Client::Browser
         }
         el.dispatchEvent(new Event('input',  { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
+      })()
+    JS
+  end
+
+  # Checks or unchecks the checkbox stamped with the given handle. A checkbox is
+  # driven by its `checked` property — writing `value` (what fill_by_handle does)
+  # leaves it untouched, which silently skips required consent boxes.
+  def set_checkbox_by_handle(handle, checked)
+    @page.execute(<<~JS)
+      (function() {
+        var el = document.querySelector('[data-am-field="' + #{handle.to_s.to_json} + '"]');
+        if (!el) return;
+        var desired = #{checked ? 'true' : 'false'};
+        if (el.checked !== desired) {
+          var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+          if (desc && desc.set) { desc.set.call(el, desired); } else { el.checked = desired; }
+          el.dispatchEvent(new Event('click',  { bubbles: true }));
+          el.dispatchEvent(new Event('input',  { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
       })()
     JS
   end

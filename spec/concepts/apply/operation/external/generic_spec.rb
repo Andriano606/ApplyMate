@@ -82,6 +82,66 @@ RSpec.describe Apply::Operation::External::Generic do
       end
     end
 
+    context 'with ATS controls that are not plain text inputs' do
+      let(:ats_inputs) do
+        [
+          { 'name' => 'Autofill from resume', 'accessible_name' => 'Autofill from resume',
+            'type' => 'file', 'tag' => 'input', 'handle' => 0, 'role' => 'cv_file', 'value' => '' },
+          { 'name' => 'Resume', 'accessible_name' => 'Resume',
+            'type' => 'file', 'tag' => 'input', 'handle' => 1, 'role' => 'cv_file', 'value' => '' },
+          { 'name' => 'Acknowledge/Confirm', 'accessible_name' => 'Acknowledge/Confirm',
+            'type' => 'checkbox', 'tag' => 'input', 'handle' => 2, 'role' => 'consent_gdpr',
+            'value' => 'on', 'options' => [ { 'label' => 'Acknowledge/Confirm', 'value' => 'on', 'handle' => 2 } ] },
+          { 'name' => 'Newsletter opt-out', 'accessible_name' => 'I do not want the newsletter',
+            'type' => 'checkbox', 'tag' => 'input', 'handle' => 3, 'role' => 'consent_marketing',
+            'value' => 'false', 'options' => [ { 'label' => 'opt out', 'value' => 'on', 'handle' => 3 } ] },
+          { 'name' => 'gender_q', 'accessible_name' => 'Gender identity', 'type' => 'radio',
+            'tag' => 'input', 'handle' => 4, 'role' => 'custom_question', 'value' => 'Man',
+            'options' => [ { 'label' => 'Woman', 'value' => 'woman', 'handle' => 4 },
+                           { 'label' => 'Man', 'value' => 'man', 'handle' => 5 } ] },
+          { 'name' => 'based_ua', 'accessible_name' => 'Are you currently based in Ukraine?',
+            'type' => 'button_group', 'tag' => 'buttongroup', 'handle' => 'grp-0',
+            'role' => 'custom_question', 'value' => 'Yes',
+            'options' => [ { 'label' => 'Yes', 'value' => 'Yes', 'handle' => 'opt-0-0' },
+                           { 'label' => 'No', 'value' => 'No', 'handle' => 'opt-0-1' } ] }
+        ]
+      end
+
+      before do
+        allow(browser).to receive(:set_checkbox_by_handle)
+        apply.update!(filled_inputs: ats_inputs)
+      end
+
+      it 'ticks a consent checkbox instead of writing a value into it' do
+        run_operation
+        expect(browser).to have_received(:set_checkbox_by_handle).with(2, true)
+        expect(browser).not_to have_received(:fill_by_handle).with(2, anything, anything)
+      end
+
+      it 'leaves an opt-out checkbox unticked when the answer is negative' do
+        run_operation
+        expect(browser).to have_received(:set_checkbox_by_handle).with(3, false)
+      end
+
+      it 'clicks the radio option matching the answer, not the first one' do
+        run_operation
+        expect(browser).to have_received(:click_by_handle).with(5)
+        expect(browser).not_to have_received(:click_by_handle).with(4)
+      end
+
+      it 'clicks the matching option of a button-built question' do
+        run_operation
+        expect(browser).to have_received(:click_by_handle).with('opt-0-0')
+        expect(browser).not_to have_received(:click_by_handle).with('opt-0-1')
+      end
+
+      it 'uploads the CV to the resume field, never to the autofill parser' do
+        run_operation
+        expect(browser).to have_received(:attach_file_by_handle).with(1, a_string_ending_with('.pdf'))
+        expect(browser).not_to have_received(:attach_file_by_handle).with(0, anything)
+      end
+    end
+
     context 'when the site refuses the submission (Ashby anti-spam)' do
       let(:rejected_state) do
         browser_observe_state.merge(

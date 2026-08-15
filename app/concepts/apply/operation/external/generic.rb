@@ -132,7 +132,17 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
     end
   end
 
+  # Values that mean "tick this box" once a consent question has been answered.
+  CHECKED_VALUES = %w[on true yes 1 y так так. згоден agree accept checked].freeze
+
   def fill_input(input)
+    type    = input['type'].to_s
+    options = Array(input['options'])
+
+    return choose_option(input) if type == 'button_group' || type == 'radio'
+    return toggle_checkbox(input) if type == 'checkbox' && options.size <= 1
+    return choose_option(input) if type == 'checkbox'
+
     if input['handle'].present?
       @browser.fill_by_handle(input['handle'], input['value'].to_s, input['tag'].to_s)
     else
@@ -140,10 +150,48 @@ class Apply::Operation::External::Generic < Apply::Operation::Base
     end
   end
 
+  # A lone checkbox (consents, opt-outs) is driven by its checked state.
+  def toggle_checkbox(input)
+    handle = input['handle'].presence || Array(input['options']).first.to_h.stringify_keys['handle']
+    return if handle.blank?
+
+    @browser.set_checkbox_by_handle(handle, CHECKED_VALUES.include?(input['value'].to_s.strip.downcase))
+  end
+
+  # Button-built choice questions (Ashby's Yes/No) and radio groups are answered
+  # by clicking the matching option, not by writing a value anywhere.
+  def choose_option(input)
+    wanted  = input['value'].to_s.strip.downcase
+    options = Array(input['options']).map { |o| o.to_h.stringify_keys }
+    option  = options.find { |o| o['label'].to_s.strip.downcase == wanted } ||
+              options.find { |o| o['value'].to_s.strip.downcase == wanted } ||
+              options.find { |o| wanted.present? && o['label'].to_s.downcase.include?(wanted) }
+
+    if option.nil? || option['handle'].blank?
+      Rails.logger.info("Generic: no option matching #{input['value'].inspect} for #{input['name'].inspect}")
+      return
+    end
+
+    @browser.click_by_handle(option['handle'])
+  end
+
+  # Ashby offers a second file input ("Autofill from resume") that re-parses the
+  # CV and overwrites everything already typed — never upload there. Prefer the
+  # real resume field; fall back to the last file input, which is the actual
+  # attachment in every layout seen so far.
+  AUTOFILL_LABEL = /autofill|auto-fill|parse|заповнити з резюме/i
+  RESUME_LABEL   = /resume|cv|résumé|резюме/i
+
   def attach_cv(inputs)
     return if @cv_tempfile.nil?
 
-    file_input = inputs.find { |i| i['type'] == 'file' }
+    file_inputs = inputs.select { |i| i['type'] == 'file' }
+    return if file_inputs.empty?
+
+    named      = ->(i) { "#{i['accessible_name']} #{i['label']} #{i['name']}" }
+    candidates = file_inputs.reject { |i| named.call(i).match?(AUTOFILL_LABEL) }
+    file_input = candidates.find { |i| named.call(i).match?(RESUME_LABEL) } ||
+                 candidates.last || file_inputs.last
     return if file_input.nil?
 
     if file_input['handle'].present?

@@ -139,8 +139,27 @@ RSpec.describe ApplyMate::Client::Browser do
       expect(@ats_snapshot['submit']).to include('handle' => 'submit', 'text' => 'Submit Application')
     end
 
-    it 'reports the fillable field count for embed detection' do
-      expect(@browser.field_count).to eq(4)
+    it 'finds a choice question built from plain buttons, with per-option handles' do
+      group = @ats_snapshot['fields'].find { |f| f['type'] == 'button_group' }
+      expect(group['accessible_name']).to eq('Are you currently based in Ukraine?')
+      expect(group['options'].map { |o| o['label'] }).to eq(%w[Yes No])
+      expect(group['options'].map { |o| o['handle'] }).to all(match(/\Aopt-\d+-\d+\z/))
+    end
+
+    it 'takes the real label over a placeholder when the two disagree' do
+      combobox = @ats_snapshot['fields'].find { |f| f['name'] == 'src-9931' }
+      expect(combobox['accessible_name']).to eq('How did you get to know Preply?')
+    end
+
+    it 'names a radio group by its question, not by the first option' do
+      radios = @ats_snapshot['fields'].select { |f| f['type'] == 'radio' }
+      expect(radios.first['group_label']).to eq('Which of the following best describes your gender identity?')
+    end
+
+    # Counts every non-hidden control (incl. radios and the yes/no state
+    # checkbox) — it only answers "does this page host a form at all?".
+    it 'reports a non-zero fillable field count for embed detection' do
+      expect(@browser.field_count).to eq(9)
     end
   end
 

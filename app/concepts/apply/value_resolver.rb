@@ -55,12 +55,16 @@ class Apply::ValueResolver
     end
   end
 
-  # Contact data must come from the profile, never from AI generation — the
+  # Contact data must come from the account, never from AI generation — the
   # vacancy context contains nothing to derive it from.
+  # NOTE: UserProfile#name is the profile's LABEL ("Ruby on Rails developer"),
+  # not a person's name — the applicant's real name lives on User (OAuth).
   def profile_default(role)
     case role
-    when 'full_name' then @apply.user_profile.name
-    when 'email'     then @apply.user.email
+    when 'full_name'  then @apply.user.name
+    when 'first_name' then @apply.user.name.to_s.split.first
+    when 'last_name'  then @apply.user.name.to_s.split.drop(1).join(' ').presence
+    when 'email'      then @apply.user.email
     end
   end
 

@@ -179,7 +179,20 @@ module Apply::Operation::FormExtractor
       end
     end
 
-    result
+    result.each { |entry| apply_group_label(entry) }
+  end
+
+  # A merged group must be named by its question, not by whichever option came
+  # first — otherwise "Which of the following best describes your gender
+  # identity?" reaches the AI as a field called "Woman".
+  def apply_group_label(entry)
+    label = entry.delete('group_label')
+    return entry unless %w[radio checkbox].include?(entry['type'])
+    return entry if label.blank? || (entry['options'] || []).size < 2
+
+    entry['accessible_name'] = label
+    entry['label']           = label
+    entry
   end
 
   def extract_cookies(headers)
