@@ -1,0 +1,197 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+
+RSpec.describe Apply::Operation::External::Generic do
+  include_context 'honeytech dou'
+
+  let(:handler) { Apply::Handler::Dou.new(apply:) }
+
+  before do
+    handler.browser = browser
+
+    apply.update!(
+      external_url:    HoneytechDou::DOU_REDIRECT,
+      resolved_url:    HoneytechDou::PEOPLEFORCE_URL,
+      submit_handle:   'submit',
+      submit_selector: 'button[type="submit"].btn.btn-primary',
+      submit_text:     'Застосувати',
+      filled_inputs:
+    )
+
+    apply.cv.attach(
+      io:           StringIO.new('%PDF-1.4 fake-pdf-content'),
+      filename:     'Jane_Doe_CV.pdf',
+      content_type: 'application/pdf'
+    )
+  end
+
+  describe '#call' do
+    subject(:run_operation) { described_class.call(apply:, handler:) }
+
+    context 'when the first pass succeeds (deterministic success signal)' do
+      it 'fills the pre-resolved inputs via handles, attaches the CV and submits' do
+        run_operation
+        expect(browser).to have_received(:fill_by_handle).with(0, 'Jane Doe', 'input')
+        expect(browser).to have_received(:attach_file_by_handle).with(4, a_string_ending_with('.pdf'))
+        expect(browser).to have_received(:click_by_handle).with('submit')
+      end
+
+      it 'completes without any AI call and attaches a screenshot' do
+        allow(browser).to receive(:screenshot).and_return('png-bytes')
+        run_operation # WebMock would raise on any unstubbed Gemini request
+        reloaded = apply.reload
+        expect(reloaded.status).to eq('completed')
+        expect(reloaded.error).to be_nil
+        expect(reloaded.screenshot).to be_attached
+      end
+    end
+
+    context 'when validation fails and the AI plans a fix' do
+      let(:error_state) do
+        {
+          'url' => HoneytechDou::PEOPLEFORCE_URL,
+          'fields' => [
+            { 'handle' => 7, 'name' => 'phone', 'accessible_name' => 'Телефон', 'label' => 'Телефон',
+              'tag' => 'input', 'type' => 'tel', 'value' => '', 'placeholder' => '' }
+          ],
+          'buttons' => [ { 'handle' => 'submit', 'text' => 'Застосувати' } ],
+          'errors' => [ { 'handle' => 7, 'name' => 'phone', 'message' => 'Вкажіть телефон' } ],
+          'alerts' => [], 'form_present' => true, 'captcha' => false, 'password_field' => false
+        }
+      end
+
+      before do
+        allow(browser).to receive(:observe_state).and_return(error_state, browser_observe_state)
+
+        create(:answer_bank, user_profile:, role: 'phone', answer: '+380501234567')
+
+        plan = { 'actions' => [
+          { 'op' => 'fill', 'handle' => 7, 'role' => 'phone' },
+          { 'op' => 'click', 'handle' => 'submit', 'purpose' => 'submit' }
+        ], 'status' => 'in_progress', 'blocked_reason' => nil }
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_json_response("```json\n#{plan.to_json}\n```"))
+      end
+
+      it 'fills the failed field with a bank value and re-submits' do
+        run_operation
+        expect(browser).to have_received(:fill_by_handle).with(7, '+380501234567', 'input')
+        expect(browser).to have_received(:click_by_handle).with('submit').twice
+        expect(apply.reload.status).to eq('completed')
+      end
+    end
+
+    context 'when a captcha challenge is visible' do
+      before do
+        allow(browser).to receive(:observe_state).and_return(
+          browser_observe_state.merge('captcha' => true, 'form_present' => true, 'alerts' => [],
+                                      'url' => HoneytechDou::PEOPLEFORCE_URL)
+        )
+      end
+
+      it 'stops with blocked_captcha before spending AI tokens' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        reloaded = apply.reload
+        expect(reloaded.status).to eq('blocked_captcha')
+        expect(reloaded.error).to include('Captcha')
+      end
+    end
+
+    context 'when the page redirects to a login wall' do
+      before do
+        allow(browser).to receive(:observe_state).and_return(
+          browser_observe_state.merge('url' => 'https://employer.com/users/sign-in', 'alerts' => [],
+                                      'form_present' => true)
+        )
+      end
+
+      it 'stops with blocked_login' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        expect(apply.reload.status).to eq('blocked_login')
+      end
+    end
+
+    context 'when the AI itself reports an account wall' do
+      before do
+        allow(browser).to receive(:observe_state).and_return(
+          browser_observe_state.merge('alerts' => [], 'form_present' => true,
+                                      'url' => HoneytechDou::PEOPLEFORCE_URL)
+        )
+        plan = { 'actions' => [], 'status' => 'blocked', 'blocked_reason' => 'requires_account' }
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_json_response("```json\n#{plan.to_json}\n```"))
+      end
+
+      it 'stops with blocked_requires_account' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError)
+        expect(apply.reload.status).to eq('blocked_requires_account')
+      end
+    end
+
+    context 'when the form never submits' do
+      before do
+        allow(browser).to receive(:observe_state).and_return(
+          browser_observe_state.merge('alerts' => [], 'form_present' => true,
+                                      'url' => HoneytechDou::PEOPLEFORCE_URL)
+        )
+        plan = { 'actions' => [ { 'op' => 'click', 'handle' => 'submit', 'purpose' => 'submit' } ],
+                 'status' => 'in_progress', 'blocked_reason' => nil }
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_json_response("```json\n#{plan.to_json}\n```"))
+      end
+
+      it 'gives up after MAX_ITERATIONS into needs_review with the observed fields saved' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError, /not submitted after/)
+        reloaded = apply.reload
+        expect(reloaded.status).to eq('needs_review')
+        expect(reloaded.review_fields).to eq([])
+      end
+    end
+
+    context 'when the AI has no actions to offer' do
+      let(:open_fields) do
+        [ { 'handle' => 3, 'name' => 'security_code', 'accessible_name' => 'Код із СМС',
+            'tag' => 'input', 'type' => 'text', 'value' => '', 'fingerprint' => 'fp-sms' } ]
+      end
+
+      before do
+        allow(browser).to receive(:observe_state).and_return(
+          browser_observe_state.merge('alerts' => [], 'form_present' => true,
+                                      'url' => HoneytechDou::PEOPLEFORCE_URL,
+                                      'fields' => open_fields)
+        )
+        plan = { 'actions' => [], 'status' => 'in_progress', 'blocked_reason' => nil }
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_json_response("```json\n#{plan.to_json}\n```"))
+      end
+
+      it 'stores the open fields for the review UI and sets needs_review' do
+        expect { run_operation }.to raise_error(Apply::Operation::Base::BlockedError, /no actions/)
+        reloaded = apply.reload
+        expect(reloaded.status).to eq('needs_review')
+        expect(reloaded.review_fields).to include(hash_including('name' => 'security_code'))
+      end
+    end
+
+    context 'when the session was lost (job retry)' do
+      let(:browser_snapshot) do
+        {
+          'fields' => raw_inputs.map { |i| i.merge('handle' => i['handle'] + 10) },
+          'submit' => { 'handle' => 'submit', 'text' => 'Застосувати',
+                        'selector' => 'button[type="submit"].btn.btn-primary' }
+        }
+      end
+
+      before { allow(browser).to receive(:alive?).and_return(false) }
+
+      it 'rebuilds the session and re-maps values onto fresh handles' do
+        run_operation
+        expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT)
+        expect(browser).to have_received(:fill_by_handle).with(10, 'Jane Doe', 'input')
+        expect(browser).to have_received(:click).with('button[type="submit"].btn.btn-primary', text: 'Застосувати')
+        expect(apply.reload.status).to eq('completed')
+      end
+    end
+  end
+end

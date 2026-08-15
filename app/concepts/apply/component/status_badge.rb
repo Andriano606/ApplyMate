@@ -65,6 +65,22 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
     failed_filling_form: {
       color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
       icon: :x_circle
+    },
+    blocked_captcha: {
+      color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+      icon: :x_circle
+    },
+    blocked_requires_account: {
+      color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+      icon: :x_circle
+    },
+    blocked_login: {
+      color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+      icon: :x_circle
+    },
+    needs_review: {
+      color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+      icon: :sparkles
     }
   }.freeze
 

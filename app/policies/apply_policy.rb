@@ -21,6 +21,10 @@ class ApplyPolicy < ApplicationPolicy
     user.present?
   end
 
+  def retry?
+    user.present? && record.user_id == user.id
+  end
+
   class Scope < ApplicationPolicy::Scope
     def resolve
       scope.where(user:)

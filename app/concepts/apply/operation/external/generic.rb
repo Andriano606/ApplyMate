@@ -1,0 +1,286 @@
+# frozen_string_literal: true
+
+# Browser submission as a perceive→act→verify loop instead of one shot. The
+# first pass fills the pre-resolved inputs and presses submit; every following
+# iteration observes the page (validation errors, new wizard steps, dynamic
+# fields), asks the AI to plan actions — fill actions return ROLES, values
+# resolve through Apply::ValueResolver — executes them and re-checks the
+# deterministic submit signals. Blockers (captcha challenge, account/login
+# walls) stop the loop with a specific blocked_* status BEFORE any AI spend.
+class Apply::Operation::External::Generic < Apply::Operation::Base
+  MAX_ITERATIONS = 6
+  SUCCESS_TEXT   = /дяку|thank|success|отриман|received|надіслан|прийнят|submitted|applied/i
+  SUCCESS_URL    = /thank|success|confirm|applied/i
+  LOGIN_URL      = /login|signin|sign-in|auth/i
+
+  def start_status
+    :sending_cv
+  end
+
+  def error_status
+    :failed_sending_cv
+  end
+
+  def success_status
+    :completed
+  end
+
+  private
+
+  def run!(apply:, handler:, **)
+    @apply       = apply
+    @handler     = handler
+    @cv_tempfile = write_cv_tempfile
+
+    @browser    = live_browser || rebuild_session
+    initial_url = apply.resolved_url.presence || apply.external_url
+
+    initial_fill_and_submit
+    @browser.wait_for_idle(timeout: 15)
+
+    iteration = 0
+    loop do
+      state = @browser.observe_state
+      check_blockers!(state)
+      break if submitted?(state, initial_url)
+
+      iteration += 1
+      give_up!(state, "Form not submitted after #{MAX_ITERATIONS} iterations") if iteration > MAX_ITERATIONS
+
+      plan = plan_actions(state)
+      check_blocked_plan!(plan)
+      give_up!(state, 'AI returned no actions to progress the form') if plan['actions'].blank?
+
+      execute_actions(plan['actions'], state)
+      @browser.wait_for_idle
+    end
+  end
+
+  def cleanup
+    attach_screenshot # both success and failure — the screenshot is the evidence
+    @cv_tempfile&.close!
+    # handler owns the browser session and quits it after all steps
+  end
+
+  # ── Session ────────────────────────────────────────────────────────────────
+
+  def live_browser
+    browser = @handler&.browser
+    browser if browser&.alive?
+  end
+
+  # Job retry: the session FetchFields opened is gone. Re-open the page, replay
+  # the trigger click, re-snapshot and re-map stored values onto fresh handles.
+  def rebuild_session
+    browser = ApplyMate::Client::Browser.new
+    @handler.browser = browser
+
+    browser.navigate_to(@apply.external_url)
+
+    if @apply.trigger_selector.present?
+      raise "Trigger element not found or not visible: #{@apply.trigger_selector}" unless browser.click(@apply.trigger_selector)
+
+      browser.wait_for_idle
+    end
+
+    @fresh_snapshot = browser.snapshot_fields
+    browser
+  end
+
+  # ── First pass: pre-resolved values ────────────────────────────────────────
+
+  def initial_fill_and_submit
+    inputs = fillable_inputs
+
+    inputs.each do |input|
+      next if input['type'] == 'file' || input['value'].blank?
+
+      fill_input(input)
+    end
+
+    attach_cv(inputs)
+    @browser.attempt_recaptcha_refresh
+    click_submit
+  end
+
+  # Live path: filled_inputs carry valid handles. Rebuild path: re-map each
+  # stored input onto the fresh snapshot by name, then label, then position.
+  def fillable_inputs
+    stored = (@apply.filled_inputs || []).map { |i| i.to_h.stringify_keys }
+    return stored if @fresh_snapshot.nil?
+
+    fresh = (@fresh_snapshot['fields'] || []).map { |f| f.to_h.stringify_keys }
+    stored.map do |input|
+      match = fresh.find { |f| f['name'].presence && f['name'] == input['name'] } ||
+              fresh.find { |f| f['label'].presence && f['label'] == input['label'] } ||
+              fresh.find { |f| f['form_index'] == input['form_index'] }
+      match ? input.merge('handle' => match['handle'], 'selector' => match['selector']) : input
+    end
+  end
+
+  def fill_input(input)
+    if input['handle'].present?
+      @browser.fill_by_handle(input['handle'], input['value'].to_s, input['tag'].to_s)
+    else
+      @browser.fill_field(input['selector'], input['value'].to_s, input['tag'].to_s, form_index: input['form_index'])
+    end
+  end
+
+  def attach_cv(inputs)
+    return if @cv_tempfile.nil?
+
+    file_input = inputs.find { |i| i['type'] == 'file' }
+    return if file_input.nil?
+
+    if file_input['handle'].present?
+      @browser.attach_file_by_handle(file_input['handle'], @cv_tempfile.path)
+    else
+      @browser.attach_file(file_input, @cv_tempfile.path)
+    end
+  end
+
+  # A failed submit click is not fatal — multi-step wizards have no submit
+  # button on step one; the loop's AI plan presses the right button instead.
+  def click_submit
+    if @fresh_snapshot.nil? && @apply.submit_handle.present?
+      return if @browser.click_by_handle(@apply.submit_handle)
+    end
+
+    selector = @apply.submit_selector.presence || 'button[type="submit"]'
+    Rails.logger.info("Generic: submit click failed (#{selector}), leaving it to the loop") unless @browser.click(selector, text: @apply.submit_text)
+  end
+
+  # ── Blockers ───────────────────────────────────────────────────────────────
+
+  def check_blockers!(state)
+    raise BlockedError.new(:blocked_captcha, 'Captcha challenge on the page') if state['captcha']
+    raise BlockedError.new(:blocked_login, "Redirected to a login page: #{state['url']}") if state['url'].to_s.match?(LOGIN_URL)
+
+    visible_fields = Array(state['fields']).reject { |f| f['type'] == 'hidden' }
+    if state['password_field'] && visible_fields.size <= 3
+      raise BlockedError.new(:blocked_requires_account, 'The site requires creating an account')
+    end
+  end
+
+  # Automation gave up but the situation is recoverable by a human: store the
+  # last observed field IR for the review UI and mark the apply needs_review.
+  # The user answers the open fields (→ AnswerBank, source: manual) and retries.
+  def give_up!(state, message)
+    @apply.update!(review_fields: Array(state['fields']))
+    raise BlockedError.new(:needs_review, message)
+  end
+
+  def check_blocked_plan!(plan)
+    return unless plan['status'] == 'blocked'
+
+    case plan['blocked_reason']
+    when 'captcha_v2'        then raise BlockedError.new(:blocked_captcha, 'AI reported a captcha challenge')
+    when 'requires_account'  then raise BlockedError.new(:blocked_requires_account, 'AI reported an account wall')
+    when 'login_wall'        then raise BlockedError.new(:blocked_login, 'AI reported a login wall')
+    else raise 'AI reported the page cannot be automated'
+    end
+  end
+
+  # ── Submit verification ────────────────────────────────────────────────────
+
+  def submitted?(state, initial_url)
+    alerts = Array(state['alerts']).join(' ')
+    url    = state['url'].to_s
+
+    return true if alerts.match?(SUCCESS_TEXT)
+    return true if url.match?(SUCCESS_URL)
+    return true if !state['form_present'] && url != initial_url
+
+    # Form gone but no positive signal — ambiguous, AI is the tie-break.
+    return verify_with_ai! unless state['form_present']
+
+    false
+  end
+
+  def verify_with_ai!
+    result = ApplyMate::Ai::AiHandler.call(
+      prompt_instance:       Apply::Ai::Prompt::Browser::CheckSubmitResult.new(@browser.body),
+      response_schema_class: Apply::Ai::ResponseSchema::Browser::CheckSubmitResult,
+      ai_integration:        @apply.ai_integration
+    )
+    raise result['reason'].presence || 'Submit verification failed' unless result['success']
+
+    true
+  end
+
+  # ── AI planning and execution ──────────────────────────────────────────────
+
+  def plan_actions(state)
+    ApplyMate::Ai::AiHandler.call(
+      prompt_instance:       Apply::Ai::Prompt::PlanActions.new(state),
+      response_schema_class: Apply::Ai::ResponseSchema::PlanActions,
+      ai_integration:        @apply.ai_integration
+    )
+  end
+
+  def execute_actions(actions, state)
+    fields_by_handle = Array(state['fields']).map { |f| f.to_h.stringify_keys }.index_by { |f| f['handle'] }
+
+    actions.each do |action|
+      action = action.to_h.stringify_keys
+
+      case action['op']
+      when 'fill'   then execute_fill(action, fields_by_handle)
+      when 'select' then execute_select(action, fields_by_handle)
+      when 'upload' then @browser.attach_file_by_handle(action['handle'], @cv_tempfile.path) if @cv_tempfile
+      when 'click'
+        @browser.attempt_recaptcha_refresh if action['purpose'] == 'submit'
+        @browser.click_by_handle(action['handle'])
+      end
+    end
+  end
+
+  def execute_fill(action, fields_by_handle)
+    field = fields_by_handle[action['handle']]
+    return if field.nil?
+
+    field = field.merge('role' => action['role']) if action['role'].present?
+    value = value_resolver.resolve([ field ]).first['value']
+    @browser.fill_by_handle(field['handle'], value.to_s, field['tag'].to_s) if value.present?
+  end
+
+  def execute_select(action, fields_by_handle)
+    field = fields_by_handle[action['handle']]
+    @browser.fill_by_handle(action['handle'], action['value'].to_s, field ? field['tag'].to_s : 'select')
+  end
+
+  def value_resolver
+    @value_resolver ||= Apply::ValueResolver.new(
+      apply:        @apply,
+      prompt_class: Apply::Ai::Prompt::FillForm,
+      schema_class: Apply::Ai::ResponseSchema::FillForm
+    )
+  end
+
+  # ── Artifacts ──────────────────────────────────────────────────────────────
+
+  def attach_screenshot
+    return if @browser.nil? || @apply.nil? || @apply.screenshot.attached?
+
+    data = @browser.screenshot
+    return if data.blank?
+
+    @apply.screenshot.attach(
+      io:           StringIO.new(data),
+      filename:     "screenshot_#{@apply.id}.png",
+      content_type: 'image/png'
+    )
+  rescue StandardError => e
+    Rails.logger.error("Generic: screenshot capture failed: #{e.message}")
+  end
+
+  def write_cv_tempfile
+    return nil unless @apply.cv.attached?
+
+    tmp = Tempfile.new([ @apply.cv.filename.base, '.pdf' ])
+    tmp.binmode
+    @apply.cv.download { |chunk| tmp.write(chunk) }
+    tmp.flush
+    tmp
+  end
+end

@@ -17,13 +17,15 @@ RSpec.describe Apply::Handler::Dou do
       )
 
     # Gemini API — stubbed in call order:
-    #   1. CheckFormPage  (FetchExternalForm — does the PeopleForce page have a form?)
-    #   2. FillForm       (AI fills career_application_form fields)
-    #   3. GenerateCv     (AI produces HTML → Grover converts to PDF)
-    #   4. CheckSubmitResult (verifies the submit was successful)
+    #   1. CheckFormPage  (PrepareSession — page digest → does the page have a form?)
+    #   2. MapFields      (AI maps ambiguous fields to canonical roles)
+    #   3. FillForm       (generation batch: cover letter only)
+    #   4. GenerateCv     (AI produces HTML → Grover converts to PDF)
+    #   5. CheckSubmitResult (verifies the submit was successful)
     stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
       .to_return(
         gemini_check_form_page,
+        gemini_map_fields,
         gemini_fill_form,
         gemini_json_response(
           '```html' "\n" \
@@ -82,16 +84,66 @@ RSpec.describe Apply::Handler::Dou do
       expect(reloaded.status).to eq('completed')
     end
 
-    it 'navigates the browser to the DOU redirect URL for submission' do
+    it 'navigates the browser exactly once — fetch and submit share the session' do
       run_handler
-      expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT)
+      expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT).once
     end
 
-    it 'clicks the submit button with the Ukrainian label' do
+    it 'fills the form via live handles from the session snapshot' do
       run_handler
-      expect(browser).to have_received(:click)
-        .with(a_string_starting_with('button[type="submit"]'),
-              text: a_string_including('Застосувати'))
+      expect(browser).to have_received(:fill_by_handle).with(0, 'Jane Doe', 'input')
+      expect(browser).to have_received(:fill_by_handle).with(1, 'dev@example.com', 'input')
+    end
+
+    it 'submits via the stamped submit handle' do
+      run_handler
+      expect(browser).to have_received(:click_by_handle).with('submit')
+    end
+
+    it 'quits the browser exactly once, owned by the handler' do
+      run_handler
+      expect(browser).to have_received(:quit).once
+    end
+
+    it 'saves a form recipe for the employer host after completion' do
+      run_handler
+      recipe = FormRecipe.find_by(host: 'honeytech.peopleforce.io')
+      expect(recipe).to be_present
+      expect(recipe.success_count).to eq(1)
+      expect(recipe.field_map.map { |f| f['role'] }).to include('email', 'cv_file', 'full_name', 'cover_letter')
+    end
+
+    context 'on a second apply to the same employer (recipe replay)' do
+      let(:second_apply) do
+        Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:,
+                      status: :generating_cv)
+      end
+
+      before do
+        run_handler # first run learns the recipe
+
+        # Second run needs only the generation batch (cover letter) and the CV —
+        # CheckFormPage and MapFields are replaced by the recipe.
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(
+            gemini_fill_form,
+            gemini_json_response(
+              '```html' "\n" \
+              "<!DOCTYPE html>\n<html>\n<body>\n<h1>Jane Doe</h1>\n</body>\n</html>" \
+              "\n" '```'
+            )
+          )
+      end
+
+      it 'completes via the recipe without navigation or mapping AI calls' do
+        described_class.new(apply: second_apply).call
+
+        reloaded = second_apply.reload
+        expect(reloaded.status).to eq('completed')
+        expect(reloaded.error).to be_nil
+        expect(reloaded.fields_source).to eq('recipe')
+        expect(FormRecipe.find_by(host: 'honeytech.peopleforce.io').success_count).to eq(2)
+      end
     end
   end
 end

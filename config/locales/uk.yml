@@ -188,6 +188,12 @@ uk:
         user_profile: Профіль
       submit: Відгукнутись
       title: Новий відгук
+    retry:
+      enqueued: Відповіді збережено, відгук відправлено повторно
+      hint: Автоматика не змогла відповісти на ці питання форми. Заповніть їх — відповіді
+        збережуться у вашому профілі, і відгук буде надіслано повторно.
+      submit: Відповісти і повторити
+      title: Потрібні ваші відповіді
     show:
       back: До відгуків
       cv_tab_preview: Превью
@@ -209,6 +215,9 @@ uk:
       no_data: Дані відсутні
       title: Відгук
     status:
+      blocked_captcha: Заблоковано капчею
+      blocked_login: Потрібен вхід на сайт
+      blocked_requires_account: Потрібна реєстрація акаунта
       checking_applyble: Перевірка доступності
       completed: Завершено
       failed_checking_applyble: Помилка перевірки доступності
@@ -223,6 +232,7 @@ uk:
       fetching_form: Отримання форми
       filling_form: Заповнення форми
       generating_cv: Генерація резюме
+      needs_review: Потрібні відповіді
       sending_cv: Надсилання
   apply_mate:
     expandable_text:

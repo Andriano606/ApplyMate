@@ -17,15 +17,20 @@ class Apply < ApplicationRecord
   jsonb_accessor :form_data,
     action:           :string, # form action URL (resolved absolute)
     http_method:      :string, # HTTP method extracted from the form element ('post', 'get')
-    submit_selector:  :string, # CSS selector for the submit button
+    submit_selector:  :string, # CSS selector for the submit button (fallback when the live session is lost)
     submit_text:      :string, # visible text of the submit button, used for disambiguation
+    submit_handle:    :string, # data-am-field handle of the submit button (live browser session only)
     external_url:     :string, # canonical URL of the employer's application page
+    resolved_url:     :string, # final URL after following all redirects (External::Resolve)
+    ats:              :string, # detected ATS ('greenhouse', 'lever', …), nil for self-hosted forms
+    fields_source:    :string, # 'adapter' (ATS API) or 'browser' (live DOM snapshot)
     trigger_selector: :string, # CSS selector to click before the form appears (e.g. "Apply" button)
     cookies:          :string, # cookies captured at form-fetch time, forwarded on HTTP submission
-    inputs:           :value   # Array<{ name, selector, form_index, tag, type, label, placeholder, value, options? }>
+    inputs:           :value   # Array<{ name, selector, form_index, tag, type, label, placeholder, value, options?, handle? }> — handle is the data-am-field index, valid only within the browser session that produced it
 
   jsonb_accessor :filled_form_data,
-    filled_inputs: :value  # same shape as inputs, with AI-filled values
+    filled_inputs: :value, # same shape as inputs, with AI-filled values
+    review_fields: :value  # IR of the last observed state when Generic gave up — shown to the user for manual answers
 
   enum :apply_type, { unknown: 0, external: 1, internal: 2 }
 
@@ -44,6 +49,10 @@ class Apply < ApplicationRecord
     failed_generating_cv: 5,
     sending_cv: 3,
     failed_sending_cv: 6,
+    blocked_captcha: 18,
+    blocked_requires_account: 19,
+    blocked_login: 20,
+    needs_review: 21,
     completed: 4
   }
 
@@ -53,9 +62,14 @@ class Apply < ApplicationRecord
       sending_cv?
   end
 
+  def blocked?
+    blocked_captcha? || blocked_requires_account? || blocked_login?
+  end
+
   def failed?
     failed_checking_applyble? || failed_fetching_apply_type? || failed_fetching_details? ||
-      failed_fetching_form? || failed_filling_form? || failed_generating_cv? || failed_sending_cv?
+      failed_fetching_form? || failed_filling_form? || failed_generating_cv? ||
+      failed_sending_cv? || blocked?
   end
 
   private

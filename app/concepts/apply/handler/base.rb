@@ -21,6 +21,11 @@ class Apply::Handler::Base
     end
   end
 
+  # Shared browser session for external-apply steps: Resolve/PrepareSession open
+  # it, later steps (External::Generic) reuse the same live page, and the handler
+  # is the single owner that quits it — steps must never quit it themselves.
+  attr_accessor :browser
+
   def initialize(apply:)
     @apply = apply
   end
@@ -31,6 +36,8 @@ class Apply::Handler::Base
 
       step[:operation].call(apply: @apply, handler: self, **step[:options])
     end
+  ensure
+    browser&.quit
   end
 
   def cv_filename

@@ -53,6 +53,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
     t.index ["user_id"], name: "index_ai_integrations_on_user_id"
   end
 
+  create_table "answer_banks", force: :cascade do |t|
+    t.text "answer", null: false
+    t.datetime "created_at", null: false
+    t.text "question"
+    t.string "role", null: false
+    t.integer "source", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_profile_id", null: false
+    t.index ["user_profile_id", "question"], name: "index_answer_banks_on_user_profile_id_and_question"
+    t.index ["user_profile_id", "role"], name: "index_answer_banks_on_user_profile_id_and_role"
+    t.index ["user_profile_id"], name: "index_answer_banks_on_user_profile_id"
+  end
+
   create_table "api_tokens", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "last_used_at"
@@ -88,6 +101,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
     t.index ["user_id"], name: "index_applies_on_user_id"
     t.index ["user_profile_id"], name: "index_applies_on_user_profile_id"
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
+  end
+
+  create_table "form_recipes", force: :cascade do |t|
+    t.string "ats"
+    t.datetime "created_at", null: false
+    t.integer "fail_count", default: 0, null: false
+    t.jsonb "field_map", default: [], null: false
+    t.string "form_fingerprint", null: false
+    t.string "host", null: false
+    t.datetime "last_success_at"
+    t.jsonb "navigation", default: [], null: false
+    t.jsonb "submit_meta", default: {}, null: false
+    t.integer "success_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["host", "form_fingerprint"], name: "index_form_recipes_on_host_and_form_fingerprint", unique: true
+    t.index ["host"], name: "index_form_recipes_on_host"
   end
 
   create_table "hidden_vacancies", force: :cascade do |t|
@@ -397,6 +426,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_integrations", "users"
+  add_foreign_key "answer_banks", "user_profiles"
   add_foreign_key "api_tokens", "users"
   add_foreign_key "applies", "ai_integrations"
   add_foreign_key "applies", "prompts", column: "fill_form_prompt_id"
