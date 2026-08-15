@@ -56,6 +56,14 @@ RSpec.describe Apply::Bookmarklet do
       expect(body).not_to include('createElement(\'script\')')
     end
 
+    # Answers are embedded verbatim, so assert on the script itself: a cover
+    # letter may legitimately contain runs of spaces.
+    it 'strips comments and indentation — the code may be copied by hand' do
+      minified = described_class.minify(described_class::SCRIPT)
+      expect(minified).not_to include('//')
+      expect(minified.lines).to all(satisfy { |l| l == l.lstrip })
+    end
+
     it 'is nil when there is nothing to fill' do
       apply.update!(filled_inputs: [])
       expect(link).to be_nil

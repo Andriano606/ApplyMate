@@ -65,7 +65,8 @@ module Apply::Bookmarklet
         if (!needle) return null;
         var nodes = Array.prototype.slice.call(document.querySelectorAll('fieldset, div, section'));
         var hits = nodes.filter(function(n){ return norm(n.textContent).indexOf(needle) !== -1; });
-        return hits.length ? hits[hits.length - 1] : null;   // deepest match
+        // deepest match
+        return hits.length ? hits[hits.length - 1] : null;
       }
       function clickInBlock(question, value, el){
         var block = questionBlock(question) || (el ? el.parentElement : null);
@@ -89,7 +90,8 @@ module Apply::Bookmarklet
           if (!!el.checked !== !!a.checked) el.click();
           done++;
         } else if (a.type === 'combobox') {
-          combos.push({ el: el, a: a });   // handled last: the list needs time
+          // handled last: the list needs time to filter
+          combos.push({ el: el, a: a });
         } else if (a.type === 'radio' || a.type === 'button_group') {
           clickInBlock(a.question, a.value, el) ? done++ : missed.push(a.question);
         } else {
@@ -125,7 +127,18 @@ module Apply::Bookmarklet
     answers = answers_for(apply)
     return nil if answers.empty?
 
-    "javascript:#{ERB::Util.url_encode(SCRIPT.gsub('__ANSWERS__', answers.to_json))}"
+    "javascript:#{ERB::Util.url_encode(minify(SCRIPT).gsub('__ANSWERS__', answers.to_json))}"
+  end
+
+  # Comments and indentation triple the length of a link the user may have to
+  # copy by hand. Line breaks stay: the script relies on them where a statement
+  # ends without a semicolon.
+  def self.minify(script)
+    script.each_line
+          .reject { |line| line.strip.start_with?('//') }
+          .map { |line| line.strip }
+          .reject(&:empty?)
+          .join("\n")
   end
 
   def self.answers_for(apply)

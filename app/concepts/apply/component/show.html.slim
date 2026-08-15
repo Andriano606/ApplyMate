@@ -76,7 +76,21 @@
                        'border-gray-300 dark:border-gray-600 text-sm px-4 py-2 ' \
                        'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
         - if bookmarklet
-          p.text-xs.text-gray-500.dark:text-gray-400 = I18n.t('apply.manual.bookmarklet_hint')
+          .rounded-lg.bg-gray-50.dark:bg-gray-800.p-3.space-y-2(data-controller='clipboard')
+            p.text-xs.font-medium.text-gray-700.dark:text-gray-300
+              = I18n.t('apply.manual.bookmarklet_hint')
+            ol.list-decimal.list-inside.space-y-1.text-xs.text-gray-600.dark:text-gray-400
+              li = I18n.t('apply.manual.bookmarklet_step_bar')
+              li = I18n.t('apply.manual.bookmarklet_step_drag')
+              li = I18n.t('apply.manual.bookmarklet_step_run')
+            .flex.items-center.gap-2
+              button.rounded-md.border.px-2.py-1.text-xs(
+                type='button' data-action='clipboard#copy' data-clipboard-target='button'
+                class='border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300')
+                = I18n.t('apply.manual.bookmarklet_copy')
+              span.text-xs.text-gray-500.dark:text-gray-400
+                = I18n.t('apply.manual.bookmarklet_copy_hint')
+            .hidden(data-clipboard-target='source') = bookmarklet
         .divide-y.divide-gray-100.dark:divide-gray-700
           - manual_answers.each do |field|
             .flex.items-start.gap-3.py-2(data-controller='clipboard')
