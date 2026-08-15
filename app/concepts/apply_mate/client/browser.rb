@@ -702,6 +702,40 @@ class ApplyMate::Client::Browser
     JS
   end
 
+  # Types into a field the way a person does: focus, select what is there, then
+  # let the browser generate the input. Values written straight into the DOM are
+  # visible and even reach React's state, yet form libraries that track their own
+  # store from trusted events treat such a field as untouched — which is how a
+  # filled-in email still came back as "missing entry" on submit.
+  # Returns false when the field cannot be reached, so callers can fall back.
+  def type_by_handle(handle, value)
+    node = @page.at_css(%([data-am-field="#{handle}"]))
+    return false if node.nil?
+
+    node.focus
+    clear_field
+    @page.command('Input.insertText', text: value.to_s)
+    true
+  rescue StandardError => e
+    Rails.logger.warn("Browser: typing into #{handle} failed: #{e.message}")
+    false
+  end
+
+  # Real mouse click on a stamped element (checkbox, radio, option, button).
+  # Same reason as type_by_handle: a synthetic click is ignored by forms that
+  # only trust browser-generated events.
+  def click_element_by_handle(handle)
+    node = @page.at_css(%([data-am-field="#{handle}"]))
+    return false if node.nil?
+
+    node.scroll_into_view
+    node.click
+    true
+  rescue StandardError => e
+    Rails.logger.warn("Browser: clicking #{handle} failed: #{e.message}")
+    false
+  end
+
   # Fills an autocomplete: types the text with real keystrokes so the widget
   # filters its list, then clicks the matching option. Writing the value alone
   # leaves such a field "empty" for the site, which rejects it as unanswered.
@@ -726,6 +760,19 @@ class ApplyMate::Client::Browser
   rescue StandardError => e
     Rails.logger.warn("Browser: combobox selection failed: #{e.message}")
     nil
+  end
+
+  # Current state of a stamped checkbox — lets callers click only when the box
+  # is not already in the wanted state, and verify that a click landed.
+  def checkbox_checked?(handle)
+    @page.evaluate(<<~JS)
+      (function() {
+        var el = document.querySelector('[data-am-field="' + #{handle.to_s.to_json} + '"]');
+        return el ? !!el.checked : false;
+      })()
+    JS
+  rescue StandardError
+    false
   end
 
   # Checks or unchecks the checkbox stamped with the given handle. A checkbox is

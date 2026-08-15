@@ -9,6 +9,9 @@ RSpec.describe Apply::FormFiller do
   before do
     allow(browser).to receive(:fill_by_handle)
     allow(browser).to receive(:click_by_handle)
+    allow(browser).to receive(:type_by_handle).and_return(true)
+    allow(browser).to receive(:click_element_by_handle).and_return(false)
+    allow(browser).to receive(:checkbox_checked?).and_return(false)
     allow(browser).to receive(:set_checkbox_by_handle)
   end
 
@@ -49,7 +52,7 @@ RSpec.describe Apply::FormFiller do
       allow(browser).to receive(:select_from_combobox).with(7, 'Linkedin').and_return('Linkedin')
       filler.fill([ combo.merge('value' => 'Linkedin') ])
       expect(browser).to have_received(:select_from_combobox).with(7, 'Linkedin')
-      expect(browser).not_to have_received(:fill_by_handle)
+      expect(browser).not_to have_received(:type_by_handle)
     end
 
     # Closed lists rarely offer our wording ("DOU" among Preply's sources), and

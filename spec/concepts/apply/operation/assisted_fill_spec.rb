@@ -40,8 +40,8 @@ RSpec.describe Apply::Operation::AssistedFill, type: :operation do
 
   it 'fills the form with the answers already resolved for this apply' do
     expect(result).to be_success
-    expect(browser).to have_received(:fill_by_handle).with(0, 'Jane Doe', 'input')
-    expect(browser).to have_received(:fill_by_handle).with(1, 'dev@example.com', 'input')
+    expect(browser).to have_received(:type_by_handle).with(0, 'Jane Doe')
+    expect(browser).to have_received(:type_by_handle).with(1, 'dev@example.com')
   end
 
   it 'never presses submit — that is the user’s job' do

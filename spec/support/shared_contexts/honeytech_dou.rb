@@ -110,6 +110,11 @@ RSpec.shared_context 'honeytech dou' do
     allow(browser).to receive(:snapshot_fields).and_return(browser_snapshot)
     allow(browser).to receive(:fill_field)
     allow(browser).to receive(:fill_by_handle)
+    # Real CDP input is preferred; the double reports typing as working and
+    # clicking as impossible, so fallbacks stay exercised.
+    allow(browser).to receive(:type_by_handle).and_return(true)
+    allow(browser).to receive(:click_element_by_handle).and_return(false)
+    allow(browser).to receive(:checkbox_checked?).and_return(false)
     allow(browser).to receive(:attach_file)
     allow(browser).to receive(:attach_file_by_handle).and_return(true)
     allow(browser).to receive(:click_by_handle).and_return(true)

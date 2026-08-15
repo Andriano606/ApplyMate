@@ -32,7 +32,7 @@ RSpec.describe Apply::Operation::External::Generic do
     context 'when the first pass succeeds (deterministic success signal)' do
       it 'fills the pre-resolved inputs via handles, attaches the CV and submits' do
         run_operation
-        expect(browser).to have_received(:fill_by_handle).with(0, 'Jane Doe', 'input')
+        expect(browser).to have_received(:type_by_handle).with(0, 'Jane Doe')
         expect(browser).to have_received(:attach_file_by_handle).with(4, a_string_ending_with('.pdf'))
         expect(browser).to have_received(:click_by_handle).with('submit')
       end
@@ -76,7 +76,7 @@ RSpec.describe Apply::Operation::External::Generic do
 
       it 'fills the failed field with a bank value and re-submits' do
         run_operation
-        expect(browser).to have_received(:fill_by_handle).with(7, '+380501234567', 'input')
+        expect(browser).to have_received(:type_by_handle).with(7, '+380501234567')
         expect(browser).to have_received(:click_by_handle).with('submit').twice
         expect(apply.reload.status).to eq('completed')
       end
@@ -115,12 +115,12 @@ RSpec.describe Apply::Operation::External::Generic do
       it 'ticks a consent checkbox instead of writing a value into it' do
         run_operation
         expect(browser).to have_received(:set_checkbox_by_handle).with(2, true)
-        expect(browser).not_to have_received(:fill_by_handle).with(2, anything, anything)
+        expect(browser).not_to have_received(:type_by_handle).with(2, anything)
       end
 
-      it 'leaves an opt-out checkbox unticked when the answer is negative' do
+      it 'leaves an already-unticked opt-out checkbox alone' do
         run_operation
-        expect(browser).to have_received(:set_checkbox_by_handle).with(3, false)
+        expect(browser).not_to have_received(:set_checkbox_by_handle).with(3, anything)
       end
 
       it 'clicks the radio option matching the answer, not the first one' do
@@ -297,7 +297,7 @@ RSpec.describe Apply::Operation::External::Generic do
       it 'rebuilds the session and re-maps values onto fresh handles' do
         run_operation
         expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT)
-        expect(browser).to have_received(:fill_by_handle).with(10, 'Jane Doe', 'input')
+        expect(browser).to have_received(:type_by_handle).with(10, 'Jane Doe')
         expect(browser).to have_received(:click).with('button[type="submit"].btn.btn-primary', text: 'Застосувати')
         expect(apply.reload.status).to eq('completed')
       end

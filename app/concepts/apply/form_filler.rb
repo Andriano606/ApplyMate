@@ -62,11 +62,18 @@ class Apply::FormFiller
     return choose_option(input) if type == 'checkbox'
     return select_from_list(input) if type == 'combobox'
 
-    if input['handle'].present?
-      @browser.fill_by_handle(input['handle'], input['value'].to_s, input['tag'].to_s)
-    else
-      @browser.fill_field(input['selector'], input['value'].to_s, input['tag'].to_s, form_index: input['form_index'])
-    end
+    return type_text(input) if input['handle'].present?
+
+    @browser.fill_field(input['selector'], input['value'].to_s, input['tag'].to_s, form_index: input['form_index'])
+  end
+
+  # Real typing first — some forms only register input they can trust. The JS
+  # write stays as a fallback for fields the browser refuses to focus (offscreen
+  # or covered), where a visible value is better than none.
+  def type_text(input)
+    return if @browser.type_by_handle(input['handle'], input['value'].to_s)
+
+    @browser.fill_by_handle(input['handle'], input['value'].to_s, input['tag'].to_s)
   end
 
   # Autocomplete: the widget only counts a CHOSEN option, so typing the answer
@@ -97,7 +104,14 @@ class Apply::FormFiller
     handle = input['handle'].presence || Array(input['options']).first.to_h.stringify_keys['handle']
     return if handle.blank?
 
-    @browser.set_checkbox_by_handle(handle, CHECKED_VALUES.include?(input['value'].to_s.strip.downcase))
+    wanted = CHECKED_VALUES.include?(input['value'].to_s.strip.downcase)
+    return if @browser.checkbox_checked?(handle) == wanted
+
+    # A real click, so the form's own store sees it; fall back to setting the
+    # property when the box cannot be clicked (hidden behind a styled label).
+    return if @browser.click_element_by_handle(handle) && @browser.checkbox_checked?(handle) == wanted
+
+    @browser.set_checkbox_by_handle(handle, wanted)
   end
 
   # Button-built choice questions (Ashby's Yes/No) and radio groups are answered
@@ -115,6 +129,8 @@ class Apply::FormFiller
       Rails.logger.info("FormFiller: no option matching #{input['value'].inspect} for #{input['name'].inspect}")
       return
     end
+
+    return if @browser.click_element_by_handle(option['handle'])
 
     @browser.click_by_handle(option['handle'])
   end

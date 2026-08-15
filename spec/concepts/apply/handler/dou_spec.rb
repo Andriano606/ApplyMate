@@ -90,8 +90,8 @@ RSpec.describe Apply::Handler::Dou do
 
     it 'fills the form via live handles from the session snapshot' do
       run_handler
-      expect(browser).to have_received(:fill_by_handle).with(0, 'Jane Doe', 'input')
-      expect(browser).to have_received(:fill_by_handle).with(1, 'dev@example.com', 'input')
+      expect(browser).to have_received(:type_by_handle).with(0, 'Jane Doe')
+      expect(browser).to have_received(:type_by_handle).with(1, 'dev@example.com')
     end
 
     it 'submits via the stamped submit handle' do

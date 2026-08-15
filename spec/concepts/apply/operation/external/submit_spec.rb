@@ -54,7 +54,7 @@ RSpec.describe Apply::Operation::External::Submit do
 
       it 'delegates to the live browser session' do
         run_operation
-        expect(browser).to have_received(:fill_by_handle).with(0, 'Jane Doe', 'input')
+        expect(browser).to have_received(:type_by_handle).with(0, 'Jane Doe')
         expect(browser).to have_received(:click_by_handle).with('submit')
         expect(apply.reload.status).to eq('completed')
       end

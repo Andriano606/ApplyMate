@@ -39,7 +39,7 @@ RSpec.describe 'Assisted apply', type: :request do
 
       it 'fills the form and marks the apply as waiting for a manual submit' do
         send_request
-        expect(browser).to have_received(:fill_by_handle).with(0, 'Jane Doe', 'input')
+        expect(browser).to have_received(:type_by_handle).with(0, 'Jane Doe')
         expect(apply.reload.status).to eq('awaiting_manual_submit')
       end
     end
@@ -49,7 +49,7 @@ RSpec.describe 'Assisted apply', type: :request do
     context 'when signed out' do
       it 'refuses to touch the browser or the apply' do
         expect { send_request }.to raise_error(Pundit::NotAuthorizedError)
-        expect(browser).not_to have_received(:fill_by_handle)
+        expect(browser).not_to have_received(:type_by_handle)
         expect(apply.reload.status).to eq('needs_review')
       end
     end
