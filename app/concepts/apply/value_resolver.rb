@@ -26,6 +26,11 @@ class Apply::ValueResolver
 
   private
 
+  # Roles whose answer a form typically validates as a number. The DOM often
+  # gives no hint at all — PeopleForce's "Desired base compensation" is a plain
+  # text input — so the role decides, and "3000$ (gross)" becomes "3000".
+  NUMERIC_ROLES = %w[salary_expectation years_of_experience].freeze
+
   def resolve_field(field)
     role = field['role'].to_s
 
@@ -36,10 +41,26 @@ class Apply::ValueResolver
     return field.merge('value' => constant) unless constant.nil?
 
     value = bank_value(role, field) || profile_default(role)
-    return field.merge('value' => value) if value.present?
+    return field.merge('value' => numeric_value(field, value)) if value.present?
 
     @to_generate << field
     field
+  end
+
+  # Keeps the first number (decimals included) and drops everything else. Blank
+  # when there is no number at all — better an empty optional field than text a
+  # numeric field rejects.
+  def numeric_value(field, value)
+    return value unless numeric_field?(field)
+
+    value.to_s
+         .gsub(/(?<=\d)[\s\u00a0'](?=\d)/, '')   # thousands separators: 1 200 → 1200
+         .tr(',', '.')[/\d+(?:\.\d+)?/]
+         .to_s
+  end
+
+  def numeric_field?(field)
+    field['type'] == 'number' || NUMERIC_ROLES.include?(field['role'].to_s)
   end
 
   def bank_value(role, field)
@@ -89,7 +110,7 @@ class Apply::ValueResolver
       next field if value.blank?
 
       cache_answer(field, value.to_s)
-      field.merge('value' => value.to_s)
+      field.merge('value' => numeric_value(field, value.to_s))
     end
   end
 

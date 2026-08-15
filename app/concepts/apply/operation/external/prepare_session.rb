@@ -63,9 +63,15 @@ class Apply::Operation::External::PrepareSession < Apply::Operation::Base
     raise 'No form fields found on employer page' if fields.empty?
 
     submit = snapshot['submit'] || {}
+    # Point at the page the form is actually on: navigation may have moved us
+    # from the vacancy description to the application itself, and the stored URL
+    # is what "open the form" offers the user later.
+    form_url = browser.current_url.presence || apply.resolved_url
+
     # Accessor-based update — must not wipe keys other steps stored (ats, resolved_url).
     apply.update!(
       external_url:,
+      resolved_url:     form_url,
       trigger_selector:,
       submit_handle:    submit['handle'],
       submit_selector:  submit['selector'].presence || 'button[type="submit"]',

@@ -87,6 +87,16 @@ RSpec.describe Apply::Operation::External::PrepareSession do
       expect(reloaded.submit_text).to eq('Застосувати')
     end
 
+    # Navigation may move from the vacancy description to the application page;
+    # the stored URL is what "open the form" hands the user, and it pointed at
+    # the description, where there is no form to fill.
+    it 'stores the page the form is actually on' do
+      allow(browser).to receive(:current_url)
+        .and_return('https://acme.peopleforce.io/careers/v/1-dev/a/new')
+      run_operation
+      expect(apply.reload.resolved_url).to eq('https://acme.peopleforce.io/careers/v/1-dev/a/new')
+    end
+
     it 'stores the DOU redirect URL as external_url' do
       run_operation
       expect(apply.reload.external_url).to eq(HoneytechDou::DOU_REDIRECT)

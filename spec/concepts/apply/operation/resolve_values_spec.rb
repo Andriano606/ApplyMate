@@ -89,6 +89,45 @@ RSpec.describe Apply::Operation::ResolveValues do
       end
     end
 
+    # "3000$ (gross)" is a perfectly good answer for a person and gets rejected
+    # as "is not a number" by the form — and the DOM gives no hint, the field is
+    # a plain text input.
+    context 'with answers a form counts rather than reads' do
+      let(:inputs) do
+        [ build_input(name: 'salary', role: 'salary_expectation'),
+          build_input(name: 'years', role: 'years_of_experience'),
+          build_input(name: 'amount', role: 'custom_question', type: 'number'),
+          build_input(name: 'city', role: 'city') ]
+      end
+
+      before do
+        create(:answer_bank, user_profile:, role: 'salary_expectation', answer: '3000$ (gross)')
+        create(:answer_bank, user_profile:, role: 'years_of_experience', answer: 'близько 8 років')
+        create(:answer_bank, user_profile:, role: 'custom_question', question: 'amount', answer: '1 200,50 грн')
+        create(:answer_bank, user_profile:, role: 'city', answer: 'Lviv, Ukraine (Remote)')
+      end
+
+      it 'keeps just the number for a salary' do
+        run_operation
+        expect(filled_value('salary')).to eq('3000')
+      end
+
+      it 'keeps just the number for years of experience' do
+        run_operation
+        expect(filled_value('years')).to eq('8')
+      end
+
+      it 'normalises any field the form declares numeric, whatever its role' do
+        run_operation
+        expect(filled_value('amount')).to eq('1200.50')
+      end
+
+      it 'leaves ordinary text answers alone' do
+        run_operation
+        expect(filled_value('city')).to eq('Lviv, Ukraine (Remote)')
+      end
+    end
+
     context 'when the bank answer exists for a custom question' do
       let(:inputs) do
         [ build_input(name: 'react_years', role: 'custom_question',
