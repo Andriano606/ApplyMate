@@ -1,29 +1,6 @@
 # frozen_string_literal: true
 
 class ApplyMate::Client::Browser
-  # A shared Chrome the user can watch and drive (the chrome_vnc accessory, seen
-  # through noVNC). Set CHROME_HOST to route assisted sessions there; without it
-  # assisted mode opens a visible Chrome window next to the Rails process.
-  CHROME_HOST = ENV['CHROME_HOST'].presence
-  CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
-
-  # Where a human can watch that browser (noVNC web UI). Without it an assisted
-  # session fills a form the user cannot find — the browser runs inside the
-  # chrome_vnc container, not on their desktop — so fall back to the standard
-  # noVNC port on the same host rather than showing nothing.
-  NOVNC_PORT = ENV.fetch('CHROME_VIEW_PORT', 6081)
-
-  def self.viewer_url
-    return ENV['CHROME_VIEW_URL'] if ENV['CHROME_VIEW_URL'].present?
-    return nil if CHROME_HOST.blank?
-
-    "http://#{CHROME_HOST}:#{NOVNC_PORT}/vnc.html?autoconnect=1&resize=scale"
-  end
-
-  def self.shared_chrome?
-    CHROME_HOST.present?
-  end
-
   USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
   # Injected before every page load to mask the CDP automation markers that
@@ -53,26 +30,10 @@ class ApplyMate::Client::Browser
   # proxy: optional proxy URL string ("http://host:port" / "socks5://host:port").
   # Routes Chrome through it so Cloudflare-protected sites see the proxy IP while a
   # real browser solves the JS challenge that the raw HTTP client cannot.
-  # headless: false opens a window a person can see and finish by hand.
-  # shared: true joins the chrome_vnc instance the user watches through noVNC —
-  # OPT-IN per session: the automatic pipeline must keep launching its own
-  # throwaway Chrome even where CHROME_HOST is configured. Falls back to a local
-  # visible browser when the shared one cannot be reached.
-  def initialize(headless: true, shared: false, proxy: nil)
-    options = { window_size: [ 1920, 1080 ], process_timeout: 20 }
-
-    if shared && self.class.shared_chrome?
-      begin
-        @browser = Ferrum::Browser.new(**options, url: "http://#{CHROME_HOST}:#{CHROME_PORT}")
-        @shared  = true
-        return
-      rescue StandardError => e
-        Rails.logger.warn("Browser: shared Chrome unavailable (#{e.message}), launching a local one")
-      end
-    end
-
+  def initialize(headless: true, proxy: nil)
     @browser = Ferrum::Browser.new(
-      **options,
+      window_size: [ 1920, 1080 ],
+      process_timeout: 20,
       headless: headless,
       **proxy_option(proxy),
       browser_options: {
@@ -984,57 +945,22 @@ class ApplyMate::Client::Browser
     # ignore pending third-party requests
   end
 
-  # Closing a SHARED session must only close its own tab: quitting would kill the
-  # chrome_vnc browser everyone else (and every other apply) is using.
   def quit
-    if @shared
-      @page&.close
-    else
-      @browser.quit
-    end
+    @browser.quit
   rescue StandardError => e
     Rails.logger.warn("Browser: quit failed: #{e.message}")
   end
 
-  # Closes tabs left in the SHARED browser by earlier assisted sessions for the
-  # same page. Without this every retry (or app restart, which loses the session
-  # registry) leaves another copy of the form behind, and the user has to guess
-  # which tab is the live one.
-  def close_stale_tabs(url)
-    return if !@shared || url.blank?
+  def wait_for_idle(timeout: 10)
+    @page.network.wait_for_idle(timeout: timeout)
+  rescue Ferrum::TimeoutError, Ferrum::PendingConnectionsError
+    # ignore pending third-party requests
+  end
 
-    targets = (@browser.command('Target.getTargets')['targetInfos'] || []).select { |t| t['type'] == 'page' }
-    stale   = targets.select do |target|
-      target['url'].to_s.start_with?(url) && !(@page && target['targetId'] == @page.target_id)
-    end
-
-    # Chrome exits when its last page closes — that killed the shared browser
-    # once. Always leave one page standing.
-    stale.pop while targets.size - stale.size < 1 && stale.any?
-
-    stale.each { |target| @browser.command('Target.closeTarget', targetId: target['targetId']) }
+  def quit
+    @browser.quit
   rescue StandardError => e
-    Rails.logger.warn("Browser: could not close stale tabs: #{e.message}")
-  end
-
-  # Raises this session's tab in the shared browser so the person watching
-  # through noVNC lands on it instead of hunting through other tabs.
-  def bring_to_front
-    @page&.command('Page.bringToFront')
-  rescue StandardError => e
-    Rails.logger.warn("Browser: bring_to_front failed: #{e.message}")
-  end
-
-  # Leaves the browser running with its page open — the whole point of assisted
-  # mode, where the person reviews the filled form and presses submit. Never
-  # call quit on such a session: it would close the window under their hands.
-  def detach
-    @detached = true
-    self
-  end
-
-  def detached?
-    @detached == true
+    Rails.logger.warn("Browser: quit failed: #{e.message}")
   end
 
   private

@@ -27,13 +27,7 @@ class AppliesController < ApplicationController
     endpoint Apply::Operation::Destroy
   end
 
-  # Assisted mode: fill the form in a visible browser, user presses submit.
-  def assisted_fill
-    endpoint Apply::Operation::AssistedFill, Apply::Component::Show do |m|
-      m.success { |result| redirect_to apply_path(result.model), notice: result.notice[:text] }
-    end
-  end
-
+  # The user finished the application themselves — close the loop.
   def confirm_manual_submit
     endpoint Apply::Operation::ConfirmManualSubmit, Apply::Component::Show do |m|
       m.success { |result| redirect_to apply_path(result.model), notice: result.notice[:text] }

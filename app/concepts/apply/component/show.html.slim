@@ -91,27 +91,9 @@
                 class='border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
                 title=I18n.t('apply.manual.copy'))
                 = I18n.t('apply.manual.copy')
-
-  / Assisted mode — fill the form in a visible browser, user submits it
-  - if assisted_available?
-    = accordion(title: I18n.t('apply.assisted.title'), open: true) do
-      .px-6.py-4.space-y-3
-        p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.hint')
-        - if @apply.awaiting_manual_submit? && viewer_url
-          p.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.assisted.viewer_hint')
-        .flex.flex-wrap.items-center.gap-3
-          / Filling stays available after the first run: the tab can be lost to a
-          / restart, or the form may need doing over.
-          = helpers.button_to assisted_button_label, \
-              helpers.assisted_fill_apply_path(@apply), method: :post, \
-              class: assisted_button_class
-          - if @apply.awaiting_manual_submit?
-            - if viewer_url
-              = helpers.link_to I18n.t('apply.assisted.viewer'), viewer_url, target: '_blank', \
-                  rel: 'noopener noreferrer', \
-                  class: 'inline-flex items-center justify-center rounded-lg bg-indigo-600 ' \
-                         'text-white text-sm px-4 py-2 hover:bg-indigo-700 font-medium'
-            = helpers.button_to I18n.t('apply.assisted.submitted'), \
+        - unless @apply.completed?
+          .pt-2
+            = helpers.button_to I18n.t('apply.manual.submitted'), \
                 helpers.confirm_manual_submit_apply_path(@apply), method: :post, \
                 class: 'inline-flex items-center justify-center rounded-lg bg-green-600 ' \
                        'text-white text-sm px-4 py-2 hover:bg-green-700 font-medium'

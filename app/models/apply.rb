@@ -53,7 +53,6 @@ class Apply < ApplicationRecord
     blocked_requires_account: 19,
     blocked_login: 20,
     needs_review: 21,
-    awaiting_manual_submit: 22,
     completed: 4
   }
 
@@ -61,12 +60,6 @@ class Apply < ApplicationRecord
     checking_applyble? || fetching_apply_type? || fetching_details? ||
       fetching_form? || filling_form? || generating_cv? ||
       sending_cv?
-  end
-
-  # Assisted mode: the form is filled and open in a browser, waiting for the
-  # person to press submit.
-  def awaiting_manual_submit?
-    status == 'awaiting_manual_submit'
   end
 
   def blocked?

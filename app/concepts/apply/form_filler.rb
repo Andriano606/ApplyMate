@@ -1,10 +1,7 @@
 # frozen_string_literal: true
 
-# Types the resolved answers into a live page. Shared by the automatic loop
-# (External::Generic) and assisted mode, so a form a person finishes by hand is
-# filled exactly the way the robot would have filled it.
-#
-# Never submits — pressing submit belongs to the caller.
+# Types the resolved answers into a live page for the automatic submission loop
+# (External::Generic). Never submits — pressing submit belongs to the caller.
 class Apply::FormFiller
   # Values that mean "tick this box" once a consent question has been answered.
   CHECKED_VALUES = %w[on true yes 1 y так так. згоден agree accept checked].freeze
@@ -79,7 +76,7 @@ class Apply::FormFiller
   # Autocomplete: the widget only counts a CHOSEN option, so typing the answer
   # is not enough. When nothing in the list matches (our answer may simply not
   # be one of the offered sources), the typed text is cleared rather than left
-  # looking like an answer — assisted mode lets the user pick properly.
+  # looking like an answer.
   # Answers a fixed list may not contain verbatim ("DOU" among Preply's sources).
   OTHER_OPTIONS = [ 'Other', 'Інше' ].freeze
 

@@ -41,7 +41,6 @@ Rails.application.routes.draw do
   resources :applies, only: [ :index, :show, :new, :create, :destroy ] do
     member do
       post :retry, action: :retry_apply
-      post :assisted_fill
       post :confirm_manual_submit
     end
   end
