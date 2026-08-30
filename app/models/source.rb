@@ -13,6 +13,9 @@ class Source < ApplicationRecord
   validates :scraper, presence: true, inclusion: { in: SCRAPERS.map(&:to_s) }
 
   def build_scraper
-    self.scraper.constantize.new(self, ApplyMate::Client::AsyncHttp.new)
+    klass = scraper.constantize
+    # Use the source's own client (Dou → ImpersonateHttp) so the apply flow reaches a
+    # Cloudflare-protected vacancy page too, not just the sync — plain AsyncHttp gets 403.
+    klass.new(self, klass.http_client_class.new)
   end
 end

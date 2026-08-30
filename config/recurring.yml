@@ -12,6 +12,12 @@
 fetch_proxies:
   class: Proxy::Job::FetchProxies
   schedule: every day at 0am
+# Validates untested proxies (fast pure-Ruby AsyncHttp, no subprocess) and records the
+# per-source result — promotes live ones into the "working" tier the sync uses, and keeps
+# the pool fresh as proxies churn. Concurrency-limited to 1 (see Proxy::Job::Validate).
+validate_proxies:
+  class: Proxy::Job::Validate
+  schedule: every 5 minutes
 sync_vacancies:
   class: Vacancy::Job::SyncVacancies
   schedule: every day at 3am

@@ -2,21 +2,114 @@
 
 Операція повної синхронізації вакансій із зовнішніх джерел. Запускається через `Vacancy::Job::SyncVacancies` (SolidQueue).
 
+> **Один запуск за раз.** Джоба має `limits_concurrency to: 1` — in-memory пул проксі (див. нижче) володіє правилом «1 проксі раз на 5с» у пам'яті, а не в БД, тож два паралельні запуски ділили б проксі частіше за кулдаун.
+
+> **Дані живуть у RAM; БД чіпається лише за двома тригерами:** (1) пул проксі порожній → дотягнути пачку (`ProxyPool#refill`); (2) RAM-буфер вакансій досяг `VACANCY_BUFFER_LIMIT` → bulk-flush у БД + очищення буфера (`VacancyBuffer#maybe_flush`), плюс фінальний flush у кінці кожного джерела. Увесь доступ до БД іде через `DbGateway` → щонайбільше `DB_CONCURRENCY` фізичних з'єднань на весь джоб.
+
 ## Константи
 
 | Константа | Значення | Роль |
 |-----------|----------|------|
-| `WORKERS_PER_SOURCE` | 200 | Кількість файберів-воркерів на одне джерело |
+| `WORKERS_PER_SOURCE` | 50 | Файберів-воркерів на джерело у Phase 1 (лістинг) |
+| `DESCRIPTION_WORKERS` | 200 | Файберів-воркерів на джерело у Phase 2 (описи) — фаза суто HTTP-очікування, масштабується ширше |
 | `MAX_PAGES` | 2000 | Верхня межа черги сторінок |
 | `LAST_PAGE_CONFIRMATIONS` | 50 | Скільки разів сторінка має повернути порожній результат, щоб вважатись останньою |
+| `VACANCY_FETCH_BATCH` | 1000 | Розмір пачки вакансій, що тягнуться з БД у Phase 2 |
+| `VACANCY_BUFFER_LIMIT` | 1000 | Скільки скрапнутих вакансій тримається в RAM перед bulk-flush у БД (Phase 1) |
+| `DB_CONCURRENCY` | 5 | Макс. одночасних DB-операцій (== фізичних конектів) у `DbGateway` |
+| `HTTP_REQUEST_TIMEOUT` | 6 | request-таймаут клієнта для sync (агресивний — швидко відсіює мертві проксі) |
+| `HTTP_CONNECT_TIMEOUT` | 3 | TCP-connect таймаут клієнта для sync |
+
+`ProxyPool` (вкладений приватний клас):
+
+| Константа | Значення | Роль |
+|-----------|----------|------|
+| `BURST_LIMIT` | 15 | Скільки запитів проксі робить поспіль перед відпочинком |
+| `BURST_COOLDOWN` | 10 | Секунд відпочинку проксі після burst-серії (виміряно: ~15 запитів витримує CF) |
+| `MIN_LIVE` | 1000 | Поріг живих проксі, нижче якого запускається refill |
+| `BATCH_SIZE` | 3000 | Скільки `ready_for_use` проксі тягнеться за один load/refill |
+| `REFILL_INTERVAL` | 5 | Мінімум секунд між refill-ами, коли пул малий (захист від частих запитів у БД) |
+
+---
+
+## In-memory пул проксі (`ProxyPool`)
+
+Замість `Proxy.transaction { FOR UPDATE SKIP LOCKED }` на **кожен** запит, проксі завантажуються в пам'ять **пачками** і ротуються там. Один екземпляр `ProxyPool` створюється в `perform!` і спільний для обох фаз і всіх джерел.
+
+### Ротація
+
+- `acquire` — повертає `Proxy`, у якого `available_at <= now` і `!in_use`, без запиту в БД. Виставляє `in_use = true`. Якщо нічого вільного зараз — повертає `nil` (воркер чекає `sleep(0.2)` і ретраїть).
+- `release(proxy, status:)`:
+  - `:success` — буферизує +1 до лічильника успіхів; рахує запит у burst (відпочинок лише після `BURST_LIMIT`);
+  - `:keep` — порожня сторінка / транзієнтна помилка: рахує запит у burst, без статистики;
+  - `:dead` (`DeadProxyError`) — **видаляє** проксі з ротації (in-memory) і буферизує +1 до лічильника фейлів.
+- `exhausted?` — `@drained && @entries.empty?`: проксі скінчились і в БД, і в пам'яті → воркер виставляє `stop[0]`.
+
+Burst-модель кулдауну: проксі лишається одразу доступним (`available_at = now`), поки не зробить `BURST_LIMIT` (15) запитів, тоді відпочиває `now + BURST_COOLDOWN` (10с). Заміри: проксі витримує ~15 запитів через `ImpersonateHttp` проти Cloudflare, тоді його варто відпустити «відпочити». Лічильник `burst` — у `Entry`. Без запису `last_used_at` у БД на кожен запит.
+
+### Refill і flush
+
+`acquire` тригерить `refill`, коли `@entries` порожній **або** `live < MIN_LIVE` (не частіше за `REFILL_INTERVAL`). `refill` (під прапором `@refilling`, щоб лише один файбер тягнув):
+
+1. **flush** буферів (`flush_pending`): один `Proxy.upsert_all(rows, unique_by: :id, update_only: %i[success_count fail_count failed_at reliability])` замість N окремих `increment_succeeded!`/`increment_fail!`. Рядки складаються з завантажених у пам'ять проксі: `success_count = поточний + N`, `fail_count = поточний + кількість фейлів`, `failed_at = now` для тих, що падали, і перерахований `reliability`. **Видалення ненадійних проксі тут НЕ робиться** — це винесено в окрему джобу;
+2. дотягує `Proxy.ready_for_use.where.not(id: @known_ids).limit(BATCH_SIZE)` — `by_reliability` тепер сортує за **збереженою індексованою колонкою `proxies.reliability`** (success-ratio, default 1.0 для нетестованих), тож refill по ~1M проксі — index-scan + рання зупинка на LIMIT, а не full scan + sort. Колонка підтримується і в bulk-flush, і в модельних `increment_*`. Індекси: `reliability`, `failed_at`, `last_used_at`;
+3. якщо нічого не дотягнулось і пул порожній → `@drained = true`.
+
+`flush!` викликається один раз у `ensure` блоці `perform!` — допише всі залишкові лічильники одним upsert-ом.
+
+> **Видалення проксі — окремою джобою (TODO).** Раніше `increment_fail!` робив `destroy`, коли проксі перевищував `MAX_FAIL_RATIO`/`MAX_FAIL_COUNTER`. Тепер flush лише інкрементує `fail_count`/`failed_at`; фактичне прибирання ненадійних проксі має робити окрема джоба за тими ж порогами. Модельний `increment_fail!` (з логікою `destroy`) лишається для іншого коду/тестів, але цей пайплайн його більше не викликає.
+
+`increment_succeeded!` приймає необов'язковий аргумент-лічильник (`by = 1`), щоб флашити агреговані успіхи одним апдейтом на проксі.
+
+---
+
+## Невеликий пул з'єднань до БД (`DbGateway`)
+
+Під `ActiveSupport::IsolatedExecutionState.isolation_level = :fiber` (`config/initializers/async_active_record.rb`) gem `pg` **yield-иться** під час очікування відповіді Postgres. Тож N паралельних файберів, що роблять DB-запити, тримають N конекшенів **одночасно** — саме це раніше змушувало роздувати пул до 300 і переповнювало серверний `max_connections = 100`.
+
+`DbGateway` обмежує доступ до БД невеликим пулом через `Async::Semaphore.new(DB_CONCURRENCY)`:
+
+```ruby
+class DbGateway
+  def call(&block)
+    @semaphore.acquire do
+      ActiveRecord::Base.connection_pool.with_connection(&block)
+    end
+  end
+end
+```
+
+Один екземпляр створюється в `perform!` і передається в `ProxyPool.new(@db)`; операційний і ProxyPool-івський `with_db` делегують у `@db.call`. У критичній секції одночасно щонайбільше `DB_CONCURRENCY` файберів → пул відкриває щонайбільше стільки фізичних конектів. Пул (а не строго 1) потрібен, щоб **повільний refill проксі не блокував** швидкі читання/per-batch записи. Безпечно: джоба йде в окремому worker-процесі (не Puma), далеко під лімітом Postgres.
+
+**Семафор не реентрантний.** Правила, щоб уникнути deadlock:
+- жоден `with_db`-блок не містить вкладений `with_db`;
+- **HTTP-запити скрапера** (`fetch_listing` / `fetch_description`) завжди **поза** `with_db` — інакше повільний мережевий I/O серіалізував би всі файбери (а ще ризик deadlock);
+- ES `.import` (SELECT на вже взятому конекшені + HTTP bulk у ES) семафор повторно **не** входить → безпечно.
+
+---
+
+## RAM-буфер вакансій (`VacancyBuffer`, Phase 1)
+
+Замість запису в БД на **кожну** сторінку, скрапнуті вакансії складаються в RAM-буфер. Один `VacancyBuffer` на джерело (джерела йдуть паралельно, `clean_old_vacancies` — per-source).
+
+- `add(structs)` — `@buf.concat(structs)` (плейн `Array`: файбери однопотокові, `concat` не має точок yield).
+- `maybe_flush` — `flush`, якщо `@buf.size >= VACANCY_BUFFER_LIMIT`.
+- `flush` — yield-free swap `batch = @buf; @buf = []`, тоді `@db.call { persist(batch) }`. `@flushing` (дзеркало `@refilling` у ProxyPool) гарантує, що флашить лише один файбер, поки інші скрапають далі; appends, що приходять під час (yield-ливого) `persist`, потрапляють у новий `@buf` — нічого не губиться.
+- `persist` — `Vacancy.upsert_all(... unique_by: [:source_id, :external_id], update_only: [...])` + `Vacancy.where(...).import` (це перенесений сюди колишній `sync_vacancies_batch`).
+
+У `scrape_pages` гілка успішної сторінки: `buffer.add(listing)` → `external_ids.concat(...)` → `buffer.maybe_flush`. `external_ids` (лише рядки, мало пам'яті) накопичується окремо для `clean_old_vacancies`.
+
+**Фінальний flush — перед `clean_old_vacancies`.** Після `barrier.wait` (усі воркери джерела зупинились → буфер стабільний) викликається `buffer.flush`, і лише потім видаляються застарілі рядки — щоб БД відображала всі скрапнуті вакансії, коли запускається `where.not(external_id: active_ids)`.
+
+Retry/ensure-логіка (`proxy = nil` перед `retry`) буфера не торкається: повторно доданий лістинг дедуплікується через `uniq(&:external_id)` у `persist`.
 
 ---
 
 ## Дві фази виконання
 
 ```
-Phase 1: sync_source       — scrape listing pages  → upsert vacancies to DB + ES
-Phase 2: fetch_description — fetch description URLs → update vacancy.description + re-index
+Phase 1: sync_source       — scrape listing pages  → буфер у RAM → bulk upsert + ES (на ліміті/в кінці)
+Phase 2: fetch_description — fetch description URLs → buffer {id,description} → bulk UPDATE + re-index (на пачку)
 ```
 
 Фази виконуються **послідовно** (два окремі `Async do` блоки). Всередині кожної фази джерела обробляються **паралельно**.
@@ -36,24 +129,18 @@ end
 
 def sync_source(source)
   WORKERS_PER_SOURCE.times do
-    barrier.async { scrape_pages(...) }      # 200 fibers на source
+    barrier.async { scrape_pages(...) }      # WORKERS_PER_SOURCE fibers на source
   end
 end
 ```
 
 При N джерелах:
 - **N** файберів-coordin­ators (по одному на джерело)
-- **N × 200** файберів-воркерів (скрейпять сторінки)
-- **Разом: N × 201** файберів у Phase 1
+- **N × WORKERS_PER_SOURCE** файберів-воркерів (скрейпять сторінки)
 
 ### Phase 2
 
-Аналогічна структура:
-- **N** файберів-coordinators
-- **N × 200** файберів-воркерів (качають description)
-- **Разом: N × 201** файберів у Phase 2
-
-> При двох джерелах (наприклад Djinni + DOU) одночасно активні **402 файбери** в кожній фазі.
+Джерело обробляється **пачками**: вакансії тягнуться з БД курсором по `id` (`WHERE id > last_id LIMIT VACANCY_FETCH_BATCH`), щоб не матеріалізувати всю таблицю в пам'яті. На **кожну пачку** піднімається `DESCRIPTION_WORKERS` файберів (більше, ніж у Phase 1 — фаза суто HTTP-очікування). Воркери не пишуть у БД по одному: успішний опис іде в RAM-масив `updates << { id:, description: }`; після `barrier.wait` робиться **один bulk-UPDATE на пачку** (`bulk_update_descriptions` — `UPDATE … FROM (VALUES …)`, чистий UPDATE, не `upsert_all`, бо INSERT-гілка впала б на NOT NULL для id+description рядків), потім ES `.import` по пачці.
 
 ---
 
@@ -65,18 +152,21 @@ end
 
 | # | Умова | Причина |
 |---|-------|---------|
-| 1 | `stop[0]` є `true` | Глобальний stop-сигнал: хтось із воркерів виявив, що проксі в базі 0 |
+| 1 | `stop[0]` є `true` | Глобальний stop-сигнал: воркер отримав `nil` від пулу і `@proxy_pool.exhausted?` |
 | 2 | `pages_queue.shift` повернув `nil` | Черга вичерпана: всі сторінки 1..2000 вже розібрані |
 | 3 | `last_page[:boundary]` встановлений і `page >= last_page[:boundary]` | Підтверджено кінець списку; сторінки після межі не мають сенсу |
 
-Додатково на кожній ітерації: якщо проксі не вдалося захопити і БД порожня → `stop[0] = true` + `break`. Якщо проксі немає але є в базі → `sleep(5)` + `next` (файбер продовжує чекати).
+Додатково на кожній ітерації: якщо `@proxy_pool.acquire` повернув `nil` і `@proxy_pool.exhausted?` → `stop[0] = true` + `break`. Якщо пул просто зайнятий (всі проксі на кулдауні / у роботі) → `sleep(0.2)` + `next` (файбер чекає, поки звільниться проксі).
 
 ### `fetch_description_worker` воркер
 
 | # | Умова |
 |---|-------|
 | 1 | `stop[0]` є `true` |
-| 2 | `vacancies_queue.shift` повернув `nil` (всі вакансії оброблені) |
+| 2 | `skip[0]` є `true` (скрейпер повернув `'SKIPP'` — джерело не має окремих сторінок з описом, напр. Djinni) |
+| 3 | `vacancies_queue.shift` повернув `nil` (пачка оброблена) |
+
+`skip[0] = true` зупиняє не лише воркер, а й зовнішній цикл по пачках для цього джерела.
 
 ---
 
@@ -126,13 +216,15 @@ last_page[:boundary] = [last_page[:boundary], page].compact.min
 ## Обробка помилок у воркерах
 
 ```
-DeadProxyError  → proxy.increment_fail!       → release proxy → proxy = nil → page/vacancy back to queue → retry
-StandardError   → log error              → release proxy → proxy = nil → page/vacancy back to queue → retry
+DeadProxyError  → @proxy_pool.release(proxy, status: :dead)  → proxy = nil → page/vacancy back to queue → retry
+StandardError   → log error → @proxy_pool.release(proxy, status: :keep) → proxy = nil → page/vacancy back to queue → retry
 ```
 
-`retry` **не запускає** `ensure` — тому `proxy = nil` перед `retry` критичний: `ensure` бачить `nil` і пропускає подвійний release.
+`:dead` прибирає проксі з ротації і буферизує `increment_fail!` (фактичний запис у БД — під час наступного `refill` або фінального `flush!`). `:keep` лише ставить проксі на кулдаун, без зміни статистики.
 
-`stop[0] = true` при відсутності проксі в БД → після `barrier.wait` операція кидає `NoProxiesError`.
+`retry` **не запускає** `ensure` — тому `proxy = nil` перед `retry` критичний: `ensure` (який робить `release(..., status: :keep)`) бачить `nil` і пропускає подвійний release. Успішна гілка робить `release(..., status: :success)` і теж виставляє `proxy = nil`.
+
+`stop[0] = true` при вичерпаному пулі (`@proxy_pool.exhausted?`) → після `barrier.wait` операція кидає `NoProxiesError`.
 
 ---
 
@@ -146,15 +238,23 @@ clean_old_vacancies(source, external_ids)
 
 `clean_old_vacancies` видаляє всі вакансії цього джерела, яких **не було** серед зібраних `external_ids`. Захищений від порожнього запуску: `return if active_ids.empty?`.
 
-## Phase 2: результат після всіх воркерів
+## Phase 2: результат після кожної пачки
 
 ```ruby
-barrier.wait
+loop do
+  break if skip[0] || stop[0]
+  vacancies_queue = with_db { ...WHERE id > last_id LIMIT VACANCY_FETCH_BATCH... }
+  break if vacancies_queue.empty?
+  # ...DESCRIPTION_WORKERS файберів складають updates << {id:, description:}, barrier.wait...
+  with_db do
+    bulk_update_descriptions(updates.to_a)            # один UPDATE … FROM (VALUES …)
+    Vacancy.where(id: updates.map { |r| r[:id] }).import
+  end if updates.any?
+end
 raise NoProxiesError if stop[0]
-Vacancy.where(id: updated_ids).import if updated_ids.any?
 ```
 
-Bulk re-index в Elasticsearch лише оновлених вакансій.
+Bulk-UPDATE і re-index в Elasticsearch робляться **по пачці** (а не по одній вакансії / не один раз у кінці) — заради обмеження пам'яті й мінімуму DB-раундтрипів.
 
 ---
 
@@ -205,11 +305,13 @@ last_page[:counts].delete_if { |p, _| p < page }
 | Структура | Тип | Причина |
 |-----------|-----|---------|
 | `pages_queue` / `vacancies_queue` | `Array` | Файбери однопотокові — гонок немає |
-| `in_use_proxy_ids` | `Set` | Однопотоковий доступ |
-| `external_ids` / `updated_ids` | `Concurrent::Array` | `concat` / `<<` від N воркерів |
+| `@proxy_pool` | `ProxyPool` | Спільний пул проксі; стан (`@entries`, буфери) — звичайні колекції, бо файбери однопотокові |
+| `@db` | `DbGateway` | Семафор(`DB_CONCURRENCY`) обмежує доступ до БД → невеликий пул конектів |
+| `buffer` | `VacancyBuffer` | Per-source RAM-буфер скрапнутих вакансій; плейн `Array` + `@flushing`, бо файбери однопотокові |
+| `external_ids` (Phase 1) / `updates` (Phase 2) | `Concurrent::Array` | `concat` / `<<` від N воркерів |
 | `last_page` | `Hash` | Однопотоковий |
 | `scraped_pages` | `Set` | Сторінки, що повернули дані; однопотоковий доступ |
-| `stop` | `[false]` | Mutable ref — `stop[0] = true` видно всім воркерам |
+| `stop` / `skip` | `[false]` | Mutable ref — `stop[0]`/`skip[0] = true` видно всім воркерам |
 | `done` | `[0]` | Лічильник прогресу, безпечний без mutex |
 
 ---

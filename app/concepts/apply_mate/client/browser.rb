@@ -4,33 +4,69 @@ class ApplyMate::Client::Browser
   # CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
   # CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
 
-  # Injected before every page load to mask CDP automation markers that
-  # reCAPTCHA and other bot-detection scripts check.
+  USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+
+  # Injected before every page load to mask the CDP automation markers that
+  # reCAPTCHA, Cloudflare Turnstile, and similar bot-detection scripts inspect.
+  # Covers the signals from the Cloudflare-bypass guide: webdriver, plugins,
+  # languages, hardwareConcurrency, deviceMemory, WebGL vendor/renderer, window.chrome.
   STEALTH_SCRIPT = <<~JS.freeze
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    Object.defineProperty(navigator, 'plugins',   { get: () => [{ name: 'PDF Viewer' }, { name: 'Chrome PDF Viewer' }] });
-    Object.defineProperty(navigator, 'languages', { get: () => ['uk-UA', 'uk', 'en-US', 'en'] });
+    Object.defineProperty(navigator, 'webdriver',           { get: () => undefined });
+    Object.defineProperty(navigator, 'plugins',             { get: () => [{ name: 'PDF Viewer' }, { name: 'Chrome PDF Viewer' }] });
+    Object.defineProperty(navigator, 'languages',           { get: () => ['uk-UA', 'uk', 'en-US', 'en'] });
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+    Object.defineProperty(navigator, 'deviceMemory',        { get: () => 8 });
     if (!window.chrome) window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
+    const __getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(p) {
+      if (p === 37445) return 'Google Inc. (Intel)';
+      if (p === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics, OpenGL 4.1)';
+      return __getParameter.call(this, p);
+    };
   JS
 
-  def initialize
+  CHALLENGE_POLLS = 6 # how many times to re-check while the challenge solves
+  CHALLENGE_WAIT  = 3 # seconds between checks (≈18s total budget)
+
+  Response = ApplyMate::Client::Response
+
+  # proxy: optional proxy URL string ("http://host:port" / "socks5://host:port").
+  # Routes Chrome through it so Cloudflare-protected sites see the proxy IP while a
+  # real browser solves the JS challenge that the raw HTTP client cannot.
+  def initialize(proxy: nil)
     @browser = Ferrum::Browser.new(
-      # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
+      **proxy_option(proxy),
       browser_options: {
-        # Chrome's sandbox needs unprivileged user namespaces, which the
-        # staging host (Raspberry Pi) blocks via AppArmor. Without these flags
-        # Chrome dies on boot with "No usable sandbox!" and never exposes its
-        # CDP websocket, surfacing as Ferrum::ProcessTimeoutError ("Browser did
-        # not produce websocket url within 10 seconds"). Required when launching
-        # a local browser inside the container; harmless when set.
+        # Chrome's sandbox needs unprivileged user namespaces, which the staging
+        # host (Raspberry Pi) blocks via AppArmor. Without these flags Chrome dies
+        # on boot with "No usable sandbox!" and never exposes its CDP websocket.
         'no-sandbox': nil,
         # /dev/shm is only 64M inside the container — keep Chrome off it.
         'disable-dev-shm-usage': nil,
-        "disable-blink-features": 'AutomationControlled',
-        "user-agent": 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        'disable-blink-features': 'AutomationControlled',
+        # Helps when Cloudflare Turnstile renders inside a cross-origin frame.
+        'disable-features': 'IsolateOrigins,site-per-process',
+        'user-agent': USER_AGENT
       }
     )
+  end
+
+  # Drop-in replacement for ApplyMate::Client::AsyncHttp#get for Cloudflare-protected
+  # GET pages: navigates with a real browser, solving the "Just a moment…" JS
+  # challenge (reloading a few times to let it clear), and returns a Response whose
+  # #body is the rendered HTML. status is 200 once the challenge clears, 403 if it
+  # never does. Scrapers that only read response.body (e.g. Dou#fetch_description)
+  # can use a Browser instance as their client unchanged. NOTE: #post is unsupported.
+  def get(url, headers: {}, **)
+    page = new_page
+    page.headers.set(headers) if headers.present?
+    body    = load_past_cloudflare(page, url)
+    cleared = !cloudflare_challenge?(body)
+    cookies = @browser.cookies.all.map { |_, c| "#{c.name}=#{c.value}" }
+    Response.new(body, { 'set-cookie' => cookies }, cleared ? 200 : 403, current_url(page) || url)
+  ensure
+    page&.close
   end
 
   # Page lifecycle contract: fetch_rendered and click_and_fetch open AND close @page
@@ -237,6 +273,55 @@ class ApplyMate::Client::Browser
   end
 
   private
+
+  def proxy_option(proxy)
+    return {} if proxy.blank?
+
+    uri  = URI.parse(proxy.to_s)
+    type = uri.scheme.to_s.start_with?('socks') ? 'socks5' : 'http'
+    { proxy: { host: uri.host, port: uri.port.to_s, type: type } }
+  end
+
+  # Navigates to url and, while Cloudflare keeps serving its "Just a moment…"
+  # interstitial, waits for the JS challenge to auto-solve — re-checking the body
+  # up to CHALLENGE_POLLS times. We do NOT reload: a reload restarts the challenge
+  # and interrupts a solve that was about to complete. Returns the final rendered
+  # body (still a challenge page if it never clears within the budget).
+  def load_past_cloudflare(page, url)
+    goto(page, url)
+    body  = body_of(page)
+    polls = 0
+    while cloudflare_challenge?(body) && polls < CHALLENGE_POLLS
+      polls += 1
+      sleep CHALLENGE_WAIT
+      body = body_of(page)
+    end
+    body
+  end
+
+  def goto(page, url)
+    page.goto(url)
+  rescue Ferrum::PendingConnectionsError
+    # ignore pending third-party requests (trackers, CF beacons)
+  ensure
+    page.network.wait_for_idle(timeout: 10) rescue nil
+  end
+
+  def cloudflare_challenge?(body)
+    body.present? && Response::CLOUDFLARE_MARKERS.any? { |marker| body.include?(marker) }
+  end
+
+  def body_of(page)
+    page.body
+  rescue StandardError
+    ''
+  end
+
+  def current_url(page)
+    page.current_url
+  rescue StandardError
+    nil
+  end
 
   def new_page
     page = @browser.create_page
