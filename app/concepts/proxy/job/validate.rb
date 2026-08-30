@@ -7,7 +7,10 @@
 class Proxy::Job::Validate < ApplicationJob
   queue_as :default
 
-  limits_concurrency to: 1, key: 'proxy_validate'
+  # Scheduled every 5 minutes and bounded to a few minutes of probing; hold the
+  # semaphore well past that so a slow run cannot overlap itself (the 3-minute
+  # default expired mid-run).
+  limits_concurrency to: 1, key: 'proxy_validate', duration: 15.minutes
 
   def perform(limit: Proxy::Operation::Validate::DEFAULT_LIMIT, scope: :untested)
     Proxy::Operation::Validate.call(limit: limit, scope: scope)

@@ -195,6 +195,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     # Sync (this runs before the operation's own Async blocks).
     def seed_initial
       candidates = with_db { candidate_proxies }
+      mark_known(candidates)
       live = VALIDATE_PROVEN_ON_START ? Sync { probe_alive(candidates) } : candidates
       add_entries(live, monotonic)
       @last_refill_at = monotonic
@@ -229,6 +230,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       @refilling = true
 
       candidates = with_db { flush_pending; candidate_proxies }
+      mark_known(candidates)
       live = if candidates.empty? || !VALIDATE_PROVEN_ON_START
         candidates
       else
@@ -266,6 +268,16 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
            .limit(DISCOVERY_BATCH).to_a
     end
 
+    # Every candidate we have already looked at — live or not. `candidate_proxies`
+    # excludes these, so a proxy that fails `probe_alive` is not re-selected on the
+    # next refill. Without this only *live* proxies were remembered, so a pool whose
+    # candidates were all dead re-queried and re-probed the same list forever:
+    # `candidates` never went empty, `@drained` never flipped, `exhausted?` never
+    # returned true and every worker fiber span on `sleep(0.2)` until the job was killed.
+    def mark_known(proxies)
+      @known_ids.merge(proxies.map(&:id))
+    end
+
     def add_entries(proxies, now)
       proxies.each do |proxy|
         next if @by_id.key?(proxy.id)
@@ -282,41 +294,42 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     def flush_pending
       return if @pending_succ.empty? && @pending_fail.empty?
 
-      now      = Time.current
-      ids      = (@pending_succ.keys + @pending_fail).map(&:id).uniq
-      existing = ProxySourceStat.where(source_id: @source.id, proxy_id: ids).index_by(&:proxy_id)
-      rows     = {}
+      # Yield-free swap. `release` keeps appending while the upsert below suspends
+      # this fiber; detaching the buffers first means those counters stay queued for
+      # the next flush instead of being wiped by a `clear` that never saw them.
+      succ, @pending_succ  = @pending_succ, Hash.new(0)
+      fails, @pending_fail = @pending_fail, []
 
-      @pending_succ.each do |proxy, count|
-        row = (rows[proxy.id] ||= base_row(proxy, existing[proxy.id]))
+      now  = Time.current
+      rows = {}
+
+      succ.each do |proxy, count|
+        row = (rows[proxy.id] ||= delta_row(proxy))
         row[:success_count] += count
       end
 
-      @pending_fail.each do |proxy|
-        row = (rows[proxy.id] ||= base_row(proxy, existing[proxy.id]))
+      fails.each do |proxy|
+        row = (rows[proxy.id] ||= delta_row(proxy))
         row[:fail_count] += 1
         row[:failed_at]   = now
       end
 
+      # Only used for the INSERT branch; the UPDATE branch recomputes from the
+      # summed totals (see ProxySourceStat.apply_deltas!).
       rows.each_value { |row| row[:reliability] = ProxySourceStat.reliability_for(row[:success_count], row[:fail_count]) }
 
-      ProxySourceStat.upsert_all(rows.values, unique_by: %i[proxy_id source_id],
-                                              update_only: %i[success_count fail_count failed_at reliability],
-                                              record_timestamps: true)
-
-      @pending_succ.clear
-      @pending_fail.clear
+      ProxySourceStat.apply_deltas!(rows.values)
     end
 
-    # Starting row from the current per-source stat (or zeros if none yet).
-    def base_row(proxy, stat)
+    # A zeroed increment row for this (proxy, source) pair.
+    def delta_row(proxy)
       {
         proxy_id:      proxy.id,
         source_id:     @source.id,
-        success_count: stat&.success_count || 0,
-        fail_count:    stat&.fail_count || 0,
-        failed_at:     stat&.failed_at,
-        reliability:   stat&.reliability || 1.0
+        success_count: 0,
+        fail_count:    0,
+        failed_at:     nil,
+        reliability:   1.0
       }
     end
 
@@ -355,7 +368,14 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       batch = @buf # yield-free swap: no fiber interleaves between these two lines,
       @buf  = []   # so appends arriving during @db.call land in the fresh buffer.
 
-      @db.call { persist(batch) }
+      begin
+        @db.call { persist(batch) }
+      rescue StandardError
+        # Put the batch back before re-raising: its pages are already in
+        # `scraped_pages`, so a dropped batch is silently lost scraping work.
+        @buf.concat(batch)
+        raise
+      end
     ensure
       @flushing = false
     end

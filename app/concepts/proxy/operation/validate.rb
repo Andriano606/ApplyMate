@@ -93,31 +93,28 @@ class Proxy::Operation::Validate < ApplyMate::Operation::Base
     false
   end
 
+  # One probe result per (proxy, source) as an *increment*. SyncVacancies flushes its
+  # own counters into the same rows while this runs, so the totals are summed SQL-side
+  # rather than read here and written back (which dropped the other writer's counts).
   def record(candidates, sources, alive_by_source)
-    now      = Time.current
-    existing = ProxySourceStat
-               .where(proxy_id: candidates.map(&:id), source_id: sources.map(&:id))
-               .index_by { |stat| [ stat.proxy_id, stat.source_id ] }
+    now = Time.current
 
     rows = candidates.flat_map do |proxy|
       sources.map do |source|
-        stat  = existing[[ proxy.id, source.id ]]
         alive = alive_by_source[source.id].include?(proxy.id)
-        succ  = (stat&.success_count || 0) + (alive ? 1 : 0)
-        fail  = (stat&.fail_count || 0) + (alive ? 0 : 1)
+        succ  = alive ? 1 : 0
+        fail  = alive ? 0 : 1
         {
           proxy_id:      proxy.id,
           source_id:     source.id,
           success_count: succ,
           fail_count:    fail,
-          failed_at:     alive ? stat&.failed_at : now,
+          failed_at:     alive ? nil : now,
           reliability:   ProxySourceStat.reliability_for(succ, fail)
         }
       end
     end
 
-    ProxySourceStat.upsert_all(rows, unique_by: %i[proxy_id source_id],
-                                     update_only: %i[success_count fail_count failed_at reliability],
-                                     record_timestamps: true)
+    ProxySourceStat.apply_deltas!(rows)
   end
 end
