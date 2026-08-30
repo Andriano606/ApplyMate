@@ -10,8 +10,8 @@
 
 | Константа | Значення | Роль |
 |-----------|----------|------|
-| `WORKERS_PER_SOURCE` | 50 | Файберів-воркерів на джерело у Phase 1 (лістинг) |
-| `DESCRIPTION_WORKERS` | 200 | Файберів-воркерів на джерело у Phase 2 (описи) — фаза суто HTTP-очікування, масштабується ширше |
+| `WORKERS_PER_SOURCE` | 100 | Файберів-воркерів на джерело у Phase 1 (лістинг) |
+| `DESCRIPTION_WORKERS` | 140 | Файберів-воркерів на джерело у Phase 2 (описи) — фаза суто HTTP-очікування, масштабується ширше |
 | `MAX_PAGES` | 2000 | Верхня межа черги сторінок |
 | `LAST_PAGE_CONFIRMATIONS` | 50 | Скільки разів сторінка має повернути порожній результат, щоб вважатись останньою |
 | `VACANCY_FETCH_BATCH` | 1000 | Розмір пачки вакансій, що тягнуться з БД у Phase 2 |
@@ -25,9 +25,11 @@
 | Константа | Значення | Роль |
 |-----------|----------|------|
 | `BURST_LIMIT` | 15 | Скільки запитів проксі робить поспіль перед відпочинком |
-| `BURST_COOLDOWN` | 10 | Секунд відпочинку проксі після burst-серії (виміряно: ~15 запитів витримує CF) |
-| `MIN_LIVE` | 1000 | Поріг живих проксі, нижче якого запускається refill |
-| `BATCH_SIZE` | 3000 | Скільки `ready_for_use` проксі тягнеться за один load/refill |
+| `Scraper.burst_cooldown` | 10 | Секунд відпочинку проксі після burst-серії (не константа операції — метод скрейпера) |
+| `MIN_LIVE` | 10 | Поріг живих проксі, нижче якого запускається refill |
+| `BATCH_SIZE` | 1500 | Скільки перевірених (`proxy_source_stats.success_count > 0`) проксі тягнеться за один load/refill |
+| `DISCOVERY_BATCH` | 300 | Скільки нетестованих проксі тягнеться, щоб bootstrap-нути пул без жодної перевіреної |
+| `VALIDATION_CONCURRENCY` | 250 | Паралельних live-проб (`AsyncHttp`) при seed/refill |
 | `REFILL_INTERVAL` | 5 | Мінімум секунд між refill-ами, коли пул малий (захист від частих запитів у БД) |
 
 ---
@@ -51,8 +53,8 @@ Burst-модель кулдауну: проксі лишається одраз�
 
 `acquire` тригерить `refill`, коли `@entries` порожній **або** `live < MIN_LIVE` (не частіше за `REFILL_INTERVAL`). `refill` (під прапором `@refilling`, щоб лише один файбер тягнув):
 
-1. **flush** буферів (`flush_pending`): один `Proxy.upsert_all(rows, unique_by: :id, update_only: %i[success_count fail_count failed_at reliability])` замість N окремих `increment_succeeded!`/`increment_fail!`. Рядки складаються з завантажених у пам'ять проксі: `success_count = поточний + N`, `fail_count = поточний + кількість фейлів`, `failed_at = now` для тих, що падали, і перерахований `reliability`. **Видалення ненадійних проксі тут НЕ робиться** — це винесено в окрему джобу;
-2. дотягує `Proxy.ready_for_use.where.not(id: @known_ids).limit(BATCH_SIZE)` — `by_reliability` тепер сортує за **збереженою індексованою колонкою `proxies.reliability`** (success-ratio, default 1.0 для нетестованих), тож refill по ~1M проксі — index-scan + рання зупинка на LIMIT, а не full scan + sort. Колонка підтримується і в bulk-flush, і в модельних `increment_*`. Індекси: `reliability`, `failed_at`, `last_used_at`;
+1. **flush** буферів (`flush_pending`): один `ProxySourceStat.apply_deltas!(rows)`. Рядки несуть **інкременти**, не абсолютні значення — лічильники додаються на боці SQL (`success_count = proxy_source_stats.success_count + EXCLUDED.success_count`), бо ті самі рядки паралельно пише `Proxy::Operation::Validate`, і read-modify-write губив чужі інкременти. Буфери відчіплюються yield-free swap-ом перед записом і повертаються назад, якщо upsert впав. **Видалення ненадійних проксі тут НЕ робиться** — це винесено в окрему джобу;
+2. дотягує кандидатів (`candidate_proxies`): проксі, що працюють **для цього джерела** — join на `proxy_source_stats` з `success_count > 0`, сорт за індексованими `proxy_source_stats.reliability, success_count`, `LIMIT BATCH_SIZE`. Якщо перевірених для джерела ще нема — bootstrap-гілка тягне нетестовані через `NOT EXISTS` anti-join (`LIMIT DISCOVERY_BATCH`); `NOT IN (subquery)` тут робив seq scan по ~1M рядків. Усі оглянуті кандидати (живі й мертві) йдуть у `@known_ids`, інакше refill вічно перевибирав би той самий мертвий список;
 3. якщо нічого не дотягнулось і пул порожній → `@drained = true`.
 
 `flush!` викликається один раз у `ensure` блоці `perform!` — допише всі залишкові лічильники одним upsert-ом.

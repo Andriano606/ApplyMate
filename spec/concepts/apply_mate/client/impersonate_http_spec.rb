@@ -8,6 +8,10 @@ RSpec.describe ApplyMate::Client::ImpersonateHttp do
   def stub_curl(body: '<html>ok</html>', headers: "HTTP/1.1 200 OK\r\n", code: 200, success: true)
     allow(Open3).to receive(:capture3) do |*args|
       @captured = args
+      # Read the request body while the tempfile still exists — `run` unlinks it in
+      # its ensure block before the example gets a chance to look.
+      idx = args.index('--data-binary')
+      @request_body = idx ? File.read(args[idx + 1].delete_prefix('@')) : nil
       File.write(args[args.index('-o') + 1], body)
       File.write(args[args.index('-D') + 1], headers)
       status = instance_double(Process::Status, success?: success, exitstatus: success ? 0 : 28)
@@ -90,13 +94,34 @@ RSpec.describe ApplyMate::Client::ImpersonateHttp do
   end
 
   describe '#post' do
-    it 'sends POST with the body via --data-binary' do
+    it 'sends POST with the body from a file via --data-binary' do
       stub_curl(code: 201)
       response = described_class.new.post('https://x', body: 'count=40')
 
       expect(@captured).to include('-X', 'POST')
-      expect(@captured[@captured.index('--data-binary') + 1]).to eq('count=40')
+      # The body goes through a file (@path), never argv — a multipart payload carries
+      # a binary PDF that would exceed ARG_MAX and lose NUL bytes as an argument.
+      expect(@captured[@captured.index('--data-binary') + 1]).to start_with('@')
+      expect(@request_body).to eq('count=40')
       expect(response.status).to eq(201)
+    end
+  end
+
+  describe '#post_multipart' do
+    it 'builds a multipart body, sets the boundary content type and does not follow redirects' do
+      stub_curl(code: 302)
+      response = described_class.new.post_multipart('https://x', payload: { 'name' => 'Ada' })
+
+      expect(@captured).to include('-X', 'POST')
+      expect(@captured).not_to include('-L')
+
+      headers = @captured.each_cons(2).select { |flag, _| flag == '-H' }.map(&:last)
+      boundary_header = headers.find { |h| h.start_with?('Content-Type:') }
+      expect(boundary_header).to match(%r{multipart/form-data; boundary=----RubyMultipart})
+
+      expect(@request_body).to include('Content-Disposition: form-data; name="name"')
+      expect(@request_body).to include('Ada')
+      expect(response.status).to eq(302)
     end
   end
 end

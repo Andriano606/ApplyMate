@@ -11,11 +11,11 @@ RSpec.describe Apply::Operation::SendApply::Http do
   context 'DOU internal apply (Coidea Agency)' do
     include_context 'coidea dou'
 
-    let(:http_client) { instance_double(ApplyMate::Client::AsyncHttp) }
+    let(:http_client) { instance_double(ApplyMate::Client::ImpersonateHttp) }
     let(:handler)     { instance_double(Apply::Handler::Base) }
 
     before do
-      allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
+      allow(ApplyMate::Client::ImpersonateHttp).to receive(:new).and_return(http_client)
       allow(handler).to receive(:build_payload).and_return(
         'csrfmiddlewaretoken' => 'oT3J2ws9iVPG6NQGwgzRo2N0CGJ428nE87IOzxDNiX5OP907lcKlRKTxNt9843KR',
         'descr'               => 'I am an experienced UI/UX designer.'

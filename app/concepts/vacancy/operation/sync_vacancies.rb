@@ -318,7 +318,15 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       # summed totals (see ProxySourceStat.apply_deltas!).
       rows.each_value { |row| row[:reliability] = ProxySourceStat.reliability_for(row[:success_count], row[:fail_count]) }
 
-      ProxySourceStat.apply_deltas!(rows.values)
+      begin
+        ProxySourceStat.apply_deltas!(rows.values)
+      rescue StandardError
+        # Re-queue the detached counters so a failed upsert doesn't silently discard
+        # them (same restore-on-error contract as VacancyBuffer#flush).
+        succ.each { |proxy, count| @pending_succ[proxy] += count }
+        @pending_fail.concat(fails)
+        raise
+      end
     end
 
     # A zeroed increment row for this (proxy, source) pair.
@@ -465,11 +473,13 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       end
 
       barrier.wait
-      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
 
-      # Drain whatever is still buffered before deleting stale rows, so the DB
-      # reflects every scraped vacancy when clean_old_vacancies runs.
+      # Drain the buffer BEFORE deciding the source failed. It holds up to
+      # VACANCY_BUFFER_LIMIT already-scraped vacancies, and `perform!`'s ensure only
+      # flushes proxy counters — raising first threw that work away.
       buffer.flush
+
+      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
 
       # external_ids could have duplicates
       log(event: 'vacancy_sync_listing_summary', session_id: @session_id, source: source.name,

@@ -18,4 +18,10 @@ class Source < ApplicationRecord
     # Cloudflare-protected vacancy page too, not just the sync — plain AsyncHttp gets 403.
     klass.new(self, klass.http_client_class.new)
   end
+
+  # The HTTP client this source must be talked to with, for callers that need raw
+  # requests rather than a scraper (the apply pipeline fetches the form and POSTs it).
+  def http_client(**options)
+    scraper.constantize.http_client_class.new(**options)
+  end
 end

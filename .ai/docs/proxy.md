@@ -9,12 +9,20 @@ aggressive), so reliability is tracked **per (proxy, source)**, not globally.
   with `success_count`, `fail_count`, `failed_at`, `reliability`. Model:
   `ProxySourceStat` (`ready_for_use` / `by_reliability` scopes, `reliability_for`).
 - **`Proxy::Operation::Validate`** — probes a batch of proxies against **each** source's
-  `base_url`, **using that source's own client** (`Scraper.http_client_class`: Cloudflare
-  sources like Dou use `ImpersonateHttp`, others `AsyncHttp`), and accepts only **2xx/3xx**.
-  Upserts the per-source result (reachable → `success_count += 1`, else `fail_count += 1`).
-  Scope `:untested` grows the pool; `:working` refreshes. Run recurringly via
-  `Proxy::Job::Validate` (`every 5 minutes`). Impersonate probes are capped at
-  `IMPERSONATE_CONCURRENCY` (curl subprocess per probe — avoids a fork storm).
+  `Scraper.validation_url`, always with the fast pure-Ruby `AsyncHttp` (validation only
+  needs to learn the proxy reaches the site; no curl subprocess). Accepts **2xx/3xx** OR a
+  **403 Cloudflare challenge** — the proxy is alive and only OpenSSL's TLS fingerprint got
+  challenged, and the CF source scrapes via `ImpersonateHttp`, which clears it. Records the
+  per-source result as an increment through `ProxySourceStat.apply_deltas!` (reachable →
+  `success_count += 1`, else `fail_count += 1` and `failed_at = now`). Concurrency is
+  `CONCURRENCY` (env `PROXY_VALIDATE_CONCURRENCY`, default 100). Scope `:untested` grows the
+  pool; `:working` refreshes. Run recurringly via `Proxy::Job::Validate` (`every 5 minutes`,
+  `duration: 15.minutes` so a slow run cannot overlap itself).
+
+  > **Known gap:** the recurring job only runs `:untested`. A proxy that fails its single
+  > probe keeps a stats row (so it is no longer `:untested`) with `success_count = 0` (so it
+  > never becomes `:working`) — it is never re-probed, and there is no pruning job. The
+  > working tier therefore shrinks monotonically while `proxies` grows.
 - **`Vacancy::Operation::SyncVacancies`** — each source has its own in-memory pool seeded
   from **its** `proxy_source_stats` (working, by reliability), validated live at seed with
   the same per-source client, and records successes/fails back per source. See

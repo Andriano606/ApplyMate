@@ -98,10 +98,10 @@ RSpec.describe Apply::Operation::FetchInternalForm do
   context 'DOU internal apply (Coidea Agency)' do
     include_context 'coidea dou'
 
-    let(:http_client) { instance_double(ApplyMate::Client::AsyncHttp) }
+    let(:http_client) { instance_double(ApplyMate::Client::ImpersonateHttp) }
 
     before do
-      allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
+      allow(ApplyMate::Client::ImpersonateHttp).to receive(:new).and_return(http_client)
       allow(http_client).to receive(:get).and_return(
         ApplyMate::Client::AsyncHttp::Response.new(
           dou_apply_html,

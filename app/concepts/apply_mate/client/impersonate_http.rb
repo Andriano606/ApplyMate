@@ -17,6 +17,8 @@ require 'tempfile'
 # `bin/install-curl-impersonate` (downloads the right build into vendor/, gitignored)
 # or point CURL_IMPERSONATE_BIN at a wrapper (e.g. curl_chrome136) on the host.
 class ApplyMate::Client::ImpersonateHttp
+  include ApplyMate::Client::Multipart
+
   Response = ApplyMate::Client::Response
 
   class RequestError < StandardError; end
@@ -43,24 +45,48 @@ class ApplyMate::Client::ImpersonateHttp
     run(url, method: 'POST', body: body, headers: headers, follow_redirects: true)
   end
 
+  # Mirrors AsyncHttp#post_multipart so a Cloudflare-protected source can submit the
+  # apply form through the same Chrome TLS fingerprint it scraped with. Redirects are
+  # NOT followed: the caller inspects the 3xx Location to tell success from failure.
+  def post_multipart(url, payload:, headers: {})
+    body, content_type = build_multipart(payload)
+    run(url, method: 'POST', body: body,
+             headers: headers.merge('Content-Type' => content_type),
+             follow_redirects: false)
+  end
+
   private
 
   def run(url, method: 'GET', body: nil, headers: {}, follow_redirects: true)
     body_file = Tempfile.new('ci_body')
     hdr_file  = Tempfile.new('ci_hdr')
+    req_file  = write_request_body(body)
     begin
       # Body → -o file, headers → -D file, so stdout carries ONLY the -w http_code.
-      stdout, stderr, status = Open3.capture3(*command(url, method, body, headers, follow_redirects, body_file, hdr_file))
+      stdout, stderr, status = Open3.capture3(*command(url, method, req_file&.path, headers, follow_redirects, body_file, hdr_file))
       raise RequestError, "curl-impersonate failed (exit #{status.exitstatus}): #{stderr.strip}" unless status.success?
 
       Response.new(File.read(body_file.path), parse_headers(File.read(hdr_file.path)), stdout.to_i, url)
     ensure
       body_file.close!
       hdr_file.close!
+      req_file&.close!
     end
   end
 
-  def command(url, method, body, headers, follow_redirects, body_file, hdr_file)
+  # The request body goes through a file, not argv: a multipart payload carries a
+  # binary PDF and would blow past ARG_MAX (and lose NUL bytes) as a command argument.
+  def write_request_body(body)
+    return nil if body.nil?
+
+    file = Tempfile.new('ci_req')
+    file.binmode
+    file.write(body)
+    file.flush
+    file
+  end
+
+  def command(url, method, body_path, headers, follow_redirects, body_file, hdr_file)
     args = [ BINARY, '-sS', '-o', body_file.path, '-D', hdr_file.path, '-w', '%{http_code}',
              '--max-time', @request_timeout.to_s, '--connect-timeout', @connect_timeout.to_s ]
     args << '-L' if follow_redirects
@@ -68,7 +94,8 @@ class ApplyMate::Client::ImpersonateHttp
       args.push('--proxy', proxy)
     end
     if method == 'POST'
-      args.push('-X', 'POST', '--data-binary', body.to_s)
+      args.push('-X', 'POST')
+      args.push('--data-binary', "@#{body_path}") if body_path
     end
     headers.each { |key, value| args.push('-H', "#{key}: #{value}") }
     args << url
