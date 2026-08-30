@@ -22,27 +22,17 @@
                   checked: false,
                   data: { action: 'change->turbo-form#update' }
 
-        - if (show_clear_filter? && show_load_default?) || \
-          (show_clear_filter? && show_save_default? && !show_load_default?)
+        - if show_clear_filter? && show_save_filter_link?
           span.relative.flex.items-center.justify-center.w-2.h-full
             span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
 
-        - if show_load_default?
-          = boolean_link form: f,
-                  name: :load_default,
-                  label_class: link_button_label_class,
-                  label: I18n.t('vacancy.search.load_default'),
-                  checked: false,
-                  data: { action: 'change->turbo-form#update' }
+        - if show_save_filter_link?
+          = helpers.link_to I18n.t('saved_filter.new.link'), new_saved_filter_link_path,
+              class: link_button_label_class,
+              data: { turbo_stream: true }
 
-        - if show_load_default? && show_save_default?
-          span.relative.flex.items-center.justify-center.w-2.h-full
-            span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
-
-        - if show_save_default?
-          = boolean_link form: f,
-                  name: :save_as_default,
-                  label_class: link_button_label_class,
-                  label: I18n.t('vacancy.search.save_as_default'),
-                  checked: false,
-                  data: { action: 'change->turbo-form#update' }
+/ ── Saved filters row (outside the search form: pills are plain links) ──
+- if current_user
+  = render SavedFilter::Component::List.new(include_tags: @include_tags,
+                                            include_ops: @include_ops,
+                                            exclude_tags: @exclude_tags)

@@ -36,11 +36,19 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :minio
 
-  # Serve attachments by streaming them through the app (same HTTPS origin) instead of
-  # redirecting to MinIO's http://localhost:9000 URL. bin/dev fronts the app with Caddy
-  # over HTTPS (dev.applymate.io); a redirect to a plain-http MinIO URL is blocked by the
-  # browser as mixed content, so images (avatars, logos) silently fail to load.
-  config.active_storage.resolve_model_to_route = :rails_storage_proxy
+  # Active Storage URL strategy depends on how the app is fronted:
+  #
+  # - bin/dev fronts the app with Caddy over HTTPS (https://dev.applymate.io). A redirect
+  #   to MinIO's plain-http localhost:9000 URL is blocked by the browser as mixed content,
+  #   so attachments must be *proxied* (streamed through the app on the same HTTPS origin).
+  #   Procfile.dev sets ACTIVE_STORAGE_PROXY=true to opt into this.
+  # - Conductor workspaces serve plain http://localhost:<port> (no Caddy), where a redirect
+  #   to http://localhost:9000 is same-scheme and works fine. Proxy mode there streams every
+  #   image through a Puma thread, so a page full of logos can saturate the pool and deadlock
+  #   the code reloader (silent infinite load). So default to redirect — the lighter path.
+  if ENV['ACTIVE_STORAGE_PROXY'] == 'true'
+    config.active_storage.resolve_model_to_route = :rails_storage_proxy
+  end
 
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false

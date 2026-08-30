@@ -3,6 +3,16 @@
 class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   JOB_LIST_URL = 'https://djinni.co/jobs/'
 
+  # Validate against the real jobs listing (not the homepage).
+  def self.validation_url(_source)
+    JOB_LIST_URL
+  end
+
+  # No Cloudflare — rest briefly between bursts to keep listing throughput up.
+  def self.burst_cooldown
+    3
+  end
+
   def initialize(source, client)
     @source = source
     @client = client
@@ -11,11 +21,16 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   def fetch_listing(page:)
     url      = "#{JOB_LIST_URL}?page=#{page}"
     response = via_proxy { @client.get(url) }
+    # Out-of-range pages redirect to /jobs/ — that (and only that) is the real last page.
     return if response.final_url != url && response.final_url == JOB_LIST_URL
 
     doc   = Nokogiri::HTML(response.body)
     nodes = doc.css('.job-list-item, .job-item')
-    return if nodes.empty?
+    # An in-range page ALWAYS has job nodes (the real end redirects, handled above). So a
+    # 200 with no nodes and no redirect means the proxy got a rate-limited/blocked page —
+    # treat it as a dead proxy so the page is retried on another IP, NOT as the last page.
+    # Returning nil here is what truncated Djinni pagination (~6163 of 7746 scraped).
+    raise DeadProxyError, 'empty job list (proxy rate-limited)' if nodes.empty?
 
     nodes.map { |element| extract_job_data(element) }
   end

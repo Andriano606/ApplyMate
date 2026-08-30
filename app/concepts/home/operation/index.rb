@@ -4,11 +4,7 @@ class Home::Operation::Index < ApplyMate::Operation::Base
   def perform!(params:, current_user:)
     skip_authorize
 
-    if current_user
-      params[:include_tags] ||= current_user.include_tags
-      params[:include_ops] ||= current_user.include_ops
-      params[:exclude_tags] ||= current_user.exclude_tags
-    end
+    apply_default_filter(params, current_user)
 
     result = run_operation Vacancy::Operation::Search, { params:, current_user: }
     vacancies = result.model
@@ -22,13 +18,21 @@ class Home::Operation::Index < ApplyMate::Operation::Base
       applies_by_vacancy:,
       include_tags: params[:include_tags],
       include_ops: params[:include_ops],
-      exclude_tags: params[:exclude_tags],
-      total_vacancies: Source.all.map do |source|
-        ApplyMate::Operation::Struct.new(
-          count: source.vacancies.count,
-          source: source
-        )
-      end
+      exclude_tags: params[:exclude_tags]
     )
+  end
+
+  private
+
+  # Opening the home page with no explicit search applies the user's default preset
+  def apply_default_filter(params, current_user)
+    return if params[:include_tags].present? || params[:exclude_tags].present?
+
+    default_filter = current_user&.default_saved_filter
+    return unless default_filter
+
+    params[:include_tags] = default_filter.include_tags
+    params[:include_ops]  = default_filter.include_ops
+    params[:exclude_tags] = default_filter.exclude_tags
   end
 end

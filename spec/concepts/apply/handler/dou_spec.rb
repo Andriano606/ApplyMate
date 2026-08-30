@@ -8,11 +8,12 @@ RSpec.describe Apply::Handler::Dou do
   # ── HTTP stubs ───────────────────────────────────────────────────────────────
   before do
     # DOU vacancy page — used by CheckApplyable, FetchApplyType, FetchDetails.
-    # Stubbed at the client level because AsyncHttp uses raw sockets and bypasses WebMock.
-    allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get)
+    # Dou's scraper client is ImpersonateHttp (Chrome TLS to clear Cloudflare); it shells
+    # out to curl-impersonate and bypasses WebMock, so stub it at the client level.
+    allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
       .with(HoneytechDou::VACANCY_URL, any_args)
       .and_return(
-        ApplyMate::Client::AsyncHttp::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
+        ApplyMate::Client::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
       )
 
     # Gemini API — stubbed in call order:

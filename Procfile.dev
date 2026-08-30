@@ -1,5 +1,5 @@
-web: env RUBY_DEBUG_OPEN=true bin/rails server
+web: env RUBY_DEBUG_OPEN=true ACTIVE_STORAGE_PROXY=true bin/rails server
 js: bun run build --watch
 css: bun run build:css --watch
-worker: bin/rails solid_queue:start
+worker: env ACTIVE_STORAGE_PROXY=true bin/rails solid_queue:start
 caddy: caddy run --config config/Caddyfile.dev

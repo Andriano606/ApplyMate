@@ -19,7 +19,9 @@ class Apply::Operation::FetchInternalForm < Apply::Operation::Base
     url        = apply.vacancy.url
 
     headers  = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
-    response = ApplyMate::Client::AsyncHttp.new.get(url, headers:, follow_redirects: true)
+    # The source's own client — Cloudflare-protected boards (Dou) need the Chrome TLS
+    # fingerprint here too; plain AsyncHttp gets a 403 challenge page instead of the form.
+    response = apply.vacancy.source.http_client.get(url, headers:, follow_redirects: true)
     raise 'Failed to fetch vacancy page' if response.nil? || response.body.blank?
 
     cookies   = extract_cookies(response.headers)

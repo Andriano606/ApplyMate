@@ -57,6 +57,39 @@ Custom success/failure handling: pass a block to `endpoint` and use `m.success` 
 - Operations **must** call `authorize!` or `skip_authorize`; forgetting raises at runtime
 - `notice(I18n.t('...'))` inside an operation sets the flash message returned via result
 
+## Code Quality Standards
+
+Apply these to ALL new and modified code. They are distilled from real review findings in this repo — each rule has already caught a shipped bug.
+
+### Structure & altitude
+- **No magic-string sentinels or test-only flags.** Behavior switches belong in the class API (e.g. a `Scraper.fetches_description?` predicate), not in string comparisons inside workers or constants that only specs ever flip. If a spec needs a seam, the seam is what should be tested.
+- **One implementation per concept.** Before writing a helper (probe/validation logic, scoring formulas, raw SQL scopes, detection predicates), grep for an existing one and extract/reuse it. Two copies of an accept-rule or formula WILL drift.
+- **Delete dead code in the same PR that orphans it.** No unused public methods, uncalled branches, or indexes on columns nothing writes. If a change removes the last caller, remove the callee (and its spec, and its index/migration).
+- **Loops don't repeat invariant work.** Hoist `constantize`, client construction, and lookups out of hot loops; a per-request object build inside a fiber reactor is GC pressure, not style.
+
+### Concurrency (fibers, jobs, shared state)
+- **Every loop must have a termination path.** For any retry/refill/polling loop, answer explicitly: "what makes this stop when the world stays broken?" Unbounded retries against a deterministic candidate set = livelock.
+- **Counters shared by concurrent writers are incremented SQL-side** (`ProxySourceStat.apply_deltas!` pattern: `col = col + EXCLUDED.col`), never read-modify-write from Ruby. Any `SELECT → compute → upsert_all` across a fiber-suspension point loses the other writer's data.
+- **Buffered work survives failure.** Swap buffers yield-free before I/O, restore them on error, and flush before raising — a `raise` that precedes a `flush` throws away completed work. Check every early-`raise` against pending buffers.
+- **`limits_concurrency` always sets `duration:`** sized to the real runtime (Solid Queue's default window is 3 minutes; long jobs need hours). Any in-memory invariant ("one run at a time") must name the mechanism that enforces it and that mechanism must actually hold for the full run.
+- **Bound all fan-out.** Fibers, subprocesses (curl-impersonate forks), and DB connections get explicit semaphores/limits sized for the production host (4-core Raspberry Pi 5). A documented cap must exist in code, not only in docs.
+
+### Data & scale (assume ~1M+ rows)
+- **Every new query names its index.** `ORDER BY` / `WHERE` on large tables must ride an existing index or add one in the same PR; prefer `NOT EXISTS` anti-joins over `NOT IN (subquery)`.
+- **No full-table aggregates in request paths.** `COUNT(*)`/grouped scans on large tables in components/controllers get cached, estimated (`pg_class.reltuples`), or moved to a job.
+- **Every table that grows has a pruning story.** A pipeline that inserts rows daily must state (in code or a scheduled job) what eventually deletes or archives them.
+- **State machines must not have absorbing dead states.** If a record can enter a state (e.g. "failed once, never re-probed"), name the code path that gets it out, or the design is incomplete.
+- **`db/{cache,queue,cable}_schema.rb` contain ONLY their `solid_*` tables.** Dev shares one database, so these connections have `database_tasks: false`; never let a schema dump regenerate them as full copies — staging/production load each file into a separate database.
+
+### Operability
+- **Scripts fail loudly.** Installers/build steps exit non-zero when the artifact is unusable — a WARN + exit 0 ships a green image with a runtime bomb.
+- **Site-side anomalies must not destroy accumulated state.** An empty page, changed selector, or challenge response may mark a request failed, but must never mass-poison reputations/pools; cap the damage one run can do (e.g. "max N% of pool failed per run").
+- **Config gated on ENV vars defaults to the safe behavior**; opt-OUT of safety, never opt-in, and document the variable where it's read.
+
+### Docs & tests
+- **Docs change in the same commit as the code they describe.** `.ai/docs/*` constants, class names, and flows must match the merged code exactly — these files are required reading and wrong values propagate into future sizing decisions.
+- **The production code path is the tested code path.** If specs stub around the real branch (validation, probing), add at least one spec that exercises the real one.
+
 ## Key Gems
 
 | Gem | Role |

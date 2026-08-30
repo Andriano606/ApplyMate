@@ -136,6 +136,13 @@ group :development do
   gem 'web-console'
   gem 'memory_profiler'
 
+  # Safety net against silent dev hangs: with code reloading on, a single request
+  # stuck in a no-timeout blocking call holds the reloader's load interlock and
+  # parks every Puma thread on the next reload — the page then loads forever with
+  # nothing in the log. rack-timeout raises such requests so the server self-heals
+  # and logs the offending backtrace. See config/initializers/rack_timeout.rb.
+  gem 'rack-timeout'
+
   # Git hooks manager
   gem 'lefthook'
 end

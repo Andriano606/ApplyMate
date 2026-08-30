@@ -7,7 +7,7 @@
     .hidden.sm:block.self-stretch.w-px.bg-gray-200.dark:bg-gray-700
 
     .flex.flex-wrap.gap-2
-      - @total_vacancies.each do |item|
+      - total_vacancies.each do |item|
         .flex.items-center.gap-2.bg-gray-50.dark:bg-gray-700.rounded-lg.px-3.py-1.5
           - if item.source.logo.attached?
             = helpers.image_tag(item.source.logo, \

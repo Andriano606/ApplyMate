@@ -6,16 +6,9 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
     params = normalize_include_params(params)
     params = normalize_exclude_params(params)
+    remember_default_filter(params, current_user)
 
-    if params.dig(:vacancy_search, :save_as_default) == '1' && current_user
-      current_user.update!(include_tags: params[:include_tags],
-                           include_ops: params[:include_ops],
-                           exclude_tags: params[:exclude_tags])
-    elsif params.dig(:vacancy_search, :load_default) == '1' && current_user
-      params[:include_tags] = current_user.include_tags
-      params[:include_ops]  = current_user.include_ops
-      params[:exclude_tags] = current_user.exclude_tags
-    elsif params.dig(:vacancy_search, :clear_filter) == '1'
+    if params.dig(:vacancy_search, :clear_filter) == '1'
       params[:include_tags] = nil
       params[:include_ops]  = nil
       params[:exclude_tags] = nil
@@ -40,10 +33,22 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
   private
 
+  # Clicking a saved-filter pill carries saved_filter_id — remember it as the
+  # user's default preset (applied on the home page)
+  def remember_default_filter(params, current_user)
+    return if params[:saved_filter_id].blank? || current_user.nil?
+
+    filter = current_user.saved_filters.find_by_hashid(params[:saved_filter_id])
+    current_user.update!(default_saved_filter: filter) if filter
+  end
+
   def normalize_include_params(params)
     return params if params.fetch(:include_ops, {}).is_a?(Array)
 
-    params[:include_ops] =  params.fetch(:include_ops, {}).values.map { |ops| ops.to_b ? 'and' : 'or' }
+    ops = params.fetch(:include_ops, {})
+    ops = ops.to_unsafe_h if ops.respond_to?(:to_unsafe_h)
+    params[:include_ops] = ops.sort_by { |index, _op| index.to_i }
+                              .map { |_index, op| normalize_op(op) }
     if params[:new_include_tag].present?
       params[:include_tags] = [ *params[:include_tags], params[:new_include_tag] ].compact_blank
       params[:include_ops] = [ *params[:include_ops], 'or' ]
@@ -56,9 +61,15 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
       elsif delete_tag_index >= params[:include_tags].count
         params[:include_ops].delete_at(delete_tag_index - 1)
       else
-        if params[:include_ops][delete_tag_index-1] == 'and'
+        left  = params[:include_ops][delete_tag_index-1]
+        right = params[:include_ops][delete_tag_index]
+
+        if left == 'g_or' || right == 'g_or'
+          # drop the op tying the deleted pill into its group, keep the outer op
+          params[:include_ops].delete_at(left == 'g_or' ? delete_tag_index - 1 : delete_tag_index)
+        elsif left == 'and'
           params[:include_ops].delete_at(delete_tag_index-1)
-        elsif params[:include_ops][delete_tag_index] == 'and'
+        elsif right == 'and'
           params[:include_ops].delete_at(delete_tag_index)
         else
           params[:include_ops].delete_at(delete_tag_index-1)
@@ -69,6 +80,13 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
     end
 
     params
+  end
+
+  # New toggles submit 'and'/'or'/'g_or' directly; legacy checkbox params were boolean-ish
+  def normalize_op(op)
+    return op if Vacancy::Operation::Search::OPS.include?(op)
+
+    op.to_b ? 'and' : 'or'
   end
 
   def normalize_exclude_params(params)

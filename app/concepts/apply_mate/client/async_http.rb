@@ -5,7 +5,9 @@ require 'kernel/sync'
 require 'resolv'
 
 class ApplyMate::Client::AsyncHttp
-  Response = Struct.new(:body, :headers, :status, :final_url)
+  include ApplyMate::Client::Multipart
+
+  Response = ApplyMate::Client::Response
 
   USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   MAX_REDIRECTS   = 5
@@ -15,8 +17,9 @@ class ApplyMate::Client::AsyncHttp
   DNS_CACHE = Concurrent::Map.new
   DNS_TTL_S = 300
 
-  def initialize(request_timeout: 15, proxy: nil)
+  def initialize(request_timeout: 15, connect_timeout: TCP_CONNECT_TIMEOUT, proxy: nil)
     @request_timeout = request_timeout
+    @connect_timeout = connect_timeout
     @proxy_uri       = proxy.present? ? URI.parse(proxy) : nil
     @ssl_ctx         = OpenSSL::SSL::SSLContext.new.tap(&:set_params)
   end
@@ -119,9 +122,9 @@ class ApplyMate::Client::AsyncHttp
   end
 
   def open_tunnel(host, port)
-    return Socket.tcp(resolve(host), port.to_i, connect_timeout: TCP_CONNECT_TIMEOUT) if @proxy_uri.nil?
+    return Socket.tcp(resolve(host), port.to_i, connect_timeout: @connect_timeout) if @proxy_uri.nil?
 
-    sock        = Socket.tcp(resolve(@proxy_uri.host), @proxy_uri.port.to_i, connect_timeout: TCP_CONNECT_TIMEOUT)
+    sock        = Socket.tcp(resolve(@proxy_uri.host), @proxy_uri.port.to_i, connect_timeout: @connect_timeout)
     established = false
     result      = case @proxy_uri.scheme.to_s.downcase
     when *HTTP_PROTOCOLS   then http_connect_tunnel(sock, host, port)
@@ -256,30 +259,5 @@ class ApplyMate::Client::AsyncHttp
     else
       body << io.read.to_s
     end
-  end
-
-  def build_multipart(payload)
-    boundary = "----RubyMultipart#{SecureRandom.hex(12)}"
-    body     = String.new(encoding: 'ASCII-8BIT')
-
-    payload.each do |name, value|
-      body << "--#{boundary}\r\n"
-      if file_part?(value)
-        body << %(Content-Disposition: form-data; name="#{name}"; filename="#{value.original_filename}"\r\n)
-        body << "Content-Type: #{value.content_type}\r\n\r\n"
-        body << value.read.b
-      else
-        body << %(Content-Disposition: form-data; name="#{name}"\r\n\r\n)
-        body << value.to_s.b
-      end
-      body << "\r\n"
-    end
-    body << "--#{boundary}--\r\n"
-
-    [ body, "multipart/form-data; boundary=#{boundary}" ]
-  end
-
-  def file_part?(value)
-    value.respond_to?(:read) && value.respond_to?(:original_filename) && value.respond_to?(:content_type)
   end
 end

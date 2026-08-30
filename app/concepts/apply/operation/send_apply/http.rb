@@ -16,7 +16,9 @@ class Apply::Operation::SendApply::Http < Apply::Operation::Base
   private
 
   def run!(apply:, handler:, **)
-    client     = ApplyMate::Client::AsyncHttp.new(request_timeout: 30)
+    # Submit through the source's own client so a Cloudflare-protected board sees the
+    # same TLS fingerprint that fetched the form (AsyncHttp would get a 403 challenge).
+    client     = apply.vacancy.source.http_client(request_timeout: 30)
     session_id = apply.source_profile.session_id
 
     cookie_header = build_cookie_header(session_id, apply.cookies)

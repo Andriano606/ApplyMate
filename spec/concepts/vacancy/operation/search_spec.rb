@@ -152,6 +152,83 @@ RSpec.describe Vacancy::Operation::Search, type: :operation do
     end
   end
 
+  shared_context "with embedded vacancies" do
+    let(:vacancy_emb_remote) do
+      create(:vacancy, source:, title: "Embedded Developer",
+                       company_name: "IoT Corp", description: "STM32 firmware, remote work")
+    end
+    let(:vacancy_emb_office) do
+      create(:vacancy, source:, title: "Embedded Engineer",
+                       company_name: "HW Corp", description: "STM32 firmware, office in Kyiv")
+    end
+    let(:vacancy_emb_viddaleno) do
+      create(:vacancy, source:, title: "Embedded C Developer",
+                       company_name: "FW Corp", description: "STM32, віддалено, повна зайнятість")
+    end
+
+    before do
+      [ vacancy_emb_remote, vacancy_emb_office, vacancy_emb_viddaleno ].each { |v| v.__elasticsearch__.index_document }
+      Vacancy.__elasticsearch__.refresh_index!
+    end
+  end
+
+  context "when a tag is a nested boolean expression: embedded і stm32 і (remote або віддалено)" do
+    include_context "with embedded vacancies"
+
+    let(:params) { { include_tags: [ '(embedded і stm32 і (remote або віддалено))' ] } }
+
+    it "returns vacancies matching embedded AND stm32 AND (remote OR віддалено)" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_emb_remote.id, vacancy_emb_viddaleno.id)
+    end
+  end
+
+  context "when ops contain an explicit OR group: embedded AND stm32 AND (remote g_or віддалено)" do
+    include_context "with embedded vacancies"
+
+    let(:params) do
+      { include_tags: [ 'embedded', 'stm32', 'remote', 'віддалено' ],
+        include_ops:  [ 'and', 'and', 'g_or' ] }
+    end
+
+    it "applies the OR group before the ANDs" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_emb_remote.id, vacancy_emb_viddaleno.id)
+    end
+  end
+
+  context "when an explicit OR group starts the chain: (remote g_or віддалено) AND stm32" do
+    include_context "with embedded vacancies"
+
+    let(:params) do
+      { include_tags: [ 'remote', 'віддалено', 'stm32' ],
+        include_ops:  [ 'g_or', 'and' ] }
+    end
+
+    it "requires stm32 plus either alternative from the group" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_emb_remote.id, vacancy_emb_viddaleno.id)
+    end
+  end
+
+  context "when an expression tag is combined with existing vacancies" do
+    let(:params) { { include_tags: [ 'rails і (python або frontend)' ] } }
+
+    it "applies the nested logic within a single tag" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_frontend.id)
+    end
+  end
+
+  context "when an exclude tag is a boolean expression" do
+    let(:params) { { exclude_tags: [ '(python або frontend)' ] } }
+
+    it "excludes vacancies matching either alternative" do
+      expect(result).to be_success
+      expect(model.map(&:id)).to contain_exactly(vacancy_rails.id)
+    end
+  end
+
   context "when 3 tags with mixed operators: (rails AND ruby) OR react" do
     let(:vacancy_react) do
       create(:vacancy, source:, title: "React Developer", company_name: "Startup", description: "React.js role")

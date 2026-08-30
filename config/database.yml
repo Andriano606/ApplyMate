@@ -34,19 +34,28 @@ development:
     # 15×N_sources. Size for puma dev threads (12) + sync-burst headroom. Conductor
     # sets APP_DB_POOL per worktree so N_worktrees × pools stays under Postgres's cap.
     max_connections: <%= ENV.fetch("APP_DB_POOL", 25) %>
+  # cache/queue/cable share the primary database in development (their solid_*
+  # tables live in db/schema.rb), so db tasks are disabled for them — otherwise
+  # every migrate re-dumps the ENTIRE shared schema into db/{cache,queue,cable}_schema.rb.
+  # Those files must stay solid_*-only: staging/production have real split databases,
+  # and db:prepare loads each file into its own database — a full dump would create
+  # the whole app schema (proxies, vacancies, …) inside the queue and cable DBs.
   cache:
     <<: *default
     database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
     migrations_paths: db/cache_migrate
+    database_tasks: false
   queue:
     <<: *default
     database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
     migrations_paths: db/queue_migrate
+    database_tasks: false
     max_connections: 8 # covers Solid Queue's 5 threads/process + headroom
   cable:
     <<: *default
     database: <%= ENV.fetch("APP_DB_NAME", "apply_mate_development") %>
     migrations_paths: db/cable_migrate
+    database_tasks: false
     max_connections: 5
 
   # The specified database role being used to connect to PostgreSQL.
