@@ -361,7 +361,7 @@ GEM
       thor (~> 1.3)
       zeitwerk (>= 2.6.18, < 3.0)
     language_server-protocol (3.17.0.6)
-    lefthook (2.1.10)
+    lefthook (2.1.11)
     lint_roller (1.1.0)
     logger (1.7.0)
     lograge (0.15.0)
@@ -950,7 +950,7 @@ CHECKSUMS
   jwt (3.2.0) sha256=5419b1fe37b1da0982bd07051f573a8b8789ab724c2aa7e785e4784a3ed217d7
   kamal (2.12.0) sha256=c51d1ab085e515470f98d0c0f043637122b5ebf76e8b610cb1fbbed0b7f9b8fa
   language_server-protocol (3.17.0.6) sha256=5ef2c0c138f8267e1bc631d3328347d354f96724b0af22f2c79516120443b7f0
-  lefthook (2.1.10) sha256=cc9c06bd8ea689e8b8016eab9769e54d696d07951860c1c6d28e8f6812e61b65
+  lefthook (2.1.11) sha256=1f199b3c2fb12c9d281c92c34edf25a1215675fd373486ccb87428947a73e089
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87
   logger (1.7.0) sha256=196edec7cc44b66cfb40f9755ce11b392f21f7967696af15d274dde7edff0203
   lograge (0.15.0) sha256=34072c1f50b95019dc185137f5fec1a6759f5a1b6d55c28163d0cba204e6df16
