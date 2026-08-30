@@ -1,0 +1,16 @@
+= turbo_form_modal( \
+    model: @saved_filter, \
+    endpoint: @saved_filter, \
+    header_text: I18n.t('saved_filter.new.header'), \
+    submit_text: I18n.t('saved_filter.new.submit')) do |modal|
+  = modal.form.input :name, \
+      label: I18n.t('saved_filter.new.form.name'), \
+      input_html: { placeholder: I18n.t('saved_filter.new.form.name_placeholder'), autofocus: true }
+
+  / current search state travels along as hidden fields
+  - @saved_filter.include_tags.each do |tag|
+    = hidden_field_tag 'saved_filter[include_tags][]', tag, id: nil
+  - @saved_filter.include_ops.each do |op|
+    = hidden_field_tag 'saved_filter[include_ops][]', op, id: nil
+  - @saved_filter.exclude_tags.each do |tag|
+    = hidden_field_tag 'saved_filter[exclude_tags][]', tag, id: nil

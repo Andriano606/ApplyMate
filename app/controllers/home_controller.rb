@@ -2,6 +2,6 @@
 
 class HomeController < ApplicationController
   def index
-    endpoint Home::Operation::Index, Home::Component::Index
+    endpoint Home::Operation::Index, Vacancy::Component::Index
   end
 end

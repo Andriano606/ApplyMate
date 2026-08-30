@@ -347,6 +347,19 @@ en:
       generate_cv: Генерація резюме
     update:
       success: Промпт оновлено
+  saved_filter:
+    create:
+      success: Filter saved
+    destroy:
+      confirm: Delete the saved filter?
+      success: Filter deleted
+    new:
+      form:
+        name: Filter name
+        name_placeholder: e.g. Embedded remote
+      header: Save filter
+      link: Save filter
+      submit: Save
   session:
     auth_modal:
       message: Please sign in to continue
@@ -440,15 +453,15 @@ en:
       and: AND
       clear_filter: Clear filter
       exclude_label: What to avoid? (e.g. Junior)
-      include_label: What are you looking for?
-      load_default: Load default
+      grouped_or: "(OR)"
+      include_label: What are you looking for? (e.g. embedded and stm32 and (remote
+        or hybrid))
       or: OR
       results_count:
         few: Found %{count} vacancies
         many: Found %{count} vacancies
         one: Found %{count} vacancy
         other: Found %{count} vacancies
-      save_as_default: Save as default
     show:
       back: До вакансій
       generate_answer: Згенерувати відповідь на питання

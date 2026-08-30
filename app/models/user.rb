@@ -7,20 +7,17 @@ class User < ApplicationRecord
   has_many :source_profiles, dependent: :destroy
   has_many :prompts, dependent: :destroy
   has_many :api_tokens, dependent: :destroy
+  has_many :saved_filters, dependent: :destroy
 
   belongs_to :default_profile, class_name: 'UserProfile', optional: true
   belongs_to :default_ai_integration, class_name: 'AiIntegration', optional: true
   belongs_to :default_fill_form_prompt, class_name: 'Prompt', optional: true
   belongs_to :default_generate_cv_prompt, class_name: 'Prompt', optional: true
+  belongs_to :default_saved_filter, class_name: 'SavedFilter', optional: true
 
   has_one_attached :avatar do |attachable|
     attachable.variant :thumb, resize_to_fill: [ 64, 64 ], format: :webp
   end
-
-  jsonb_accessor :default_vacancy_search,
-                 include_tags: [ :string, array: true, default: [] ],
-                 include_ops: [ :string, array: true, default: [] ],
-                 exclude_tags: [ :string, array: true, default: [] ]
 
   validates :email, presence: true
   validates :name, presence: true

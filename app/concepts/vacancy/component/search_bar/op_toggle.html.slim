@@ -1,0 +1,11 @@
+span.relative.inline-flex.items-center.flex-shrink-0
+  = radio('and', 'peer/op-and')
+  = radio('or', 'peer/op-or')
+  = radio('g_or', 'peer/op-gor')
+
+  label for=radio_id('or') class="hidden peer-checked/op-and:inline-flex #{label_classes}"
+    = label_text('and')
+  label for=radio_id('g_or') class="hidden peer-checked/op-or:inline-flex #{label_classes}"
+    = label_text('or')
+  label for=radio_id('and') class="hidden peer-checked/op-gor:inline-flex #{label_classes}"
+    = label_text('g_or')

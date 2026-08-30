@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_30_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -131,6 +131,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
     t.index ["source_id", "failed_at"], name: "index_proxy_source_stats_on_source_id_and_failed_at"
     t.index ["source_id", "reliability"], name: "index_proxy_source_stats_on_source_id_and_reliability"
     t.index ["source_id"], name: "index_proxy_source_stats_on_source_id"
+  end
+
+  create_table "saved_filters", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.jsonb "vacancy_search", default: {}, null: false
+    t.index ["user_id", "name"], name: "index_saved_filters_on_user_id_and_name", unique: true
   end
 
   create_table "solid_cable_messages", force: :cascade do |t|
@@ -314,7 +323,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
     t.bigint "default_fill_form_prompt_id"
     t.bigint "default_generate_cv_prompt_id"
     t.bigint "default_profile_id"
-    t.jsonb "default_vacancy_search"
+    t.bigint "default_saved_filter_id"
     t.string "email", null: false
     t.string "middle_name"
     t.string "name", null: false
@@ -323,6 +332,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
     t.datetime "updated_at", null: false
     t.index ["default_fill_form_prompt_id"], name: "index_users_on_default_fill_form_prompt_id"
     t.index ["default_generate_cv_prompt_id"], name: "index_users_on_default_generate_cv_prompt_id"
+    t.index ["default_saved_filter_id"], name: "index_users_on_default_saved_filter_id"
     t.index ["email"], name: "index_users_on_email"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
   end
@@ -385,6 +395,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
   add_foreign_key "prompts", "users"
   add_foreign_key "proxy_source_stats", "proxies"
   add_foreign_key "proxy_source_stats", "sources"
+  add_foreign_key "saved_filters", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
@@ -397,6 +408,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_000001) do
   add_foreign_key "users", "ai_integrations", column: "default_ai_integration_id"
   add_foreign_key "users", "prompts", column: "default_fill_form_prompt_id"
   add_foreign_key "users", "prompts", column: "default_generate_cv_prompt_id"
+  add_foreign_key "users", "saved_filters", column: "default_saved_filter_id", on_delete: :nullify
   add_foreign_key "users", "user_profiles", column: "default_profile_id"
   add_foreign_key "vacancies", "sources"
   add_foreign_key "vacancy_cvs", "ai_integrations"

@@ -16,21 +16,14 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
       !@include_ops.blank?
   end
 
-  def show_load_default?
-    @show_load_default ||= current_user && (normalize_prop(current_user.include_tags) != normalize_prop(@include_tags) ||
-      normalize_prop(current_user.include_ops) != normalize_prop(@include_ops) ||
-      normalize_prop(current_user.exclude_tags) != normalize_prop(@exclude_tags)) &&
-                           (!current_user.include_tags.blank? || !current_user.exclude_tags.blank?)
+  def show_save_filter_link?
+    current_user && show_clear_filter?
   end
 
-  def show_save_default?
-    @show_save_default ||= current_user && (normalize_prop(current_user.include_tags) != normalize_prop(@include_tags) ||
-      normalize_prop(current_user.include_ops) != normalize_prop(@include_ops) ||
-      normalize_prop(current_user.exclude_tags) != normalize_prop(@exclude_tags))
-  end
-
-  def normalize_prop(prop)
-    prop || []
+  def new_saved_filter_link_path
+    helpers.new_saved_filter_path(include_tags: @include_tags,
+                                  include_ops:  @include_ops,
+                                  exclude_tags: @exclude_tags)
   end
 
   def search_pill_input(f, tags:, ops:, name_prefix:)
@@ -40,7 +33,8 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
 
     content_tag(:div) do
       # 1. Основний контейнер
-      concat(content_tag(:div, class: 'flex flex-wrap items-center gap-2 p-2 rounded-xl border-0 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 bg-white dark:bg-gray-800 shadow-sm transition-all min-h-[3rem]') do
+      # Fixed height: pills never wrap; overflow scrolls horizontally instead of growing the bar
+      concat(content_tag(:div, class: 'flex flex-nowrap items-center gap-2 px-2 h-14 overflow-x-auto [scrollbar-width:thin] rounded-xl border-0 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 bg-white dark:bg-gray-800 shadow-sm transition-all') do
         # Рендеримо згруповані теги (метод, який ми створили раніше)
         concat render_grouped_tags(f, tags, ops, name_prefix)
 
@@ -69,30 +63,15 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
     end
   end
 
-  # tags = ['ruby', 'react', 'rails']
-  # ops  = ['and', 'or']
-  # => [['ruby', 'react'], ['rails']]
-  def group_tags_by_logic(tags, ops)
-    return [] if tags.blank?
+  AND_GROUP_CLASSES = 'inline-flex items-center gap-2 p-1 bg-gray-50 dark:bg-gray-800 ' \
+    'border border-gray-200 dark:border-gray-700 rounded-full shadow-sm flex-shrink-0'
+  OR_GROUP_CLASSES = 'inline-flex items-center gap-1 p-1 bg-indigo-50/50 dark:bg-indigo-900/20 ' \
+    'border border-indigo-200 dark:border-indigo-800 rounded-full shadow-sm flex-shrink-0'
+  PAREN_CLASSES = 'text-sm font-semibold text-indigo-400 dark:text-indigo-500 select-none'
 
-    result = [ [ tags.first ] ]
-
-    ops.each_with_index do |op, index|
-      next_tag = tags[index + 1]
-      break unless next_tag
-
-      if op.to_s.downcase == 'and'
-        # Додаємо в останню існуючу групу
-        result.last << next_tag
-      else
-        # Створюємо нову групу для OR
-        result << [ next_tag ]
-      end
-    end
-
-    result
-  end
-
+  # Ops between pills: 'g_or' joins the neighbours into an explicit
+  # parenthesized OR unit, then 'and' binds units tighter than 'or'
+  # (mirrors Vacancy::Operation::Search#build_include).
   def render_grouped_tags(f, tags, ops, name_prefix)
     return if tags.blank?
 
@@ -106,74 +85,68 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
       end
     end
 
-    grouped_indexes = group_tag_indexes_by_logic(tags, ops)
     ops_field = "#{name_prefix}_ops"
-
-    @op_counter = 0 # Використовуємо інстанс-змінну або переконуємося, що локальна змінюється коректно
+    groups = and_groups(or_units(tags, ops), ops)
 
     capture do
-      grouped_indexes.each_with_index do |index_group, g_idx|
-        if index_group.size > 1
-          # Рендеримо контент групи окремо, щоб лічильник оновився гарантовано
-          group_html = capture do
-            index_group.each_with_index do |tag_idx, t_idx|
-              if t_idx > 0
-                concat render_logic_link(f, ops_field, @op_counter)
-                @op_counter += 1
-              end
-              concat render Vacancy::Component::SearchBar::Tag.new(form: f, name: delete_field, label: tags[tag_idx], index: tag_idx)
-            end
-          end
-
-          concat content_tag(:div, group_html, class: 'inline-flex items-center gap-2 p-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm flex-shrink-0')
-        else
-          tag_idx = index_group.first
-          concat render Vacancy::Component::SearchBar::Tag.new(form: f, name: delete_field, label: tags[tag_idx], index: tag_idx)
-        end
-
-        # Оператор МІЖ групами
-        if g_idx < grouped_indexes.size - 1
-          concat render_logic_link(f, ops_field, @op_counter)
-          @op_counter += 1
-        end
+      groups.each_with_index do |units, group_idx|
+        concat render_and_group(f, units, tags, ops_field, delete_field)
+        # toggle between AND-groups; op index = index of the tag left of the boundary
+        concat render_op_toggle(ops_field, groups[group_idx + 1].first.first - 1) if group_idx < groups.size - 1
       end
     end
   end
 
-  def group_tag_indexes_by_logic(tags, ops)
-    return [] if tags.blank?
+  # tags: 4 pills, ops: [and, g_or, or] => units of tag indexes: [[0], [1, 2], [3]]
+  def or_units(tags, ops)
+    units = [ [ 0 ] ]
+    (1...tags.size).each do |i|
+      ops[i - 1] == 'g_or' ? units.last << i : units << [ i ]
+    end
+    units
+  end
 
-    # Починаємо з першого індексу [0]
-    result = [ [ 0 ] ]
+  # units chained by 'and' render inside one visual group: [[0], [1, 2]], [[3]]
+  def and_groups(units, ops)
+    groups = [ [ units.first ] ]
+    units.each_cons(2) do |left, right|
+      (ops[left.last] || 'and') == 'and' ? groups.last << right : groups << [ right ]
+    end
+    groups
+  end
 
-    ops.each_with_index do |op, index|
-      next_tag_index = index + 1
-      break unless tags[next_tag_index]
-
-      if op.to_s.downcase == 'and'
-        result.last << next_tag_index
-      else
-        result << [ next_tag_index ]
+  def render_and_group(f, units, tags, ops_field, delete_field)
+    html = capture do
+      units.each_with_index do |unit, unit_idx|
+        concat render_op_toggle(ops_field, unit.first - 1) if unit_idx > 0
+        concat render_or_unit(f, unit, tags, ops_field, delete_field)
       end
     end
 
-    result
+    units.size > 1 ? content_tag(:div, html, class: AND_GROUP_CLASSES) : html
   end
 
-  def render_logic_link(f, field_name, index)
-    current_val = @include_ops[index]
-    is_and = (current_val == 'and')
+  def render_or_unit(f, unit, tags, ops_field, delete_field)
+    if unit.one?
+      return render Vacancy::Component::SearchBar::Tag.new(form: f, name: delete_field,
+                                                           label: tags[unit.first], index: unit.first)
+    end
 
-    boolean_link(
-      form: f,
-      name: field_name.to_sym,
-      index: index,
-      checked: is_and,
-      label: is_and ? I18n.t('vacancy.search.and') : I18n.t('vacancy.search.or'),
-      label_class: 'text-[10px] font-bold tracking-widest text-gray-400 hover:text-indigo-500 \
-        transition-colors duration-200 select-none px-1',
-      data: { action: 'change->turbo-form#update' }
-    )
+    html = capture do
+      concat content_tag(:span, '(', class: PAREN_CLASSES)
+      unit.each_with_index do |tag_idx, idx_in_unit|
+        concat render_op_toggle(ops_field, tag_idx - 1) if idx_in_unit > 0
+        concat render Vacancy::Component::SearchBar::Tag.new(form: f, name: delete_field,
+                                                             label: tags[tag_idx], index: tag_idx)
+      end
+      concat content_tag(:span, ')', class: PAREN_CLASSES)
+    end
+
+    content_tag(:div, html, class: OR_GROUP_CLASSES)
+  end
+
+  def render_op_toggle(ops_field, index)
+    render Vacancy::Component::SearchBar::OpToggle.new(name: ops_field, index:, value: @include_ops[index])
   end
 
   def link_button_label_class

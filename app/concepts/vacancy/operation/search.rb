@@ -2,9 +2,18 @@
 
 # params: { include_tags: ['rails', 'ruby', 'react'], include_ops: ['and', 'or'], exclude_tags: ['vue'] }
 # result: ('rails' AND 'ruby') OR 'react'
+#
+# Ops precedence: 'g_or' joins adjacent tags into an explicit parenthesized OR
+# group (tightest), then 'and' binds tighter than 'or':
+#   tags: [embedded, stm32, remote, віддалено], ops: [and, and, g_or]
+#   => embedded AND stm32 AND (remote OR віддалено)
+#
+# Each tag may itself be a boolean expression with parentheses, parsed by
+# Vacancy::SearchExpression: 'embedded і stm32 і (remote або віддалено)'.
 
 class Vacancy::Operation::Search < ApplyMate::Operation::Base
   SEARCH_FIELDS = %w[title company_name description].freeze
+  OPS = %w[and or g_or].freeze
 
   def perform!(params:, current_user:, **)
     authorize! Vacancy.new, :index?
@@ -50,22 +59,49 @@ class Vacancy::Operation::Search < ApplyMate::Operation::Base
 
   def build_include(tags, ops)
     return { match_all: {} } if tags.empty?
-    return phrase_clause(tags.first) if tags.one?
+    return include_clause(tags.first) if tags.one?
 
-    groups = group_by_and(tags, ops)
-    or_clauses = groups.map do |group|
-      group.one? ? phrase_clause(group.first) : { bool: { must: group.map { |t| phrase_clause(t) } } }
+    units, unit_ops = split_group_units(tags, ops)
+    clauses = units.map do |unit|
+      unit.one? ? include_clause(unit.first) : or_clause(unit.map { |tag| include_clause(tag) })
     end
 
-    or_clauses.one? ? or_clauses.first : { bool: { should: or_clauses, minimum_should_match: 1 } }
+    build_boolean(clauses, unit_ops)
   end
 
-  def group_by_and(tags, ops)
-    groups = [ [ tags.first ] ]
+  # tags: [a, b, c, d], ops: [and, g_or, or] => units: [[a], [b, c], [d]], unit_ops: [and, or]
+  def split_group_units(tags, ops)
+    units    = [ [ tags.first ] ]
+    unit_ops = []
+
     (1...tags.size).each do |i|
-      (ops[i - 1] || 'and') == 'and' ? groups.last << tags[i] : groups << [ tags[i] ]
+      if ops[i - 1] == 'g_or'
+        units.last << tags[i]
+      else
+        unit_ops << (ops[i - 1] || 'and')
+        units << [ tags[i] ]
+      end
     end
-    groups
+
+    [ units, unit_ops ]
+  end
+
+  def build_boolean(clauses, ops)
+    groups = [ [ clauses.first ] ]
+    (1...clauses.size).each do |i|
+      (ops[i - 1] || 'and') == 'and' ? groups.last << clauses[i] : groups << [ clauses[i] ]
+    end
+
+    or_clauses = groups.map { |group| group.one? ? group.first : { bool: { must: group } } }
+    or_clauses.one? ? or_clauses.first : or_clause(or_clauses)
+  end
+
+  def or_clause(clauses)
+    { bool: { should: clauses, minimum_should_match: 1 } }
+  end
+
+  def include_clause(tag)
+    expression_clause(tag) { |phrase| phrase_clause(phrase) }
   end
 
   def phrase_clause(tag)
@@ -73,12 +109,29 @@ class Vacancy::Operation::Search < ApplyMate::Operation::Base
   end
 
   def build_excludes(tags)
-    tags.map do |tag|
-      if tag.split.one?
-        { bool: { should: SEARCH_FIELDS.map { |f| { wildcard: { f => { value: "#{tag}*", case_insensitive: true } } } } } }
-      else
-        { multi_match: { query: tag, fields: SEARCH_FIELDS, type: 'phrase' } }
-      end
+    tags.map { |tag| expression_clause(tag) { |phrase| exclude_phrase_clause(phrase) } }
+  end
+
+  def exclude_phrase_clause(phrase)
+    if phrase.split.one?
+      { bool: { should: SEARCH_FIELDS.map { |f| { wildcard: { f => { value: "#{phrase}*", case_insensitive: true } } } } } }
+    else
+      phrase_clause(phrase)
+    end
+  end
+
+  def expression_clause(tag, &leaf)
+    node_clause(Vacancy::SearchExpression.parse(tag), &leaf)
+  end
+
+  def node_clause(node, &leaf)
+    case node
+    when Vacancy::SearchExpression::And
+      { bool: { must: node.nodes.map { |n| node_clause(n, &leaf) } } }
+    when Vacancy::SearchExpression::Or
+      or_clause(node.nodes.map { |n| node_clause(n, &leaf) })
+    else
+      yield node.text
     end
   end
 end
