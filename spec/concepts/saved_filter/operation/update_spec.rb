@@ -31,6 +31,24 @@ RSpec.describe SavedFilter::Operation::Update, type: :operation do
     expect(current_user.reload.default_saved_filter).to eq(saved_filter)
   end
 
+  # "Зберегти в «name»" saves in one click: no modal, so no nested saved_filter
+  context "when saved straight from the search bar link" do
+    let(:params) do
+      ActionController::Parameters.new(id: saved_filter.hashid,
+                                       include_tags: %w[embedded remote],
+                                       include_ops:  %w[g_or],
+                                       exclude_tags: %w[junior])
+    end
+
+    it "overwrites the state and keeps the name" do
+      expect(result).to be_success
+      expect(saved_filter.reload.name).to eq('Embedded')
+      expect(saved_filter.include_tags).to eq(%w[embedded remote])
+      expect(saved_filter.include_ops).to eq(%w[g_or])
+      expect(saved_filter.exclude_tags).to eq(%w[junior])
+    end
+  end
+
   context "when the new name is blank" do
     let(:params) do
       ActionController::Parameters.new(id: saved_filter.hashid, saved_filter: { name: '' })

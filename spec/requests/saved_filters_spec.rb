@@ -42,6 +42,22 @@ RSpec.describe 'Saved filters', type: :request do
     expect(saved_filter.include_tags).to eq(%w[embedded remote])
   end
 
+  it 'saves into the preset in one click and renders the links away' do
+    patch saved_filter_path(saved_filter, include_tags: %w[embedded remote], include_ops: %w[and]),
+          headers: headers
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include('target="saved_filter_actions"')
+    expect(response.body).to include('target="saved_filters_list"')
+    # the swapped-in actions node carries no save links any more
+    actions = response.body[/target="saved_filter_actions".*?<\/turbo-stream>/m]
+    expect(actions).not_to include(I18n.t('saved_filter.new.link'))
+    expect(actions).to include('saved_filter_id')
+
+    expect(saved_filter.reload.include_tags).to eq(%w[embedded remote])
+    expect(saved_filter.name).to eq('Embedded')
+  end
+
   it 're-renders the modal with errors when the name is taken' do
     create(:saved_filter, user:, name: 'Taken')
 

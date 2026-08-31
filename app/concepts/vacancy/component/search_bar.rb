@@ -17,32 +17,6 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
       !@include_ops.blank?
   end
 
-  # An untouched preset is already saved, so neither save link is offered;
-  # editing it brings back both "save as new" and "save into the current one".
-  def state_differs_from_saved_filter?
-    @saved_filter && !@saved_filter.matches_state?(**current_state_params)
-  end
-
-  def show_save_filter_link?
-    current_user && show_clear_filter? && (@saved_filter.nil? || state_differs_from_saved_filter?)
-  end
-
-  def show_update_filter_link?
-    current_user && state_differs_from_saved_filter?
-  end
-
-  def new_saved_filter_link_path
-    helpers.new_saved_filter_path(**current_state_params)
-  end
-
-  def update_saved_filter_link_path
-    helpers.edit_saved_filter_path(@saved_filter, **current_state_params)
-  end
-
-  def current_state_params
-    { include_tags: @include_tags, include_ops: @include_ops, exclude_tags: @exclude_tags }
-  end
-
   def search_pill_input(f, tags:, ops:, name_prefix:)
     # name_prefix: наприклад, :include (для tags та ops)
     tags_field = "#{name_prefix}_tags"
@@ -164,10 +138,5 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
 
   def render_op_toggle(ops_field, index)
     render Vacancy::Component::SearchBar::OpToggle.new(name: ops_field, index:, value: @include_ops[index])
-  end
-
-  def link_button_label_class
-    'text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 \
-      dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer'
   end
 end
