@@ -1,5 +1,8 @@
-= render Vacancy::Component::TotalVacancies.new
+/ Everything the frame response returns must live inside the frame: the endpoint
+/ replaces #vacancy-search with this whole component, so a bar rendered outside
+/ would be duplicated on every search update.
 = helpers.turbo_frame_tag 'vacancy-search', data: { turbo_action: 'advance' } do
+  = render Vacancy::Component::TotalVacancies.new
   = render Vacancy::Component::SearchBar.new(include_tags: @include_tags,
           include_ops: @include_ops,
           exclude_tags: @exclude_tags,
