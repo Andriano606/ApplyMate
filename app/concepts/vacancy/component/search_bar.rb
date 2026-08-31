@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 class Vacancy::Component::SearchBar < ApplyMate::Component::Base
-  def initialize(include_tags: nil, include_ops: nil, exclude_tags: nil, count: nil)
+  def initialize(include_tags: nil, include_ops: nil, exclude_tags: nil, saved_filter: nil, count: nil)
     @include_tags = include_tags
     @include_ops = include_ops
     @exclude_tags = exclude_tags
+    @saved_filter = saved_filter
     @count = count
   end
 
@@ -16,14 +17,30 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
       !@include_ops.blank?
   end
 
+  # An untouched preset is already saved, so neither save link is offered;
+  # editing it brings back both "save as new" and "save into the current one".
+  def state_differs_from_saved_filter?
+    @saved_filter && !@saved_filter.matches_state?(**current_state_params)
+  end
+
   def show_save_filter_link?
-    current_user && show_clear_filter?
+    current_user && show_clear_filter? && (@saved_filter.nil? || state_differs_from_saved_filter?)
+  end
+
+  def show_update_filter_link?
+    current_user && state_differs_from_saved_filter?
   end
 
   def new_saved_filter_link_path
-    helpers.new_saved_filter_path(include_tags: @include_tags,
-                                  include_ops:  @include_ops,
-                                  exclude_tags: @exclude_tags)
+    helpers.new_saved_filter_path(**current_state_params)
+  end
+
+  def update_saved_filter_link_path
+    helpers.edit_saved_filter_path(@saved_filter, **current_state_params)
+  end
+
+  def current_state_params
+    { include_tags: @include_tags, include_ops: @include_ops, exclude_tags: @exclude_tags }
   end
 
   def search_pill_input(f, tags:, ops:, name_prefix:)

@@ -4,6 +4,10 @@
   .max-w-7xl.mx-auto.pt-8.pb-4
     / ── Include row ─────────────────────────────────────────────
 
+    / keeps the active preset across turbo-form updates (the form is the whole state)
+    - if @saved_filter
+      = hidden_field_tag :saved_filter_id, @saved_filter.hashid, id: nil
+
     .mb-2 = search_pill_input(f, tags: @include_tags, ops: @include_ops, name_prefix: :include)
     .mb-2 = search_pill_input(f, tags: @exclude_tags, ops: [], name_prefix: :exclude)
 
@@ -28,6 +32,14 @@
 
         - if show_save_filter_link?
           = helpers.link_to I18n.t('saved_filter.new.link'), new_saved_filter_link_path,
+              class: link_button_label_class,
+              data: { turbo_stream: true }
+
+        - if show_update_filter_link?
+          span.relative.flex.items-center.justify-center.w-2.h-full
+            span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
+
+          = helpers.link_to I18n.t('saved_filter.edit.link', name: @saved_filter.name), update_saved_filter_link_path,
               class: link_button_label_class,
               data: { turbo_stream: true }
 

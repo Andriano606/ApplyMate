@@ -353,6 +353,11 @@ en:
     destroy:
       confirm: Delete the saved filter?
       success: Filter deleted
+    edit:
+      header: Edit filter
+      link: Save into "%{name}"
+      submit: Save
+      title: Rename filter
     new:
       form:
         name: Filter name
@@ -360,6 +365,8 @@ en:
       header: Save filter
       link: Save filter
       submit: Save
+    update:
+      success: Filter updated
   session:
     auth_modal:
       message: Please sign in to continue

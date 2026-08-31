@@ -17,13 +17,8 @@ class SavedFilter::Component::List < ApplyMate::Component::Base
   end
 
   def saved_filter_active?(saved_filter)
-    saved_filter.include_tags == normalize_prop(@include_tags) &&
-      saved_filter.include_ops == normalize_prop(@include_ops) &&
-      saved_filter.exclude_tags == normalize_prop(@exclude_tags)
-  end
-
-  def normalize_prop(prop)
-    prop || []
+    saved_filter.matches_state?(include_tags: @include_tags, include_ops: @include_ops,
+                                exclude_tags: @exclude_tags)
   end
 
   def saved_filter_pill_classes(saved_filter)

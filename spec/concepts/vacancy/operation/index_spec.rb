@@ -58,6 +58,21 @@ RSpec.describe Vacancy::Operation::Index, type: :operation do
       expect(current_user.reload.default_saved_filter).to eq(saved_filter)
     end
 
+    it "exposes the preset so the bar knows which one is being edited" do
+      expect(result).to be_success
+      expect(model.saved_filter).to eq(saved_filter)
+    end
+
+    context "when the filter is cleared" do
+      let(:raw_params) { super().merge(vacancy_search: { clear_filter: '1' }) }
+
+      it "drops the active preset along with the tags" do
+        expect(result).to be_success
+        expect(model.saved_filter).to be_nil
+        expect(model.include_tags).to be_nil
+      end
+    end
+
     context "when the filter belongs to another user" do
       let(:saved_filter) { create(:saved_filter) }
 
