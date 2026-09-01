@@ -1,6 +1,15 @@
 # Cucumber / Feature Tests
 
-Feature files live in `features/user_stories/`. Steps are in `features/steps/generic/`.
+Feature files live in `features/user_stories/`. Steps are in `features/steps/`, split the
+same way as `app/concepts/`:
+
+- `generic/{given,when,then}.rb` — steps that work for any model or page (`I click on`,
+  `the following {word} records:`, `I hover over`).
+- `<resource>/{given,when,then}.rb` — steps that belong to one domain: `source/given.rb`,
+  `vacancy/given.rb`, `saved_filter/then.rb`.
+
+A step that names a model belongs in that resource's folder, not in `generic/`. Everything
+under `features/` is auto-required, so a new folder or file needs no wiring.
 
 ## Given Steps
 
@@ -41,6 +50,29 @@ Given the OAuth user is "Test User" with email "test@example.com"
 Given I am logged in as Andrii Kuluev
 ```
 
+### Records the table step cannot build
+
+`Given the following {word} records:` uses `find_or_create_by!`, so it cannot satisfy
+models that validate an attachment. FactoryBot is available in steps
+(`features/support/factory_bot.rb`), and `Source` has its own step because of the
+required logo:
+
+```gherkin
+Given a job source exists
+Given the last Source has the following Vacancy records:
+  | external_id | title          | company_name | description |
+  | ruby-1      | Ruby Developer | Acme         | Backend role |
+```
+
+### Make indexed vacancies searchable
+
+Elasticsearch callbacks fire in Cucumber, but a document is only searchable after a
+refresh, and the default interval (1s) is too slow to rely on mid-scenario:
+
+```gherkin
+Given the vacancy search index is refreshed
+```
+
 ## When Steps
 
 ### Navigate to a page
@@ -75,7 +107,11 @@ When I attach the file "resume.pdf" to "CV"    # from spec/fixtures/files/
 When I click on "Submit"         # works for both links and buttons, uses JS click
 When I click the edit button for "Acme Corp" in the table
 When I click the delete button for "Acme Corp" in the table   # confirms dialog
+When I hover over "Backend"      # dwells past Turbo's 100ms hover-prefetch delay
 ```
+
+`I click on` fires a JS click, which does **not** move the pointer — use `I hover over`
+when a scenario needs the real hover behaviour (Turbo 8 prefetches links on hover).
 
 ## Then Steps
 
@@ -87,6 +123,16 @@ Then I do not see text "Error"
 Then I see notice "Record saved"       # checks [data-flash-target="message"]
 Then I see alert "Invalid input"
 ```
+
+### Saved filter pills
+
+```gherkin
+Then the preset "Backend" shows "+1"      # scoped to that pill only
+Then the preset "Backend" shows no deltas # no +appeared / −disappeared badge
+```
+
+A **positive** assertion is satisfied by the pre-click DOM, so after `I click on` assert
+the badge that has to *disappear* first — that one waits for the response to land.
 
 ### Modal
 

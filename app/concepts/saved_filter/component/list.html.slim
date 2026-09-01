@@ -1,6 +1,10 @@
 - if saved_filters.any?
   .max-w-7xl.mx-auto.pb-2
-    .flex.items-center.gap-2.flex-wrap.px-1
+    / Opening a preset records its "last seen" snapshot, so a pill link is a GET
+    / that is NOT safe to speculate on. Turbo 8 prefetches links on hover, so
+    / sweeping the pointer across the row would consume the appeared/disappeared
+    / badges of every pill it passes over — not just the one the user clicks.
+    .flex.items-center.gap-2.flex-wrap.px-1 data-turbo-prefetch="false" data-test-id="saved-filter-pills"
       - saved_filters.each do |saved_filter|
         span[data-model-id=saved_filter.id class=saved_filter_pill_classes(saved_filter)]
           = helpers.link_to saved_filter.name, apply_saved_filter_path(saved_filter)
