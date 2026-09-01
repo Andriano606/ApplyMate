@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-RSpec.describe SavedFilter::Counts do
+RSpec.describe SavedFilter::Operation::Counts, type: :operation do
   include_context "with elasticsearch index"
 
   after do
@@ -27,7 +27,7 @@ RSpec.describe SavedFilter::Counts do
 
   def stats_for(filter)
     Rails.cache.clear
-    described_class.for([ filter.reload ])[filter.id]
+    described_class.call(saved_filters: [ filter.reload ]).model[filter.id]
   end
 
   it "counts matching vacancies and hides deltas before the first view" do
@@ -64,6 +64,6 @@ RSpec.describe SavedFilter::Counts do
     allow(Elasticsearch::Model.client).to receive(:msearch).and_raise(StandardError, "down")
     Rails.cache.clear
 
-    expect(described_class.for([ saved_filter ])).to eq({})
+    expect(described_class.call(saved_filters: [ saved_filter ]).model).to eq({})
   end
 end

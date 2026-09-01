@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-# Builds the Elasticsearch bodies for a vacancy search. The ONE place that
-# turns include/exclude tags + ops into a query — the search page and the
-# saved-filter counters must never drift apart.
+# Builds the Elasticsearch bool query (result model) for a vacancy search. The
+# ONE place that turns include/exclude tags + ops into a query — the search
+# page and the saved-filter counters must never drift apart.
 #
-# params: include_tags: ['rails', 'ruby', 'react'], include_ops: ['and', 'or'], exclude_tags: ['vue']
-# result: ('rails' AND 'ruby') OR 'react'
+# include_tags: ['rails', 'ruby', 'react'], include_ops: ['and', 'or'], exclude_tags: ['vue']
+# => ('rails' AND 'ruby') OR 'react'
 #
 # Ops precedence: 'g_or' joins adjacent tags into an explicit parenthesized OR
 # group (tightest), then 'and' binds tighter than 'or':
@@ -13,40 +13,27 @@
 #   => embedded AND stm32 AND (remote OR віддалено)
 #
 # Each tag may itself be a boolean expression with parentheses, parsed by
-# Vacancy::SearchExpression: 'embedded і stm32 і (remote або віддалено)'.
-class Vacancy::SearchQuery
+# Vacancy::Operation::ParseSearchExpression: 'embedded і stm32 і (remote або віддалено)'.
+#
+# min_vacancy_id limits the query to vacancies that appeared after a snapshot
+# (the saved-filter "appeared since last view" counter).
+class Vacancy::Operation::BuildSearchQuery < ApplyMate::Operation::Base
   SEARCH_FIELDS = %w[title company_name description].freeze
   OPS = %w[and or g_or].freeze
 
-  def initialize(include_tags:, include_ops:, exclude_tags:)
-    @include_tags = normalize_tags(include_tags)
-    @include_ops  = parse_ops(include_ops, @include_tags.size)
-    @exclude_tags = normalize_tags(exclude_tags)
-  end
+  def perform!(include_tags:, include_ops:, exclude_tags:, min_vacancy_id: nil, **)
+    skip_authorize
 
-  def search_body(page:, per_page:)
-    {
-      query:            query,
-      sort:             [ { vacancy_id: { order: 'desc' } } ],
-      from:             (page - 1) * per_page,
-      size:             per_page,
-      track_total_hits: true
-    }
-  end
+    tags = normalize_tags(include_tags)
+    ops  = parse_ops(include_ops, tags.size)
 
-  # min_vacancy_id limits the count to vacancies that appeared after a snapshot
-  def count_body(min_vacancy_id: nil)
-    { query: query(min_vacancy_id:), size: 0, track_total_hits: true }
+    must = [ build_include(tags, ops) ]
+    must << { range: { vacancy_id: { gt: min_vacancy_id } } } if min_vacancy_id
+
+    self.model = { bool: { must:, must_not: build_excludes(normalize_tags(exclude_tags)) } }
   end
 
   private
-
-  def query(min_vacancy_id: nil)
-    must = [ build_include(@include_tags, @include_ops) ]
-    must << { range: { vacancy_id: { gt: min_vacancy_id } } } if min_vacancy_id
-
-    { bool: { must:, must_not: build_excludes(@exclude_tags) } }
-  end
 
   def normalize_tags(param)
     Array.wrap(param).flat_map { |v| v.to_s.split(',') }.map(&:strip).reject(&:blank?)
@@ -122,14 +109,15 @@ class Vacancy::SearchQuery
   end
 
   def expression_clause(tag, &leaf)
-    node_clause(Vacancy::SearchExpression.parse(tag), &leaf)
+    node = run_operation(Vacancy::Operation::ParseSearchExpression, { text: tag }).model
+    node_clause(node, &leaf)
   end
 
   def node_clause(node, &leaf)
     case node
-    when Vacancy::SearchExpression::And
+    when Vacancy::Operation::ParseSearchExpression::And
       { bool: { must: node.nodes.map { |n| node_clause(n, &leaf) } } }
-    when Vacancy::SearchExpression::Or
+    when Vacancy::Operation::ParseSearchExpression::Or
       or_clause(node.nodes.map { |n| node_clause(n, &leaf) })
     else
       yield node.text

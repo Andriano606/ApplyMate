@@ -15,7 +15,7 @@ class SavedFilter::Component::List < ApplyMate::Component::Base
   end
 
   def stats
-    @stats ||= SavedFilter::Counts.for(saved_filters)
+    @stats ||= SavedFilter::Operation::Counts.call(saved_filters:).model
   end
 
   def stat_badge_classes
