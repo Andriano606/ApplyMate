@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-# Saved-filter pills under the search bar. Wrapped in a stable #saved_filters_list
-# node so SavedFiltersController#create can replace it via turbo stream without
-# refreshing the page (a refresh would reset the not-yet-saved search bar state).
+# Saved-filter pills under the search bar.
 class SavedFilter::Component::List < ApplyMate::Component::Base
   def initialize(include_tags: nil, include_ops: nil, exclude_tags: nil, **)
     @include_tags = include_tags

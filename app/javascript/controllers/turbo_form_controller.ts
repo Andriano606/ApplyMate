@@ -2,10 +2,11 @@ import { Controller } from '@hotwired/stimulus';
 import { turboFetch } from '../util/turbo_fetch';
 
 export default class extends Controller {
-  static values = { url: String };
+  static values = { url: String, history: Boolean };
 
   declare hasUrlValue: boolean;
   declare urlValue: string;
+  declare historyValue: boolean;
   #formGetAction!: string;
   #activeRequest: AbortController | null = null;
 
@@ -121,7 +122,14 @@ export default class extends Controller {
     const turboFrame = form.closest('turbo-frame') as Element;
 
     try {
-      await turboFetch(url, turboFrame, { signal: this.#activeRequest.signal });
+      const ok = await turboFetch(url, turboFrame, {
+        signal: this.#activeRequest.signal,
+      });
+      // Keep the address bar reproducing the rendered state (opt-in), so a hard
+      // reload or a turbo refresh after a save re-renders exactly this state.
+      if (ok && this.historyValue) {
+        window.history.replaceState(window.history.state, '', url);
+      }
     } catch (error) {
       // Don't log errors for aborted requests
       if (error instanceof Error && error.name !== 'AbortError') {

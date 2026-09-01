@@ -1,20 +1,19 @@
-span#saved_filter_actions.contents
-  / keeps the active preset across turbo-form updates (the form is the whole state)
-  - if @saved_filter
-    = hidden_field_tag :saved_filter_id, @saved_filter.hashid, id: nil
+/ keeps the active preset across turbo-form updates (the form is the whole state)
+- if @saved_filter
+  = hidden_field_tag :saved_filter_id, @saved_filter.hashid, id: nil
 
-  - if show_save_new?
-    span class=separator_classes
-      span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
+- if show_save_new?
+  span class=separator_classes
+    span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
 
-    = helpers.link_to I18n.t('saved_filter.new.link'), new_saved_filter_path,
-        class: link_button_label_class,
-        data: { turbo_stream: true }
+  = helpers.link_to I18n.t('saved_filter.new.link'), new_saved_filter_path,
+      class: link_button_label_class,
+      data: { turbo_stream: true }
 
-  - if show_save_into?
-    span class=separator_classes
-      span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
+- if show_save_into?
+  span class=separator_classes
+    span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
 
-    = helpers.link_to I18n.t('saved_filter.edit.link', name: @saved_filter.name), save_into_saved_filter_path,
-        class: link_button_label_class,
-        data: { turbo_method: :patch, turbo_stream: true }
+  = helpers.link_to I18n.t('saved_filter.edit.link', name: @saved_filter.name), save_into_saved_filter_path,
+      class: link_button_label_class,
+      data: { turbo_method: :patch, turbo_stream: true }

@@ -6,7 +6,9 @@ RSpec.describe 'Saved filters', type: :request do
   let(:user)  { create(:user) }
   let(:token) { user.api_tokens.create!.token }
   let(:headers) do
-    { 'Authorization' => "Bearer #{token}", 'Accept' => 'text/vnd.turbo-stream.html, text/html' }
+    { 'Authorization' => "Bearer #{token}",
+      'Accept' => 'text/vnd.turbo-stream.html, text/html',
+      'Referer' => 'http://www.example.com/vacancies' }
   end
   let(:saved_filter) do
     create(:saved_filter, user:, name: 'Embedded',
@@ -29,30 +31,24 @@ RSpec.describe 'Saved filters', type: :request do
     expect(response.body).to include('remote')
   end
 
-  it 'updates the preset and swaps the pills row without a page refresh' do
+  it 'updates the preset and answers with a page refresh' do
     patch saved_filter_path(saved_filter),
           params:  { saved_filter: { name: 'Embedded remote', include_tags: %w[embedded remote] } },
           headers: headers
 
     expect(response).to have_http_status(:ok)
-    expect(response.body).to include('target="saved_filters_list"')
-    expect(response.body).not_to include('action="refresh"')
+    expect(response.body).to include('action="refresh"')
 
     expect(saved_filter.reload.name).to eq('Embedded remote')
     expect(saved_filter.include_tags).to eq(%w[embedded remote])
   end
 
-  it 'saves into the preset in one click and renders the links away' do
+  it 'saves into the preset in one click, keeping its name' do
     patch saved_filter_path(saved_filter, include_tags: %w[embedded remote], include_ops: %w[and]),
           headers: headers
 
     expect(response).to have_http_status(:ok)
-    expect(response.body).to include('target="saved_filter_actions"')
-    expect(response.body).to include('target="saved_filters_list"')
-    # the swapped-in actions node carries no save links any more
-    actions = response.body[/target="saved_filter_actions".*?<\/turbo-stream>/m]
-    expect(actions).not_to include(I18n.t('saved_filter.new.link'))
-    expect(actions).to include('saved_filter_id')
+    expect(response.body).to include('action="refresh"')
 
     expect(saved_filter.reload.include_tags).to eq(%w[embedded remote])
     expect(saved_filter.name).to eq('Embedded')

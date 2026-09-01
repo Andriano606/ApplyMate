@@ -1,5 +1,6 @@
 = helpers.simple_form_for :vacancy_search, url: helpers.vacancies_path, method: :get,
-    html: { data: { turbo: true, controller: 'turbo-form', 'turbo-form-url-value': helpers.vacancies_path } } do |f|
+    html: { data: { turbo: true, controller: 'turbo-form', 'turbo-form-url-value': helpers.vacancies_path,
+                    'turbo-form-history-value': true } } do |f|
 
   .max-w-7xl.mx-auto.pt-8.pb-4
     / ── Include row ─────────────────────────────────────────────

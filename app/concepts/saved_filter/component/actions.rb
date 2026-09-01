@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
 # The save links of the search bar, plus the hidden field that keeps the active
-# preset attached to the search state. Wrapped in a stable #saved_filter_actions
-# node (display: contents, so an empty one adds no gap) so SavedFiltersController
-# can swap it after a save: the links vanish and the new preset id is in place,
-# all without re-running the search or refreshing the page.
+# preset attached to the search state across turbo-form updates. After a save
+# the whole page turbo-refreshes (morph), so the links simply render away once
+# the state matches the preset again.
 class SavedFilter::Component::Actions < ApplyMate::Component::Base
   def initialize(saved_filter: nil, include_tags: nil, include_ops: nil, exclude_tags: nil, **)
     @saved_filter = saved_filter

@@ -38,6 +38,8 @@ When `update` fires it:
 3. GETs `<form-action>/new` (create form) or `<form-action>/edit` (update form), or a custom URL if `data-turbo-form-url-value` is set.
 4. Replaces the nearest `<turbo-frame>` ancestor with the response fragment.
 5. Cancels any in-flight request before starting a new one (AbortController).
+6. If `data-turbo-form-history-value="true"` is set and the response rendered
+   successfully, writes the fetched URL into the address bar (see below).
 
 The operation reads `params[:action_initiator_name]` when it needs to vary behaviour by field:
 
@@ -75,6 +77,34 @@ If the re-render target differs from the form action (e.g. a search endpoint):
 = helpers.simple_form_for @search, url: helpers.widgets_path,
     html: { data: { controller: 'turbo-form', 'turbo-form-url-value': helpers.new_widget_path } } do |f|
 ```
+
+## Address-bar sync (`data-turbo-form-history-value`)
+
+Opt-in. When set to `true` on the form, every successful `update` calls
+`history.replaceState` with the exact URL it just fetched, so the address bar
+keeps reproducing the on-screen state:
+
+```slim
+= helpers.simple_form_for :vacancy_search, url: helpers.vacancies_path, method: :get,
+    html: { data: { controller: 'turbo-form', 'turbo-form-url-value': helpers.vacancies_path,
+                    'turbo-form-history-value': true } } do |f|
+```
+
+Enable it **only** for forms whose GET request *is* the page's canonical URL
+(e.g. the vacancy search bar). It is what makes these work mid-edit:
+
+- **hard reload / share the link** — re-renders exactly the visible state;
+- **`turbo_stream.action(:refresh, …)`** — the endpoint's default create/update
+  response re-fetches the current location, so controllers that save state
+  related to the form (e.g. `SavedFiltersController`) can rely on the default
+  handling instead of hand-rolled turbo streams.
+
+`replaceState` does not touch history entries (Back still leaves the page) and
+is skipped when the fetch failed or was aborted, so the URL never points at a
+state the browser did not render.
+
+Leave it off for modal/auxiliary forms — their `update` fetches a fragment URL
+(`…/new?…`) that must not become the page address.
 
 ## What turbo-form replaces
 
