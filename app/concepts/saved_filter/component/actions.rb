@@ -49,4 +49,9 @@ class SavedFilter::Component::Actions < ApplyMate::Component::Base
   def separator_classes
     'relative flex items-center justify-center w-2 h-full'
   end
+
+  def link_button_label_class
+    'text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 ' \
+      'dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer'
+  end
 end

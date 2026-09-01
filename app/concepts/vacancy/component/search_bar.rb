@@ -17,6 +17,11 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
       !@include_ops.blank?
   end
 
+  def link_button_label_class
+    'text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 ' \
+      'dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer'
+  end
+
   def search_pill_input(f, tags:, ops:, name_prefix:)
     # name_prefix: наприклад, :include (для tags та ops)
     tags_field = "#{name_prefix}_tags"

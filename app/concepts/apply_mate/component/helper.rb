@@ -63,11 +63,6 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::RadioButton.new(form:, attribute:, value:, label:, icon_name:, input_html:))
   end
 
-  def link_button_label_class
-    'text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 ' \
-      'dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer'
-  end
-
   def data_test_id(value)
     return {} if Rails.env.production?
 
