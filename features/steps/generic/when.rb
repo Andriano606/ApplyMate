@@ -142,3 +142,10 @@ When(/^I click the (edit|delete) button for "([^"]*)" in the table$/) do |action
     row.find("a[data-test-id=\"edit-button\"]").click
   end
 end
+
+# Turbo 8 prefetches a link 100ms after the pointer enters it, so a hover step
+# has to dwell past that delay to reproduce what a real pointer does.
+When('I hover over {string}') do |text|
+  find(:link_or_button, text, match: :first).hover
+  sleep 0.3
+end
