@@ -40,7 +40,7 @@ Rails.application.routes.draw do
   resources :applies, only: [ :index, :show, :new, :create, :destroy ]
   resources :source_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :prompts, only: [ :index, :new, :create, :edit, :update, :destroy ]
-  resources :saved_filters, only: [ :new, :create, :destroy ]
+  resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]
 
   # Defines the root path route ("/")
   root 'home#index'

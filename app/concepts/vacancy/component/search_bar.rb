@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 class Vacancy::Component::SearchBar < ApplyMate::Component::Base
-  def initialize(include_tags: nil, include_ops: nil, exclude_tags: nil, count: nil)
+  def initialize(include_tags: nil, include_ops: nil, exclude_tags: nil, saved_filter: nil, count: nil)
     @include_tags = include_tags
     @include_ops = include_ops
     @exclude_tags = exclude_tags
+    @saved_filter = saved_filter
     @count = count
   end
 
@@ -16,14 +17,9 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
       !@include_ops.blank?
   end
 
-  def show_save_filter_link?
-    current_user && show_clear_filter?
-  end
-
-  def new_saved_filter_link_path
-    helpers.new_saved_filter_path(include_tags: @include_tags,
-                                  include_ops:  @include_ops,
-                                  exclude_tags: @exclude_tags)
+  def link_button_label_class
+    'text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 ' \
+      'dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer'
   end
 
   def search_pill_input(f, tags:, ops:, name_prefix:)
@@ -147,10 +143,5 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
 
   def render_op_toggle(ops_field, index)
     render Vacancy::Component::SearchBar::OpToggle.new(name: ops_field, index:, value: @include_ops[index])
-  end
-
-  def link_button_label_class
-    'text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 \
-      dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer'
   end
 end

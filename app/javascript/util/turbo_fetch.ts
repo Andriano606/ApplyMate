@@ -5,12 +5,13 @@ import * as Turbo from '@hotwired/turbo';
  * Fetches content and handles both Turbo Stream and HTML responses intelligently.
  * Turbo Stream responses are rendered via Turbo.renderStreamMessage().
  * HTML responses are parsed and used to replace turbo-frame content directly.
+ * Returns whether the response was rendered successfully.
  */
 export async function turboFetch(
   url: string,
   turboFrame: Element,
   init?: RequestInit,
-) {
+): Promise<boolean> {
   const headers: Record<string, string> = {
     Accept: 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml',
   };
@@ -50,7 +51,9 @@ export async function turboFetch(
       // Fallback to stream handling
       Turbo.renderStreamMessage(streamMessage);
     }
+    return true;
   } else {
     console.error('Form update failed with status:', response.status);
+    return false;
   }
 }

@@ -1,5 +1,6 @@
 = helpers.simple_form_for :vacancy_search, url: helpers.vacancies_path, method: :get,
-    html: { data: { turbo: true, controller: 'turbo-form', 'turbo-form-url-value': helpers.vacancies_path } } do |f|
+    html: { data: { turbo: true, controller: 'turbo-form', 'turbo-form-url-value': helpers.vacancies_path,
+                    'turbo-form-history-value': true } } do |f|
 
   .max-w-7xl.mx-auto.pt-8.pb-4
     / ── Include row ─────────────────────────────────────────────
@@ -22,14 +23,10 @@
                   checked: false,
                   data: { action: 'change->turbo-form#update' }
 
-        - if show_clear_filter? && show_save_filter_link?
-          span.relative.flex.items-center.justify-center.w-2.h-full
-            span.absolute.text-gray-300.dark:text-gray-600.font-light.leading-none |
-
-        - if show_save_filter_link?
-          = helpers.link_to I18n.t('saved_filter.new.link'), new_saved_filter_link_path,
-              class: link_button_label_class,
-              data: { turbo_stream: true }
+        = render SavedFilter::Component::Actions.new(saved_filter: @saved_filter,
+                include_tags: @include_tags,
+                include_ops: @include_ops,
+                exclude_tags: @exclude_tags)
 
 / ── Saved filters row (outside the search form: pills are plain links) ──
 - if current_user

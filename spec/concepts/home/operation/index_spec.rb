@@ -27,6 +27,7 @@ RSpec.describe Home::Operation::Index, type: :operation do
       expect(model.include_tags).to eq(%w[embedded stm32])
       expect(model.include_ops).to eq(%w[and])
       expect(model.exclude_tags).to eq(%w[junior])
+      expect(model.saved_filter).to eq(saved_filter)
     end
 
     context "when explicit search params are given" do
@@ -36,6 +37,7 @@ RSpec.describe Home::Operation::Index, type: :operation do
         expect(result).to be_success
         expect(model.include_tags).to eq(%w[ruby])
         expect(model.exclude_tags).to be_nil
+        expect(model.saved_filter).to be_nil
       end
     end
   end

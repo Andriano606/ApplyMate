@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-# Saved-filter pills under the search bar. Wrapped in a stable #saved_filters_list
-# node so SavedFiltersController#create can replace it via turbo stream without
-# refreshing the page (a refresh would reset the not-yet-saved search bar state).
+# Saved-filter pills under the search bar.
 class SavedFilter::Component::List < ApplyMate::Component::Base
   def initialize(include_tags: nil, include_ops: nil, exclude_tags: nil, **)
     @include_tags = include_tags
@@ -16,14 +14,25 @@ class SavedFilter::Component::List < ApplyMate::Component::Base
     @saved_filters ||= current_user ? current_user.saved_filters.order(:name) : []
   end
 
-  def saved_filter_active?(saved_filter)
-    saved_filter.include_tags == normalize_prop(@include_tags) &&
-      saved_filter.include_ops == normalize_prop(@include_ops) &&
-      saved_filter.exclude_tags == normalize_prop(@exclude_tags)
+  def stats
+    @stats ||= SavedFilter::Operation::Counts.call(saved_filters:).model
   end
 
-  def normalize_prop(prop)
-    prop || []
+  def stat_badge_classes
+    'inline-flex items-center rounded-full bg-black/10 dark:bg-white/10 px-1.5 text-[10px] font-semibold'
+  end
+
+  def appeared_badge_classes
+    'inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-1.5 text-[10px] font-semibold'
+  end
+
+  def disappeared_badge_classes
+    'inline-flex items-center rounded-full bg-rose-100 text-rose-700 px-1.5 text-[10px] font-semibold'
+  end
+
+  def saved_filter_active?(saved_filter)
+    saved_filter.matches_state?(include_tags: @include_tags, include_ops: @include_ops,
+                                exclude_tags: @exclude_tags)
   end
 
   def saved_filter_pill_classes(saved_filter)

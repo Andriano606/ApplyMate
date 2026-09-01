@@ -353,6 +353,11 @@ uk:
     destroy:
       confirm: Видалити збережений фільтр?
       success: Фільтр видалено
+    edit:
+      header: Редагувати фільтр
+      link: Зберегти в «%{name}»
+      submit: Зберегти
+      title: Перейменувати фільтр
     new:
       form:
         name: Назва фільтру
@@ -360,6 +365,12 @@ uk:
       header: Зберегти фільтр
       link: Зберегти фільтр
       submit: Зберегти
+    stats:
+      appeared_title: Нових вакансій з останнього перегляду
+      count_title: Вакансій зараз
+      disappeared_title: Зникло вакансій з останнього перегляду
+    update:
+      success: Фільтр оновлено
   session:
     auth_modal:
       message: Будь ласка, увійдіть, щоб продовжити

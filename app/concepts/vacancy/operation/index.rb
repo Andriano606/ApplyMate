@@ -6,16 +6,24 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
     params = normalize_include_params(params)
     params = normalize_exclude_params(params)
-    remember_default_filter(params, current_user)
 
     if params.dig(:vacancy_search, :clear_filter) == '1'
-      params[:include_tags] = nil
-      params[:include_ops]  = nil
-      params[:exclude_tags] = nil
+      params[:include_tags]    = nil
+      params[:include_ops]     = nil
+      params[:exclude_tags]    = nil
+      params[:saved_filter_id] = nil
     end
+
+    saved_filter = resolve_saved_filter(params, current_user)
+    remember_default_filter(saved_filter, current_user)
 
     result = run_operation Vacancy::Operation::Search, { params:, current_user: }
     vacancies = result.model
+    run_operation(SavedFilter::Operation::RecordView,
+                  { saved_filter:, vacancies:,
+                    include_tags: params[:include_tags],
+                    include_ops:  params[:include_ops],
+                    exclude_tags: params[:exclude_tags] })
     applies_by_vacancy = if current_user
       current_user.applies.where(vacancy_id: vacancies.map(&:id)).index_by(&:vacancy_id)
     else
@@ -27,19 +35,25 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
       applies_by_vacancy:,
       include_tags: params[:include_tags],
       include_ops:  params[:include_ops],
-      exclude_tags: params[:exclude_tags]
+      exclude_tags: params[:exclude_tags],
+      saved_filter:
     )
   end
 
   private
 
-  # Clicking a saved-filter pill carries saved_filter_id — remember it as the
-  # user's default preset (applied on the home page)
-  def remember_default_filter(params, current_user)
+  # The pill link and the search form both carry saved_filter_id, so the bar
+  # knows which preset is being edited across turbo updates.
+  def resolve_saved_filter(params, current_user)
     return if params[:saved_filter_id].blank? || current_user.nil?
 
-    filter = current_user.saved_filters.find_by_hashid(params[:saved_filter_id])
-    current_user.update!(default_saved_filter: filter) if filter
+    current_user.saved_filters.find_by_hashid(params[:saved_filter_id])
+  end
+
+  def remember_default_filter(saved_filter, current_user)
+    return if saved_filter.nil? || current_user.default_saved_filter_id == saved_filter.id
+
+    current_user.update!(default_saved_filter: saved_filter)
   end
 
   def normalize_include_params(params)
@@ -84,7 +98,7 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
   # New toggles submit 'and'/'or'/'g_or' directly; legacy checkbox params were boolean-ish
   def normalize_op(op)
-    return op if Vacancy::Operation::Search::OPS.include?(op)
+    return op if Vacancy::Operation::BuildSearchQuery::OPS.include?(op)
 
     op.to_b ? 'and' : 'or'
   end

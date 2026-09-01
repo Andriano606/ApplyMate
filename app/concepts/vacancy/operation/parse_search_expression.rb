@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-# Parses a boolean search expression into an AST of Phrase / And / Or nodes:
+# Parses a boolean search expression into an AST of Phrase / And / Or nodes
+# (result model):
 #
-#   Vacancy::SearchExpression.parse('embedded і stm32 і (remote або віддалено)')
+#   Vacancy::Operation::ParseSearchExpression.call(text: 'embedded і stm32 і (remote або віддалено)').model
 #   # => And[Phrase('embedded'), Phrase('stm32'), Or[Phrase('remote'), Phrase('віддалено')]]
 #
 # Operators (case-insensitive): і / та / and / && / & — AND; або / or / || / | — OR.
@@ -13,7 +14,7 @@
 # Parsing is lenient — user input must never raise: unbalanced parens are
 # auto-closed or skipped, dangling operators are ignored, and input that yields
 # no terms at all falls back to a literal phrase of the whole string.
-class Vacancy::SearchExpression
+class Vacancy::Operation::ParseSearchExpression < ApplyMate::Operation::Base
   Phrase = Struct.new(:text)
   And    = Struct.new(:nodes)
   Or     = Struct.new(:nodes)
@@ -23,15 +24,17 @@ class Vacancy::SearchExpression
 
   TOKEN_RE = /"[^"]*"|\(|\)|[^\s()]+/
 
-  def self.parse(input)
-    new(input).parse
-  end
+  def perform!(text:, **)
+    skip_authorize
 
-  def initialize(input)
-    @input  = input.to_s
+    @input  = text.to_s
     @tokens = @input.scan(TOKEN_RE)
     @pos    = 0
+
+    self.model = parse
   end
+
+  private
 
   def parse
     nodes = []
@@ -44,8 +47,6 @@ class Vacancy::SearchExpression
 
     combine(And, nodes) || (Phrase.new(@input.strip) unless @input.blank?)
   end
-
-  private
 
   def parse_or
     nodes = [ parse_and ].compact

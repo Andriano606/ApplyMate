@@ -1,22 +1,22 @@
 class SavedFiltersController < ApplicationController
+  # create/update rely on the endpoint default (flash + turbo refresh with
+  # morph): the search bar keeps its address bar in sync (turbo-form history
+  # option), so refreshing the current URL re-renders exactly the on-screen
+  # state with the fresh preset data.
   def new
-    endpoint SavedFilter::Operation::New, SavedFilter::Component::NewModal
+    endpoint SavedFilter::Operation::New, SavedFilter::Component::FormModal
   end
 
-  # No page refresh on success: it would reset the search bar state,
-  # which lives only in the form. Swap the pills row in place instead.
   def create
-    endpoint SavedFilter::Operation::Create, SavedFilter::Component::NewModal do |m|
-      m.success do |result|
-        list = SavedFilter::Component::List.new(include_tags: result.model.include_tags,
-                                                include_ops:  result.model.include_ops,
-                                                exclude_tags: result.model.exclude_tags)
-        turbo_actions = [ turbo_stream.close_active_modal ]
-        turbo_actions << turbo_stream.replace('saved_filters_list', html: render_to_string(list, layout: false))
-        turbo_actions << turbo_stream.flash([ [ result.message_level, result.notice[:text] ] ]) if result.notice
-        render turbo_stream: turbo_actions
-      end
-    end
+    endpoint SavedFilter::Operation::Create, SavedFilter::Component::FormModal
+  end
+
+  def edit
+    endpoint SavedFilter::Operation::Edit, SavedFilter::Component::FormModal
+  end
+
+  def update
+    endpoint SavedFilter::Operation::Update, SavedFilter::Component::FormModal
   end
 
   def destroy
