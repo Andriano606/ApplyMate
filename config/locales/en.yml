@@ -365,6 +365,10 @@ en:
       header: Save filter
       link: Save filter
       submit: Save
+    stats:
+      appeared_title: New vacancies since your last view
+      count_title: Vacancies now
+      disappeared_title: Vacancies gone since your last view
     update:
       success: Filter updated
   session:

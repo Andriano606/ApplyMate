@@ -19,6 +19,10 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
     result = run_operation Vacancy::Operation::Search, { params:, current_user: }
     vacancies = result.model
+    SavedFilter::RecordView.call(saved_filter:, vacancies:,
+                                 include_tags: params[:include_tags],
+                                 include_ops:  params[:include_ops],
+                                 exclude_tags: params[:exclude_tags])
     applies_by_vacancy = if current_user
       current_user.applies.where(vacancy_id: vacancies.map(&:id)).index_by(&:vacancy_id)
     else
@@ -93,7 +97,7 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
 
   # New toggles submit 'and'/'or'/'g_or' directly; legacy checkbox params were boolean-ish
   def normalize_op(op)
-    return op if Vacancy::Operation::Search::OPS.include?(op)
+    return op if Vacancy::SearchQuery::OPS.include?(op)
 
     op.to_b ? 'and' : 'or'
   end

@@ -17,4 +17,18 @@ class SavedFilter < ApplicationRecord
       self.include_ops == Array(include_ops) &&
       self.exclude_tags == Array(exclude_tags)
   end
+
+  # Snapshot for the "+appeared/−disappeared since last view" badges. On an
+  # empty result max_vacancy_id is nil — keep the previous watermark so newer
+  # vacancies still count as appeared.
+  def record_view!(count:, max_vacancy_id:)
+    max_vacancy_id ||= last_seen_max_vacancy_id
+    return if last_seen_count == count && last_seen_max_vacancy_id == max_vacancy_id
+
+    update!(last_seen_count: count, last_seen_max_vacancy_id: max_vacancy_id)
+  end
+
+  def viewed?
+    last_seen_count.present?
+  end
 end

@@ -31,6 +31,34 @@ RSpec.describe SavedFilter::Operation::Update, type: :operation do
     expect(current_user.reload.default_saved_filter).to eq(saved_filter)
   end
 
+  it "resets the view snapshot because it described the old state" do
+    saved_filter.record_view!(count: 5, max_vacancy_id: 100)
+
+    expect(result).to be_success
+    expect(saved_filter.reload.last_seen_count).to be_nil
+    expect(saved_filter.last_seen_max_vacancy_id).to be_nil
+  end
+
+  context "when only the name changes" do
+    let(:params) do
+      ActionController::Parameters.new(
+        id: saved_filter.hashid,
+        saved_filter: { name: 'Renamed',
+                        include_tags: saved_filter.include_tags,
+                        include_ops: saved_filter.include_ops,
+                        exclude_tags: saved_filter.exclude_tags }
+      )
+    end
+
+    it "keeps the view snapshot" do
+      saved_filter.record_view!(count: 5, max_vacancy_id: 100)
+
+      expect(result).to be_success
+      expect(saved_filter.reload.name).to eq('Renamed')
+      expect(saved_filter.last_seen_count).to eq(5)
+    end
+  end
+
   # "Зберегти в «name»" saves in one click: no modal, so no nested saved_filter
   context "when saved straight from the search bar link" do
     let(:params) do

@@ -14,6 +14,22 @@ class SavedFilter::Component::List < ApplyMate::Component::Base
     @saved_filters ||= current_user ? current_user.saved_filters.order(:name) : []
   end
 
+  def stats
+    @stats ||= SavedFilter::Counts.for(saved_filters)
+  end
+
+  def stat_badge_classes
+    'inline-flex items-center rounded-full bg-black/10 dark:bg-white/10 px-1.5 text-[10px] font-semibold'
+  end
+
+  def appeared_badge_classes
+    'inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-1.5 text-[10px] font-semibold'
+  end
+
+  def disappeared_badge_classes
+    'inline-flex items-center rounded-full bg-rose-100 text-rose-700 px-1.5 text-[10px] font-semibold'
+  end
+
   def saved_filter_active?(saved_filter)
     saved_filter.matches_state?(include_tags: @include_tags, include_ops: @include_ops,
                                 exclude_tags: @exclude_tags)

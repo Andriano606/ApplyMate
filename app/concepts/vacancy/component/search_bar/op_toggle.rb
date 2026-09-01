@@ -3,7 +3,7 @@
 # Three-state operator toggle between search pills: clicking cycles
 # і → або → (або) → і. The '(або)' state joins the adjacent pills into an
 # explicit parenthesized OR group, overriding the default AND-binds-tighter
-# precedence (see Vacancy::Operation::Search::OPS).
+# precedence (see Vacancy::SearchQuery::OPS).
 #
 # No custom JS: three hidden radios hold the states; the visible label always
 # shows the current state but its `for` targets the NEXT state's radio, so a
@@ -13,7 +13,7 @@ class Vacancy::Component::SearchBar::OpToggle < ApplyMate::Component::Base
   def initialize(name:, index:, value:)
     @name  = name
     @index = index
-    @value = Vacancy::Operation::Search::OPS.include?(value) ? value : 'and'
+    @value = Vacancy::SearchQuery::OPS.include?(value) ? value : 'and'
     super()
   end
 

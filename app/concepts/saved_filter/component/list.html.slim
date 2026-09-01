@@ -4,6 +4,15 @@
       - saved_filters.each do |saved_filter|
         span[data-model-id=saved_filter.id class=saved_filter_pill_classes(saved_filter)]
           = helpers.link_to saved_filter.name, apply_saved_filter_path(saved_filter)
+          - if (stat = stats[saved_filter.id])
+            span class=stat_badge_classes title=I18n.t('saved_filter.stats.count_title')
+              = stat.count
+            - if stat.appeared.to_i.positive?
+              span class=appeared_badge_classes title=I18n.t('saved_filter.stats.appeared_title')
+                = "+#{stat.appeared}"
+            - if stat.disappeared.to_i.positive?
+              span class=disappeared_badge_classes title=I18n.t('saved_filter.stats.disappeared_title')
+                = "−#{stat.disappeared}"
           = helpers.link_to icon(:edit, size: 3), helpers.edit_saved_filter_path(saved_filter),
               class: 'flex items-center justify-center w-3 h-3 opacity-50 hover:opacity-100 transition-opacity',
               title: I18n.t('saved_filter.edit.title'),

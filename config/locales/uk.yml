@@ -365,6 +365,10 @@ uk:
       header: Зберегти фільтр
       link: Зберегти фільтр
       submit: Зберегти
+    stats:
+      appeared_title: Нових вакансій з останнього перегляду
+      count_title: Вакансій зараз
+      disappeared_title: Зникло вакансій з останнього перегляду
     update:
       success: Фільтр оновлено
   session:
