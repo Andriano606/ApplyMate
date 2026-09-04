@@ -27,6 +27,10 @@ Then('I see button {string}') do |text|
   expect(page).to have_button(text)
 end
 
+Then('I do not see button {string}') do |text|
+  expect(page).to have_no_button(text)
+end
+
 Then('I see link {string}') do |text|
   expect(page).to have_link(text)
 end

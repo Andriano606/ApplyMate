@@ -113,6 +113,21 @@ When I hover over "Backend"      # dwells past Turbo's 100ms hover-prefetch dela
 `I click on` fires a JS click, which does **not** move the pointer — use `I hover over`
 when a scenario needs the real hover behaviour (Turbo 8 prefetches links on hover).
 
+### Vacancy cards
+
+```gherkin
+When I click "Приховати" on the vacancy card "Ruby Developer"   # scoped to that card; JS click, works on hover-only buttons
+When I hover over the vacancy card "Ruby Developer"
+```
+
+### Hover-only UI
+
+Headless Chrome has no pointing device and reports `(hover: none)`, while Tailwind v4
+wraps every `hover:` / `group-hover:` rule in `@media (hover: hover)`. The driver in
+`features/support/env.rb` therefore declares a mouse via `--blink-settings`, so
+`I hover over ...` really reveals hover-only elements and `I do not see button` holds
+before the hover (Selenium treats `opacity: 0` as not visible).
+
 ## Then Steps
 
 ### Text and flash messages
@@ -122,6 +137,14 @@ Then I see text "Welcome"
 Then I do not see text "Error"
 Then I see notice "Record saved"       # checks [data-flash-target="message"]
 Then I see alert "Invalid input"
+```
+
+### Vacancy cards
+
+```gherkin
+Then the vacancy card "Ruby Developer" is hidden       # [data-hidden="true"] on the card
+Then the vacancy card "Ruby Developer" is not hidden
+Then I do not see button "Повернути"                    # visibility-aware: opacity 0 counts as not visible
 ```
 
 ### Saved filter pills

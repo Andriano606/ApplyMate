@@ -1,42 +1,60 @@
-.bg-white.dark:bg-gray-800.rounded-xl.border.border-gray-200.dark:border-gray-700.flex.flex-col.h-80 id=dom_id(@vacancy)
-  .flex.items-center.justify-between.pt-4.px-5
-    .flex.items-center.gap-3
-      .w-10.h-10.rounded-lg.bg-gray-100.dark:bg-gray-700.shrink-0.flex.items-center.justify-center [
-        id="company_logo_#{@vacancy.hashid}"
-        data-turbo-permanent="true"
-        ]
-        - if valid_icon_url?
-          img.max-w-full.max-h-full.object-contain (
-              src=@vacancy.company_icon_url alt=@vacancy.company_name \
-              onerror="this.style.display='none';this.nextElementSibling.style.display=''"
-            )
-          span.text-sm.font-bold.text-gray-500.dark:text-gray-400 style="display:none" = company_initial
-        - else
-          span.text-sm.font-bold.text-gray-500.dark:text-gray-400 = company_initial
-      .flex.flex-col.gap-1
-        span.text-sm.font-bold.text-gray-900.dark:text-gray-100.line-clamp-1 = @vacancy.company_name
-        .w-fit = badge(label: @vacancy.source.name, color: :green, variant: :pill)
+.relative.group id=dom_id(@vacancy) data-hidden=(hidden? ? 'true' : nil) *data_test_id('vacancy-card')
+  div class=card_classes
+    .flex.items-center.justify-between.pt-4.px-5
+      .flex.items-center.gap-3
+        .w-10.h-10.rounded-lg.bg-gray-100.dark:bg-gray-700.shrink-0.flex.items-center.justify-center [
+          id="company_logo_#{@vacancy.hashid}"
+          data-turbo-permanent="true"
+          ]
+          - if valid_icon_url?
+            img.max-w-full.max-h-full.object-contain (
+                src=@vacancy.company_icon_url alt=@vacancy.company_name \
+                onerror="this.style.display='none';this.nextElementSibling.style.display=''"
+              )
+            span.text-sm.font-bold.text-gray-500.dark:text-gray-400 style="display:none" = company_initial
+          - else
+            span.text-sm.font-bold.text-gray-500.dark:text-gray-400 = company_initial
+        .flex.flex-col.gap-1
+          span.text-sm.font-bold.text-gray-900.dark:text-gray-100.line-clamp-1 = @vacancy.company_name
+          .w-fit = badge(label: @vacancy.source.name, color: :green, variant: :pill)
 
-    - if signed_in?
-      = Apply::TurboHandler::StatusUpdate.stream_from(@vacancy, current_user, helpers)
-      = render Apply::Component::StatusBadge.new(vacancy: @vacancy)
+      - if signed_in?
+        = Apply::TurboHandler::StatusUpdate.stream_from(@vacancy, current_user, helpers)
+        = render Apply::Component::StatusBadge.new(vacancy: @vacancy)
 
-  .flex.flex-col.gap-3.px-5.pt-3.pb-4.flex-1
-    h3.text-xl.font-extrabold.text-gray-900.dark:text-gray-100.leading-tight.tracking-tight.line-clamp-1
-      = @vacancy.title
-    p.text-sm.text-gray-500.dark:text-gray-400.leading-relaxed.line-clamp-5 = description
-  .border-t.border-gray-200.dark:border-gray-700.flex
-    = helpers.link_to helpers.vacancy_path(@vacancy), \
-        data: { turbo_frame: '_top' }, \
-        class: 'flex items-center gap-1.5 px-5 py-3 font-medium font-outfit text-[13px] ' \
-               'text-gray-900 dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 ' \
-               "transition-colors#{' border-r border-gray-200 dark:border-gray-700' if @vacancy.url.present?}"
-      = icon(:eye, size: 4)
-      = I18n.t('vacancy.card.details')
-    - if @vacancy.url.present?
-      a.flex.items-center.gap-1.5.px-5.py-3.font-medium.font-outfit.text-gray-900 (
-          class=" text-[13px] dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" \
-          href=@vacancy.url target="_blank" rel="noopener noreferrer"
-        )
-        = icon(:external_link, size: 4)
-        = I18n.t('vacancy.card.view_original')
+    .flex.flex-col.gap-3.px-5.pt-3.pb-4.flex-1
+      h3.text-xl.font-extrabold.text-gray-900.dark:text-gray-100.leading-tight.tracking-tight.line-clamp-1
+        = @vacancy.title
+      p.text-sm.text-gray-500.dark:text-gray-400.leading-relaxed.line-clamp-5 = description
+    .border-t.border-gray-200.dark:border-gray-700.flex
+      = helpers.link_to helpers.vacancy_path(@vacancy), \
+          data: { turbo_frame: '_top' }, \
+          class: 'flex items-center gap-1.5 px-5 py-3 font-medium font-outfit text-[13px] ' \
+                 'text-gray-900 dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 ' \
+                 "transition-colors#{' border-r border-gray-200 dark:border-gray-700' if @vacancy.url.present?}"
+        = icon(:eye, size: 4)
+        = I18n.t('vacancy.card.details')
+      - if @vacancy.url.present?
+        a.flex.items-center.gap-1.5.px-5.py-3.font-medium.font-outfit.text-gray-900 (
+            class=" text-[13px] dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" \
+            href=@vacancy.url target="_blank" rel="noopener noreferrer"
+          )
+          = icon(:external_link, size: 4)
+          = I18n.t('vacancy.card.view_original')
+      - if signed_in? && !hidden?
+        = helpers.button_to hide_path, method: :post, form_class: 'ml-auto flex', \
+            title: I18n.t('vacancy.card.hide'), \
+            class: 'flex items-center px-4 py-3 border-l border-gray-200 dark:border-gray-700 ' \
+                   'text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors' do
+          = icon(:eye_slash, size: 4)
+          span.sr-only = I18n.t('vacancy.card.hide')
+
+  - if hidden?
+    div class=overlay_classes
+      span.text-sm.font-medium.text-gray-600.dark:text-gray-300 = I18n.t('vacancy.card.hidden')
+      = helpers.button_to hide_path, method: :delete, form_class: 'flex', \
+          class: 'flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gray-900 text-white dark:bg-gray-100 ' \
+                 'dark:text-gray-900 text-sm font-medium font-outfit shadow hover:bg-gray-700 ' \
+                 'dark:hover:bg-white transition-colors' do
+        = icon(:eye, size: 4)
+        = I18n.t('vacancy.card.restore')

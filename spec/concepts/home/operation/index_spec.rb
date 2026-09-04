@@ -42,6 +42,30 @@ RSpec.describe Home::Operation::Index, type: :operation do
     end
   end
 
+  context "when the user hid a vacancy on the page" do
+    let(:current_user) { create(:user) }
+    let(:source) { create(:source) }
+    let!(:hidden)  { create(:vacancy, source:, title: "Hidden role") }
+    let!(:visible) { create(:vacancy, source:, title: "Visible role") }
+
+    before do
+      [ hidden, visible ].each { |v| v.__elasticsearch__.index_document }
+      Vacancy.__elasticsearch__.refresh_index!
+      current_user.hidden_vacancies.create!(vacancy: hidden)
+    end
+
+    after do
+      Elasticsearch::Model.client.delete_by_query(index: Vacancy.index_name,
+                                                  body: { query: { match_all: {} } }, refresh: true)
+    end
+
+    it "keeps the vacancy in the list and flags it as hidden" do
+      expect(result).to be_success
+      expect(model.vacancies.map(&:id)).to contain_exactly(hidden.id, visible.id)
+      expect(model.hidden_vacancy_ids).to eq([ hidden.id ])
+    end
+  end
+
   context "when the user has no default saved filter" do
     let(:current_user) { create(:user) }
 

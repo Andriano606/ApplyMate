@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_01_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_04_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -88,6 +88,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_000001) do
     t.index ["user_id"], name: "index_applies_on_user_id"
     t.index ["user_profile_id"], name: "index_applies_on_user_profile_id"
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
+  end
+
+  create_table "hidden_vacancies", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.bigint "vacancy_id", null: false
+    t.index ["user_id", "vacancy_id"], name: "index_hidden_vacancies_on_user_id_and_vacancy_id", unique: true
+    t.index ["vacancy_id"], name: "index_hidden_vacancies_on_vacancy_id"
   end
 
   create_table "prompts", force: :cascade do |t|
@@ -394,6 +403,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_000001) do
   add_foreign_key "applies", "user_profiles"
   add_foreign_key "applies", "users"
   add_foreign_key "applies", "vacancies"
+  add_foreign_key "hidden_vacancies", "users"
+  add_foreign_key "hidden_vacancies", "vacancies"
   add_foreign_key "prompts", "users"
   add_foreign_key "proxy_source_stats", "proxies"
   add_foreign_key "proxy_source_stats", "sources"

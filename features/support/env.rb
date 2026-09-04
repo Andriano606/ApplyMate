@@ -13,6 +13,11 @@ require 'cucumber/rails'
 # Set SHOW_CHROME_DURING_TEST=true in .env to see Chrome during tests
 Capybara.register_driver :selenium_chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
+  # Headless Chrome has no pointing device, so it reports `(hover: none)` and every
+  # Tailwind `hover:` / `group-hover:` rule (gated on `@media (hover: hover)`) stays
+  # off. Declare a mouse so hover-revealed UI behaves like on a desktop.
+  options.add_argument('--blink-settings=primaryHoverType=2,availableHoverTypes=2,' \
+                       'primaryPointerType=4,availablePointerTypes=4')
   unless ENV['SHOW_CHROME_DURING_TEST'].to_s == 'true'
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
