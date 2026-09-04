@@ -7,5 +7,4 @@ details(class='group')
         = icon(:chevron_down, size: 3)
     p.text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.group-open:hidden(class=clamp_class)
       = preview_text
-  .text-sm.text-gray-600.dark:text-gray-400.leading-relaxed.space-y-2
-    = full_html
+  = rich_text(html: @html)

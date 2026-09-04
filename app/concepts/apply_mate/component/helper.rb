@@ -51,6 +51,20 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::ExpandableText.new(html:, lines:))
   end
 
+  def rich_text(html:)
+    render(ApplyMate::Component::RichText.new(html:))
+  end
+
+  # A vacancy's description as renderable markup. Rows scraped before descriptions
+  # were stored as markup only have the plain-text column, so their blank lines are
+  # turned back into paragraphs — every caller then feeds RichText one shape.
+  def vacancy_description_html(vacancy)
+    return vacancy.description_html if vacancy.description_html.present?
+    return nil if vacancy.description.blank?
+
+    helpers.simple_format(vacancy.description)
+  end
+
   def tabs(base_url:, id: nil, &block)
     render(ApplyMate::Component::Tabs.new(base_url:, id:), &block)
   end

@@ -398,7 +398,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       # let the listing overwrite it — otherwise an existing full description is clobbered
       # by the listing snapshot and the (skip-if-present) detail pass never restores it.
       update_cols = %i[title url company_name company_icon_url]
-      update_cols << :description unless @source.scraper.constantize.fetches_description?
+      update_cols += %i[description description_html] unless @source.scraper.constantize.fetches_description?
 
       Vacancy.upsert_all(
         data.map(&:to_h),
@@ -446,7 +446,9 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         sources.map do |source|
           top_task.async do
             sync_source(source)
-            fetch_description_for_source(source)
+            # Sources whose listing already carries the description (Djinni) have no
+            # second pass — there is no detail page left to visit.
+            fetch_description_for_source(source) if source.scraper.constantize.fetches_description?
           end
         end.each(&:wait)
       end
@@ -496,18 +498,20 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       done         = [ 0 ]
       skipped      = [ 0 ]
       stop         = [ false ]
-      skip         = [ false ]
       retry_counts = Hash.new(0)
       last_id      = 0
 
       loop do
-        break if skip[0] || stop[0]
+        break if stop[0]
 
-        scope = source.vacancies.select(:id, :external_id, :url).where('vacancies.id > ?', last_id)
         # Skip vacancies that already have a description — only fetch the ones still missing
         # one (new this run + any whose previous detail fetch failed). Huge win for Dou,
         # whose detail pass otherwise re-fetches every vacancy through rate-limited proxies.
-        scope = scope.where(description: [ nil, '' ]) if source.scraper.constantize.fetches_description?
+        # Keyed on description_html (not description): rows scraped before descriptions were
+        # stored as markup have text but no markup, and this is what backfills them.
+        scope = source.vacancies.select(:id, :external_id, :url)
+                      .where('vacancies.id > ?', last_id)
+                      .where(description_html: [ nil, '' ])
         vacancies_queue = with_db { scope.order(:id).limit(VACANCY_FETCH_BATCH).to_a }
         break if vacancies_queue.empty?
 
@@ -517,7 +521,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         barrier = Async::Barrier.new
 
         DESCRIPTION_WORKERS.times do
-          barrier.async { fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, skip, pool) }
+          barrier.async { fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool) }
         end
 
         barrier.wait
@@ -540,9 +544,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     end
   end
 
-  def fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, skip, pool)
+  def fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool)
+    scraper_class = source.scraper.constantize
+
     loop do
-      break if stop[0] || skip[0]
+      break if stop[0]
 
       begin
         proxy   = nil
@@ -562,15 +568,14 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           next
         end
 
-        client      = source.scraper.constantize.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
-        scraper     = source.scraper.constantize.new(source, client)
-        description = scraper.fetch_description(vacancy.url)
+        client  = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
+        scraper = scraper_class.new(source, client)
+        html    = scraper.fetch_description(vacancy.url)
 
-        if description == 'SKIPP'
-          skip[0] = true
-          break
-        elsif description.present?
-          updates << { id: vacancy.id, description: description }
+        if html.present?
+          # Store the markup as the source wrote it and derive the plain-text column
+          # from that same string, so the two can never describe different content.
+          updates << { id: vacancy.id, description_html: html, description: scraper_class.to_plain_text(html) }
           done[0] += 1
           pool.release(proxy, status: :success)
           proxy = nil
@@ -695,11 +700,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   # violate NOT NULL on the id+description-only tuples.
   def bulk_update_descriptions(rows)
     conn   = Vacancy.connection
-    values = rows.map { |r| "(#{r[:id].to_i}::bigint, #{conn.quote(r[:description])}::text)" }.join(', ')
+    values = rows.map { |r| "(#{r[:id].to_i}::bigint, #{conn.quote(r[:description])}::text, #{conn.quote(r[:description_html])}::text)" }.join(', ')
     conn.execute(<<~SQL.squish)
       UPDATE vacancies AS v
-      SET description = d.description
-      FROM (VALUES #{values}) AS d(id, description)
+      SET description = d.description, description_html = d.description_html
+      FROM (VALUES #{values}) AS d(id, description, description_html)
       WHERE v.id = d.id
     SQL
   end

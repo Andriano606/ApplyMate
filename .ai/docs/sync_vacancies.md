@@ -111,10 +111,12 @@ Retry/ensure-логіка (`proxy = nil` перед `retry`) буфера не �
 
 ```
 Phase 1: sync_source       — scrape listing pages  → буфер у RAM → bulk upsert + ES (на ліміті/в кінці)
-Phase 2: fetch_description — fetch description URLs → buffer {id,description} → bulk UPDATE + re-index (на пачку)
+Phase 2: fetch_description — fetch description URLs → buffer {id,description,description_html} → bulk UPDATE + re-index (на пачку)
 ```
 
-Фази виконуються **послідовно** (два окремі `Async do` блоки). Всередині кожної фази джерела обробляються **паралельно**.
+Фази складені в **конвеєр на кожне джерело**: в одному `Async` блоці кожне джерело йде `sync_source(source)` → `fetch_description_for_source(source)` у власному файбері, а джерела між собою — **паралельно**. Тобто описи Dou стартують одразу після лістингу Dou, не чекаючи на повільніший лістинг Djinni.
+
+Phase 2 запускається **лише для джерел з `Scraper.fetches_description?` == `true`** (Dou). У Djinni опис уже є в лістингу — детальних сторінок відвідувати нічого.
 
 ---
 
@@ -142,7 +144,9 @@ end
 
 ### Phase 2
 
-Джерело обробляється **пачками**: вакансії тягнуться з БД курсором по `id` (`WHERE id > last_id LIMIT VACANCY_FETCH_BATCH`), щоб не матеріалізувати всю таблицю в пам'яті. На **кожну пачку** піднімається `DESCRIPTION_WORKERS` файберів (більше, ніж у Phase 1 — фаза суто HTTP-очікування). Воркери не пишуть у БД по одному: успішний опис іде в RAM-масив `updates << { id:, description: }`; після `barrier.wait` робиться **один bulk-UPDATE на пачку** (`bulk_update_descriptions` — `UPDATE … FROM (VALUES …)`, чистий UPDATE, не `upsert_all`, бо INSERT-гілка впала б на NOT NULL для id+description рядків), потім ES `.import` по пачці.
+Джерело обробляється **пачками**: вакансії тягнуться з БД курсором по `id` (`WHERE id > last_id LIMIT VACANCY_FETCH_BATCH`), щоб не матеріалізувати всю таблицю в пам'яті. На **кожну пачку** піднімається `DESCRIPTION_WORKERS` файберів (більше, ніж у Phase 1 — фаза суто HTTP-очікування). Курсор бере **лише вакансії без `description_html`** — нові за цей запуск і ті, чий попередній фетч деталей провалився; вже наповнені пропускаються (інакше Dou щоразу переобходив би всю таблицю через rate-limited проксі). Це саме та умова, що поступово добиває `description_html` рядкам, зібраним до того, як опис почали зберігати розміткою.
+
+Воркери не пишуть у БД по одному: успішний опис іде в RAM-масив `updates << { id:, description_html:, description: }` — розмітка як є плюс її ж плейн-текстова проєкція (`Scraper.to_plain_text`), щоб дві колонки не могли розійтися. Після `barrier.wait` робиться **один bulk-UPDATE на пачку** (`bulk_update_descriptions` — `UPDATE … FROM (VALUES …)`, чистий UPDATE, не `upsert_all`, бо INSERT-гілка впала б на NOT NULL для id+description рядків), потім ES `.import` по пачці.
 
 ---
 
@@ -165,10 +169,7 @@ end
 | # | Умова |
 |---|-------|
 | 1 | `stop[0]` є `true` |
-| 2 | `skip[0]` є `true` (скрейпер повернув `'SKIPP'` — джерело не має окремих сторінок з описом, напр. Djinni) |
-| 3 | `vacancies_queue.shift` повернув `nil` (пачка оброблена) |
-
-`skip[0] = true` зупиняє не лише воркер, а й зовнішній цикл по пачках для цього джерела.
+| 2 | `vacancies_queue.shift` повернув `nil` (пачка оброблена) |
 
 ---
 
@@ -244,10 +245,10 @@ clean_old_vacancies(source, external_ids)
 
 ```ruby
 loop do
-  break if skip[0] || stop[0]
+  break if stop[0]
   vacancies_queue = with_db { ...WHERE id > last_id LIMIT VACANCY_FETCH_BATCH... }
   break if vacancies_queue.empty?
-  # ...DESCRIPTION_WORKERS файберів складають updates << {id:, description:}, barrier.wait...
+  # ...DESCRIPTION_WORKERS файберів складають updates << {id:, description:, description_html:}, barrier.wait...
   with_db do
     bulk_update_descriptions(updates.to_a)            # один UPDATE … FROM (VALUES …)
     Vacancy.where(id: updates.map { |r| r[:id] }).import
@@ -313,7 +314,7 @@ last_page[:counts].delete_if { |p, _| p < page }
 | `external_ids` (Phase 1) / `updates` (Phase 2) | `Concurrent::Array` | `concat` / `<<` від N воркерів |
 | `last_page` | `Hash` | Однопотоковий |
 | `scraped_pages` | `Set` | Сторінки, що повернули дані; однопотоковий доступ |
-| `stop` / `skip` | `[false]` | Mutable ref — `stop[0]`/`skip[0] = true` видно всім воркерам |
+| `stop` | `[false]` | Mutable ref — `stop[0] = true` видно всім воркерам |
 | `done` | `[0]` | Лічильник прогресу, безпечний без mutex |
 
 ---

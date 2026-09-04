@@ -7,7 +7,7 @@ Scrapers live in `app/concepts/apply_mate/scraper/`. Each scraper inherits `Appl
 | Method | Purpose |
 |--------|---------|
 | `fetch_listing(page:)` | Makes **one** HTTP request for that page/offset. Returns array of vacancy structs, or `nil` when the page is empty. No per-vacancy HTTP calls. |
-| `fetch_description(url)` | Fetches and returns enriched description text for a single vacancy. Called in the second async pass by `fetch_description_worker`. Empty for scrapers that don't support it. |
+| `fetch_description(url)` | Fetches a single vacancy's description and returns it as **HTML**. Called in the second async pass by `fetch_description_worker`. Only implemented by scrapers whose `fetches_description?` is `true`. |
 | `fetch_details(url)` | Used by the **apply flow** (not sync). Returns structured details needed to fill an application form. |
 | `fetch_applyble(url, session_id:)` | Returns `true`/`false` — can the user apply to this vacancy? |
 | `fetch_form_data(url, session_id: nil)` | Returns a hash representing the HTML application form (inputs, action, method, cookies) |
@@ -24,10 +24,14 @@ These two methods serve different callers:
 |---|---|---|
 | Called by | `SyncVacancies` second pass | Apply flow |
 | Purpose | Enrich vacancy description in DB | Provide form/apply details |
+| Returns | HTML string | plain text |
 | Dou | ✅ implemented | empty |
-| Djinni | empty | ✅ implemented |
+| Djinni | not implemented | ✅ implemented |
 
-A scraper that returns empty from `fetch_description` is valid — the second-pass worker checks `description.present?` and skips the update.
+`fetch_description` is called **only** when the scraper's `fetches_description?` is `true`
+— `SyncVacancies` skips the whole second pass otherwise, so a source whose listing already
+carries the description (Djinni) must not define the method at all. Returning a sentinel
+string from it to make the pipeline stop is what this predicate replaced.
 
 Constructor always takes `(source, client)`:
 
@@ -62,12 +66,17 @@ ApplyMate::Operation::Struct.new(
   source_id:,
   title:,
   url:,
-  description:,       # sanitized plain text
+  description:,       # plain text — Elasticsearch, AI prompts, card preview
+  description_html:,  # the source's own markup — what the vacancy page renders
   company_name:,
   company_icon_url:,
   external_id:        # unique identifier on the source site (string)
 )
 ```
+
+Only listing-carries-the-description sources (`fetches_description?` == `false`) fill the two
+description keys here; for the others the listing must leave both out so the second pass owns
+them (see `.ai/docs/sync_vacancies.md`).
 
 ## Source#build_scraper
 
@@ -251,15 +260,34 @@ log 'Could not extract CSRF token', color: :red, level: :warn        # red warn
 
 Never call `Rails.logger` directly inside a scraper.
 
-## HTML sanitization
+## Descriptions: markup in, text derived
 
-`Html2Text.convert(html)` converts HTML to plain text. Strip excess whitespace if needed:
+A vacancy description is stored twice, and a scraper must produce both from the **same**
+string so they can never describe different content:
+
+| Column | Content | Read by |
+|---|---|---|
+| `description_html` | the source's markup, kept as-is | `Vacancy::Component::InfoCard` → `ApplyMate::Component::RichText` |
+| `description` | plain-text projection of that markup | Elasticsearch `as_indexed_json`, AI prompts, `Vacancy::Component::Card` preview |
+
+`ApplyMate::Scraper::Base` owns both halves — never hand-roll tag stripping in a scraper:
 
 ```ruby
-def sanitize_html(html)
-  return '' if html.blank?
-  Html2Text.convert(html).gsub(/[\t\r\n]+/, ' ').gsub(/\s{2,}/, ' ').strip
-end
+# Inner HTML of a description node, minus NON_CONTENT_TAGS (script/style/iframe/…)
+# and inline on* handlers. Structure and emphasis are kept on purpose.
+html = content_html(node)
+
+# Plain-text projection. `compact: true` also collapses runs of whitespace.
+text = self.class.to_plain_text(html)
 ```
 
-Djinni uses the simpler `Html2Text.convert(html)` without the gsub strip — use whichever fits the source's HTML structure.
+Scope the node to the description **body**, not the page wrapper: once the result is rendered
+as markup rather than flattened to text, share widgets, tracking scripts and reply buttons
+show up as visible noise (Dou: `div.b-typo.vacancy-section`, not `div.l-vacancy`).
+
+Storing raw markup is safe because nothing renders it directly — `ApplyMate::Component::RichText`
+re-sanitises against a tag allow-list at render time (`rich_text(html:)` /
+`vacancy_description_html(vacancy)` helpers). Keep the write faithful; keep the render strict.
+
+`sanitize_html(html, compact: false)` remains as a private alias of `to_plain_text` for
+scrapers that only need the text projection.

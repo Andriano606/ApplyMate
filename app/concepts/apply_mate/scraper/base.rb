@@ -10,6 +10,11 @@ class ApplyMate::Scraper::Base
   # Upstream/proxy statuses that mean "this IP can't be used right now".
   PROXY_DEAD_STATUSES = [ 502, 503, 504 ].freeze
 
+  # Tags that carry no readable content (or execute code) — dropped from the
+  # description HTML before it is stored. Everything else is kept verbatim so the
+  # vacancy page can render the source's own paragraphs, lists and emphasis.
+  NON_CONTENT_TAGS = %w[script style noscript iframe object embed link meta form].freeze
+
   # HTTP client the sync pipeline builds for this source. Default is the fast
   # pure-Ruby AsyncHttp; Cloudflare-protected sources override this to a client
   # that passes the TLS-fingerprint check (see ApplyMate::Client::ImpersonateHttp).
@@ -39,6 +44,19 @@ class ApplyMate::Scraper::Base
   # triggers more blocks → proxy churn → slower), CF-free sites just want throughput.
   def self.burst_cooldown
     5
+  end
+
+  # Plain-text projection of a description's HTML. `description_html` is what the
+  # vacancy page renders; this is what Elasticsearch indexes, what the AI prompts
+  # embed and what the card preview truncates — so it must be derived here, in one
+  # place, instead of each caller re-inventing its own tag stripping.
+  def self.to_plain_text(html, compact: false)
+    return '' if html.blank?
+
+    text = Html2Text.convert(html)
+    return text unless compact
+
+    text.gsub(/[\t\r\n]+/, ' ').gsub(/\s{2,}/, ' ').strip
   end
 
   def fetch_listing(page:)
@@ -96,9 +114,22 @@ class ApplyMate::Scraper::Base
   end
 
   def sanitize_html(html, compact: false)
-    return '' if html.blank?
-    text = Html2Text.convert(html)
-    return text unless compact
-    text.gsub(/[\t\r\n]+/, ' ').gsub(/\s{2,}/, ' ').strip
+    self.class.to_plain_text(html, compact:)
+  end
+
+  # Inner HTML of a scraped description node, kept as-is apart from non-content
+  # tags and inline event handlers. Structure and emphasis survive on purpose —
+  # stripping them here is what used to flatten every vacancy into one wall of
+  # text. Rendering re-sanitises against a tag allow-list (Component::RichText).
+  def content_html(node)
+    return '' if node.nil?
+
+    fragment = Nokogiri::HTML::DocumentFragment.parse(node.inner_html)
+    fragment.css(NON_CONTENT_TAGS.join(',')).each(&:remove)
+    fragment.css('*').each do |element|
+      element.attribute_nodes.each { |attr| element.remove_attribute(attr.name) if attr.name.downcase.start_with?('on') }
+    end
+
+    fragment.to_html.strip
   end
 end

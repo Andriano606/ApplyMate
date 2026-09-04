@@ -35,10 +35,6 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     nodes.map { |element| extract_job_data(element) }
   end
 
-  def fetch_description(url)
-    'SKIPP'
-  end
-
   def fetch_details(url)
     response = @client.get(url)
     doc = Nokogiri::HTML(response&.body)
@@ -104,7 +100,11 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     url = element.at_css('.job-list-item__link, .job_item__header-link, a[href*="/jobs/"]')&.[]('href')
     external_id = url.to_s.scan(/\d+/).first
     description_node = element.at_css('.js-original-text') || element.at_css("#job-description-#{external_id}")
-    description = sanitize_html(description_node&.inner_html)
+    # Djinni ships the full description inside the listing, so both columns are filled
+    # here: the markup as the source wrote it, plus the plain-text projection used by
+    # Elasticsearch, the AI prompts and the card preview.
+    description_html = content_html(description_node)
+    description = self.class.to_plain_text(description_html)
     company_name = element.at_css('.small.text-gray-800, .job-list-item__company-name')&.text&.strip
     company_icon_url = element.at_css('img.userpic-image')&.[]('src')
 
@@ -113,6 +113,7 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
       title:,
       url: full_url(url),
       description:,
+      description_html:,
       company_name:,
       company_icon_url:,
       external_id:

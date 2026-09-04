@@ -82,6 +82,15 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       expect(vacancy.url).to eq('https://djinni.co/jobs/823990-copywriter-script-writer-web3-fintech-perform/')
       expect(vacancy.company_icon_url).to eq('https://p.djinni.co/f6/759465ffbaeb7add22812612b475ed/photo_2025-04-07_16.14.27_400.jpeg')
       expect(vacancy.description).to include('Ми — performance marketing команда')
+      # Djinni's description comes from the listing, so the markup is stored there too.
+      expect(vacancy.description_html).to include('<p>')
+      expect(vacancy.description_html).to include('Ми — performance marketing команда')
+    end
+
+    it 'does not visit vacancy pages — the listing already carries the description' do
+      expect_any_instance_of(ApplyMate::Scraper::Djinni).not_to receive(:fetch_description)
+
+      operation.call
     end
 
     context 'when a page within the scraped range returns empty on first request (anti-scraping)' do
@@ -189,10 +198,22 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
 
       # Verify that the description was scraped correctly from the detail fixture
       # Taking a significant block from the first 20 lines for comparison
-      expect(vacancy.description).to include('8 травня 2026')
-      expect(vacancy.description).to include('Senior Customer Success Manager')
+      expect(vacancy.description).to include('віддалено $1800–2500')
       expect(vacancy.description).to include('GrowthBand runs done-for-you lead generation for mid-market B2B companies')
       expect(vacancy.description).to include('You own the client relationship completely')
+    end
+
+    it 'keeps the employer markup so the vacancy page can render it' do
+      operation.call
+      vacancy = source_dou.vacancies.find_by(external_id: '357292')
+
+      expect(vacancy.description_html).to include('<p><strong>TL;DR</strong></p>')
+      expect(vacancy.description_html).to include('<li>')
+      # The tracking script inside the detail page must never reach the database.
+      expect(vacancy.description_html).not_to include('<script')
+      # …and the plain-text column stays a projection of that same markup.
+      expect(vacancy.description).not_to include('<p>')
+      expect(vacancy.description).to include('TL;DR')
     end
 
     it 'visits each vacancy page to fetch descriptions' do

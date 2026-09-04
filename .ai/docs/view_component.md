@@ -50,7 +50,7 @@ This applies to any Rails helper: `turbo_frame_tag`, `link_to`, `image_tag`, `co
 ## Decision tree — before creating a component
 
 **Step 1 — check if it already exists.**
-Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
+Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, `rich_text`, `expandable_text`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
 
 ```slim
 / ✅ use the helper
@@ -72,6 +72,15 @@ Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component ha
 | No — specific to one resource | `app/concepts/<resource>/component/<name>.rb` + template, no helper needed |
 
 When in doubt, prefer resource-scoped first. Promote to shared only when a second concept actually needs it.
+
+### Rendering untrusted HTML
+
+Scraped markup (a vacancy's `description_html`) goes through `rich_text(html:)` →
+`ApplyMate::Component::RichText`, never through `raw` / `html_safe`. That component is the one
+place that holds the tag allow-list and the prose classes the project's tag-free Tailwind setup
+would otherwise not apply. `expandable_text(html:)` wraps it for collapsed previews, and
+`vacancy_description_html(vacancy)` produces the markup to feed it (falling back to paragraph-wrapped
+plain text for vacancies scraped before `description_html` existed).
 
 ## Shared component (reusable)
 

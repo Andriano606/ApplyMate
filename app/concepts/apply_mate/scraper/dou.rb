@@ -31,6 +31,15 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     @client = client
   end
 
+  # Returns the description as HTML, not text: `div.b-typo.vacancy-section` is the
+  # employer's own copy (paragraphs, bullet lists, bold headings) and that markup is
+  # what the vacancy page renders. Scoped to that section rather than the whole
+  # `div.l-vacancy` wrapper, which also holds the share widget, tracking script and
+  # reply button — noise once it is rendered as markup instead of flattened text.
+  # The `sh-info` line (city / remote / office) is prepended as its own paragraph so
+  # it survives the narrower scope.
+  # SyncVacancies stores this in `description_html` and derives the plain-text
+  # `description` (Elasticsearch, AI prompts, card preview) from it.
   def fetch_description(url)
     response = via_proxy { @client.get(url) }
 
@@ -38,10 +47,11 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     return nil if html.blank?
 
     doc  = Nokogiri::HTML(html)
-    node = doc.at_css('div.l-vacancy')
+    node = doc.at_css('div.b-typo.vacancy-section') || doc.at_css('div.l-vacancy')
     return nil if node.nil?
 
-    sanitize_html(node.inner_html, compact: true)
+    info = doc.at_css('div.sh-info')&.text&.squish
+    [ info.presence && "<p>#{ERB::Util.html_escape(info)}</p>", content_html(node) ].compact.join
   end
 
   def fetch_details(url)
