@@ -76,9 +76,12 @@ When in doubt, prefer resource-scoped first. Promote to shared only when a secon
 ### Rendering untrusted HTML
 
 Scraped markup (a vacancy's `description_html`) goes through `rich_text(html:)` →
-`ApplyMate::Component::RichText`, never through `raw` / `html_safe`. That component is the one
-place that holds the tag allow-list and the prose classes the project's tag-free Tailwind setup
-would otherwise not apply. `expandable_text(html:)` wraps it for collapsed previews, and
+`ApplyMate::Component::RichText`, never through `raw` / `html_safe`. That component holds the tag
+allow-list; the typography lives in the `.rich-text` component class in
+`app/stylesheets/application.tailwind.css`. Prose is the one place utility classes do not fit —
+the tags come from the employer, not from us, so the rules must address `ul`/`li`/`p` directly and
+lean on `> * + *` and `:has()`. Enumerating tags as `[&_p]:mb-3` utilities is what previously left
+every unlisted tag with no spacing at all. `expandable_text(html:)` wraps it for collapsed previews, and
 `vacancy_description_html(vacancy)` produces the markup to feed it (falling back to paragraph-wrapped
 plain text for vacancies scraped before `description_html` existed).
 
