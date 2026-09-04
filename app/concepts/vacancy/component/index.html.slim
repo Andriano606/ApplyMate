@@ -8,4 +8,5 @@
           exclude_tags: @exclude_tags,
           saved_filter: @saved_filter,
           count: @vacancies.total_entries)
-  = render Vacancy::Component::List.new(vacancies: @vacancies, applies_by_vacancy: @applies_by_vacancy)
+  = render Vacancy::Component::List.new(vacancies: @vacancies, applies_by_vacancy: @applies_by_vacancy,
+                                        hidden_vacancy_ids: @hidden_vacancy_ids)

@@ -8,6 +8,7 @@ class User < ApplicationRecord
   has_many :prompts, dependent: :destroy
   has_many :api_tokens, dependent: :destroy
   has_many :saved_filters, dependent: :destroy
+  has_many :hidden_vacancies, dependent: :delete_all
 
   belongs_to :default_profile, class_name: 'UserProfile', optional: true
   belongs_to :default_ai_integration, class_name: 'AiIntegration', optional: true

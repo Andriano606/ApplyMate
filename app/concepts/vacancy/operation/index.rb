@@ -33,6 +33,7 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
     self.model = ApplyMate::Operation::Struct.new(
       vacancies:,
       applies_by_vacancy:,
+      hidden_vacancy_ids: HiddenVacancy.vacancy_ids_for(user: current_user, vacancies:),
       include_tags: params[:include_tags],
       include_ops:  params[:include_ops],
       exclude_tags: params[:exclude_tags],

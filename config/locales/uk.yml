@@ -459,6 +459,9 @@ uk:
   vacancy:
     card:
       details: Деталі
+      hidden: Приховано
+      hide: Приховати
+      restore: Повернути
       view_original: Переглянути оригінал
     search:
       add: Додати
