@@ -17,6 +17,15 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   MAX_VACANCY_RETRIES     = 20
   VACANCY_FETCH_BATCH     = 1000
   VACANCY_BUFFER_LIMIT    = 1000
+
+  # Constant SQL for bulk_update_descriptions — the batch arrives as three array binds.
+  BULK_UPDATE_DESCRIPTIONS_SQL = <<~SQL.squish
+    UPDATE vacancies AS v
+    SET description = d.description, description_html = d.description_html
+    FROM unnest($1::bigint[], $2::text[], $3::text[]) AS d(id, description, description_html)
+    WHERE v.id = d.id
+  SQL
+
   DB_CONCURRENCY          = 5     # max concurrent DB ops (== physical connections) in the run
 
   # Timeouts for sync. Not too aggressive: of ~964k proxies only a few hundred ever
@@ -398,7 +407,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       # let the listing overwrite it — otherwise an existing full description is clobbered
       # by the listing snapshot and the (skip-if-present) detail pass never restores it.
       update_cols = %i[title url company_name company_icon_url]
-      update_cols << :description unless @source.scraper.constantize.fetches_description?
+      update_cols += %i[description description_html] unless @source.scraper.constantize.fetches_description?
 
       Vacancy.upsert_all(
         data.map(&:to_h),
@@ -446,7 +455,9 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         sources.map do |source|
           top_task.async do
             sync_source(source)
-            fetch_description_for_source(source)
+            # Sources whose listing already carries the description (Djinni) have no
+            # second pass — there is no detail page left to visit.
+            fetch_description_for_source(source) if source.scraper.constantize.fetches_description?
           end
         end.each(&:wait)
       end
@@ -496,18 +507,20 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       done         = [ 0 ]
       skipped      = [ 0 ]
       stop         = [ false ]
-      skip         = [ false ]
       retry_counts = Hash.new(0)
       last_id      = 0
 
       loop do
-        break if skip[0] || stop[0]
+        break if stop[0]
 
-        scope = source.vacancies.select(:id, :external_id, :url).where('vacancies.id > ?', last_id)
         # Skip vacancies that already have a description — only fetch the ones still missing
         # one (new this run + any whose previous detail fetch failed). Huge win for Dou,
         # whose detail pass otherwise re-fetches every vacancy through rate-limited proxies.
-        scope = scope.where(description: [ nil, '' ]) if source.scraper.constantize.fetches_description?
+        # Keyed on description_html (not description): rows scraped before descriptions were
+        # stored as markup have text but no markup, and this is what backfills them.
+        scope = source.vacancies.select(:id, :external_id, :url)
+                      .where('vacancies.id > ?', last_id)
+                      .where(description_html: [ nil, '' ])
         vacancies_queue = with_db { scope.order(:id).limit(VACANCY_FETCH_BATCH).to_a }
         break if vacancies_queue.empty?
 
@@ -517,7 +530,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         barrier = Async::Barrier.new
 
         DESCRIPTION_WORKERS.times do
-          barrier.async { fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, skip, pool) }
+          barrier.async { fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool) }
         end
 
         barrier.wait
@@ -540,9 +553,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     end
   end
 
-  def fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, skip, pool)
+  def fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool)
+    scraper_class = source.scraper.constantize
+
     loop do
-      break if stop[0] || skip[0]
+      break if stop[0]
 
       begin
         proxy   = nil
@@ -562,15 +577,14 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           next
         end
 
-        client      = source.scraper.constantize.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
-        scraper     = source.scraper.constantize.new(source, client)
-        description = scraper.fetch_description(vacancy.url)
+        client  = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
+        scraper = scraper_class.new(source, client)
+        html    = scraper.fetch_description(vacancy.url)
 
-        if description == 'SKIPP'
-          skip[0] = true
-          break
-        elsif description.present?
-          updates << { id: vacancy.id, description: description }
+        if html.present?
+          # Store the markup as the source wrote it and derive the plain-text column
+          # from that same string, so the two can never describe different content.
+          updates << { id: vacancy.id, description_html: html, description: scraper_class.to_plain_text(html) }
           done[0] += 1
           pool.release(proxy, status: :success)
           proxy = nil
@@ -693,14 +707,22 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   # Bulk-update descriptions for a cursor-batch in one statement. A pure UPDATE
   # (not upsert_all) — the rows already exist, and upsert's INSERT path would
   # violate NOT NULL on the id+description-only tuples.
+  #
+  # The batch travels as three array binds unnested into rows, not as an interpolated
+  # `VALUES (…), (…)` list. The SQL text is then constant whatever the batch size, so
+  # Postgres parses one statement instead of a new one per batch — and there is no
+  # string-built SQL left for a future edit (or a static analyser) to get wrong.
   def bulk_update_descriptions(rows)
-    conn   = Vacancy.connection
-    values = rows.map { |r| "(#{r[:id].to_i}::bigint, #{conn.quote(r[:description])}::text)" }.join(', ')
-    conn.execute(<<~SQL.squish)
-      UPDATE vacancies AS v
-      SET description = d.description
-      FROM (VALUES #{values}) AS d(id, description)
-      WHERE v.id = d.id
-    SQL
+    Vacancy.connection.exec_update(BULK_UPDATE_DESCRIPTIONS_SQL, 'bulk_update_descriptions', [
+      array_bind(rows.map { |r| r[:id] },               ActiveRecord::Type::BigInteger.new),
+      array_bind(rows.map { |r| r[:description] },      ActiveRecord::Type::Text.new),
+      array_bind(rows.map { |r| r[:description_html] }, ActiveRecord::Type::Text.new)
+    ])
+  end
+
+  def array_bind(values, subtype)
+    ActiveRecord::Relation::QueryAttribute.new(
+      nil, values, ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Array.new(subtype, ',')
+    )
   end
 end

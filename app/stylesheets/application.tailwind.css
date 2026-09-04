@@ -1,6 +1,97 @@
 @import 'tailwindcss';
 @import './select2.css';
 
+/* Prose for scraped vacancy descriptions — see ApplyMate::Component::RichText.
+   The markup belongs to the employer, so these rules address tags rather than
+   classes, and Preflight has stripped every default margin and list marker. */
+@layer components {
+  .rich-text {
+    @apply text-sm leading-relaxed text-gray-600 dark:text-gray-400 break-words;
+
+    /* Vertical rhythm for every top-level block, whatever tag the source used.
+       Enumerating tags one by one is what left gaps around the ones nobody
+       listed; `* + *` cannot miss one, and skips the first child by design. */
+    & > * + * {
+      @apply mt-4;
+    }
+
+    & ul,
+    & ol {
+      @apply pl-5;
+    }
+    & ul {
+      @apply list-disc;
+    }
+    & ol {
+      @apply list-decimal;
+    }
+    & li + li {
+      @apply mt-1.5;
+    }
+    & li > ul,
+    & li > ol {
+      @apply mt-1.5;
+    }
+    & li::marker {
+      @apply text-gray-400 dark:text-gray-500;
+    }
+
+    /* Dou and Djinni editors write section headings as a bold-only paragraph
+       rather than an <h*>, so give those the same separation a heading gets. */
+    & * + p:has(> strong:only-child),
+    & * + p:has(> b:only-child) {
+      @apply mt-6 text-gray-900 dark:text-gray-200;
+    }
+
+    & :is(h1, h2, h3, h4, h5, h6) {
+      @apply font-semibold text-gray-900 dark:text-gray-200;
+    }
+    & * + :is(h1, h2, h3, h4, h5, h6) {
+      @apply mt-6;
+    }
+    & :is(h1, h2) {
+      @apply text-base;
+    }
+    & :is(h3, h4, h5, h6) {
+      @apply text-sm;
+    }
+
+    & :is(strong, b) {
+      @apply font-semibold text-gray-900 dark:text-gray-200;
+    }
+    & :is(em, i) {
+      @apply italic;
+    }
+    & u {
+      @apply underline;
+    }
+    & a {
+      @apply text-indigo-500 underline underline-offset-2 hover:text-indigo-600;
+    }
+    & blockquote {
+      @apply border-l-2 border-gray-200 pl-3 italic dark:border-gray-700;
+    }
+    & hr {
+      @apply my-6 border-gray-200 dark:border-gray-700;
+    }
+    & pre {
+      @apply whitespace-pre-wrap;
+    }
+    & code {
+      @apply font-mono text-xs;
+    }
+    & table {
+      @apply w-full text-left;
+    }
+    & :is(th, td) {
+      @apply py-1 pr-3 align-top;
+    }
+    & th {
+      @apply font-semibold text-gray-900 dark:text-gray-200;
+    }
+  }
+}
+
 @utility scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;

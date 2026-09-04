@@ -50,7 +50,7 @@ This applies to any Rails helper: `turbo_frame_tag`, `link_to`, `image_tag`, `co
 ## Decision tree — before creating a component
 
 **Step 1 — check if it already exists.**
-Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
+Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, `rich_text`, `expandable_text`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
 
 ```slim
 / ✅ use the helper
@@ -72,6 +72,22 @@ Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component ha
 | No — specific to one resource | `app/concepts/<resource>/component/<name>.rb` + template, no helper needed |
 
 When in doubt, prefer resource-scoped first. Promote to shared only when a second concept actually needs it.
+
+### Rendering untrusted HTML
+
+Scraped markup (a vacancy's `description_html`) goes through `rich_text(html:, text:)` →
+`ApplyMate::Component::RichText`, never through `raw` / `html_safe`. That component holds the tag
+allow-list; the typography lives in the `.rich-text` component class in
+`app/stylesheets/application.tailwind.css`. Prose is the one place utility classes do not fit —
+the tags come from the employer, not from us, so the rules must address `ul`/`li`/`p` directly and
+lean on `> * + *` and `:has()`. Enumerating tags as `[&_p]:mb-3` utilities is what previously left
+every unlisted tag with no spacing at all.
+
+Pass **both** description columns. `html:` is what renders; `text:` is the plain-text projection the
+component paragraph-wraps for rows scraped before `description_html` existed, and it is also what
+`expandable_text(html:, text:)` clamps into a collapsed preview — `strip_tags` puts no separator
+between blocks, so deriving the teaser from the markup would glue the last word of one paragraph
+onto the first of the next. Views guard on `Vacancy#description_present?` so both cards agree.
 
 ## Shared component (reusable)
 

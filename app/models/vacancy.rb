@@ -28,6 +28,13 @@ class Vacancy < ApplicationRecord
     end
   end
 
+  # One predicate for both description columns: rows scraped before markup was stored
+  # only have the text, new rows have both. Views guard on this so the markup card and
+  # the collapsed apply card can never disagree about whether there is a description.
+  def description_present?
+    description_html.present? || description.present?
+  end
+
   def as_indexed_json(_options = {})
     { title:, company_name:, description:, vacancy_id: id }
   end

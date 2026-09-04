@@ -10,22 +10,25 @@ class ApplyMate::Component::ExpandableText < ApplyMate::Component::Base
     6 => 'line-clamp-6'
   }.freeze
 
-  ALLOWED_TAGS       = %w[p br ul ol li strong em b i h1 h2 h3 h4 h5 h6 a].freeze
-  ALLOWED_ATTRIBUTES = %w[href].freeze
-
-  def initialize(html:, lines: 3)
+  def initialize(html:, text: nil, lines: 3)
     @html  = html
+    @text  = text
     @lines = lines
+  end
+
+  def render?
+    @html.present? || @text.present?
   end
 
   private
 
+  # The collapsed teaser is deliberately tag-free: a line clamp counts rendered
+  # lines, and block markup would make the first paragraph the whole preview.
+  # Prefer the caller's plain-text projection — `strip_tags` inserts no separator
+  # between blocks, so stripping markup here would glue "…нас" onto "Вимоги…".
+  # The expanded body renders through RichText, which owns sanitisation.
   def preview_text
-    helpers.strip_tags(@html.to_s)
-  end
-
-  def full_html
-    helpers.sanitize(@html.to_s, tags: ALLOWED_TAGS, attributes: ALLOWED_ATTRIBUTES)
+    @text.presence || helpers.strip_tags(@html.to_s)
   end
 
   def clamp_class
