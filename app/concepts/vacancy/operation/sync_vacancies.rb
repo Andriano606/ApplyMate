@@ -17,6 +17,15 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   MAX_VACANCY_RETRIES     = 20
   VACANCY_FETCH_BATCH     = 1000
   VACANCY_BUFFER_LIMIT    = 1000
+
+  # Constant SQL for bulk_update_descriptions — the batch arrives as three array binds.
+  BULK_UPDATE_DESCRIPTIONS_SQL = <<~SQL.squish
+    UPDATE vacancies AS v
+    SET description = d.description, description_html = d.description_html
+    FROM unnest($1::bigint[], $2::text[], $3::text[]) AS d(id, description, description_html)
+    WHERE v.id = d.id
+  SQL
+
   DB_CONCURRENCY          = 5     # max concurrent DB ops (== physical connections) in the run
 
   # Timeouts for sync. Not too aggressive: of ~964k proxies only a few hundred ever
@@ -698,14 +707,22 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   # Bulk-update descriptions for a cursor-batch in one statement. A pure UPDATE
   # (not upsert_all) — the rows already exist, and upsert's INSERT path would
   # violate NOT NULL on the id+description-only tuples.
+  #
+  # The batch travels as three array binds unnested into rows, not as an interpolated
+  # `VALUES (…), (…)` list. The SQL text is then constant whatever the batch size, so
+  # Postgres parses one statement instead of a new one per batch — and there is no
+  # string-built SQL left for a future edit (or a static analyser) to get wrong.
   def bulk_update_descriptions(rows)
-    conn   = Vacancy.connection
-    values = rows.map { |r| "(#{r[:id].to_i}::bigint, #{conn.quote(r[:description])}::text, #{conn.quote(r[:description_html])}::text)" }.join(', ')
-    conn.execute(<<~SQL.squish)
-      UPDATE vacancies AS v
-      SET description = d.description, description_html = d.description_html
-      FROM (VALUES #{values}) AS d(id, description, description_html)
-      WHERE v.id = d.id
-    SQL
+    Vacancy.connection.exec_update(BULK_UPDATE_DESCRIPTIONS_SQL, 'bulk_update_descriptions', [
+      array_bind(rows.map { |r| r[:id] },               ActiveRecord::Type::BigInteger.new),
+      array_bind(rows.map { |r| r[:description] },      ActiveRecord::Type::Text.new),
+      array_bind(rows.map { |r| r[:description_html] }, ActiveRecord::Type::Text.new)
+    ])
+  end
+
+  def array_bind(values, subtype)
+    ActiveRecord::Relation::QueryAttribute.new(
+      nil, values, ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Array.new(subtype, ',')
+    )
   end
 end
