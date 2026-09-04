@@ -46,11 +46,15 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     html = response.body
     return nil if html.blank?
 
-    doc  = Nokogiri::HTML(html)
-    node = doc.at_css('div.b-typo.vacancy-section') || doc.at_css('div.l-vacancy')
+    doc     = Nokogiri::HTML(html)
+    section = doc.at_css('div.b-typo.vacancy-section')
+    node    = section || doc.at_css('div.l-vacancy')
     return nil if node.nil?
 
-    info = doc.at_css('div.sh-info')&.text&.squish
+    # `sh-info` sits outside the section but inside the `l-vacancy` wrapper, so it is
+    # prepended only when the narrow scope is what we took — on the fallback path the
+    # line is already part of the markup and would otherwise appear twice.
+    info = section && doc.at_css('div.sh-info')&.text&.squish
     [ info.presence && "<p>#{ERB::Util.html_escape(info)}</p>", content_html(node) ].compact.join
   end
 

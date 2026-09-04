@@ -47,22 +47,12 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::Accordion.new(title:, open:, loading:), &block)
   end
 
-  def expandable_text(html:, lines: 3)
-    render(ApplyMate::Component::ExpandableText.new(html:, lines:))
+  def expandable_text(html:, text: nil, lines: 3)
+    render(ApplyMate::Component::ExpandableText.new(html:, text:, lines:))
   end
 
-  def rich_text(html:)
-    render(ApplyMate::Component::RichText.new(html:))
-  end
-
-  # A vacancy's description as renderable markup. Rows scraped before descriptions
-  # were stored as markup only have the plain-text column, so their blank lines are
-  # turned back into paragraphs — every caller then feeds RichText one shape.
-  def vacancy_description_html(vacancy)
-    return vacancy.description_html if vacancy.description_html.present?
-    return nil if vacancy.description.blank?
-
-    helpers.simple_format(vacancy.description)
+  def rich_text(html:, text: nil)
+    render(ApplyMate::Component::RichText.new(html:, text:))
   end
 
   def tabs(base_url:, id: nil, &block)

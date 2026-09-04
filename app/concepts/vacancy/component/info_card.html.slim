@@ -19,9 +19,9 @@
         p.mt-0.5.text-sm.text-gray-500.dark:text-gray-400 = @vacancy.company_name
 
     / Description — the point of this page, so it is rendered in full rather than clamped
-    - if description_html.present?
+    - if @vacancy.description_present?
       .mt-4.pt-4.border-t.border-gray-100.dark:border-gray-700 *data_test_id('vacancy-description')
-        = rich_text(html: description_html)
+        = rich_text(html: @vacancy.description_html, text: @vacancy.description)
 
   / Meta grid
   div(class="border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-6 py-4")

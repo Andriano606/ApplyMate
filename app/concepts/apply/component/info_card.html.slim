@@ -17,9 +17,9 @@
         p.mt-0.5.text-sm.text-gray-500.dark:text-gray-400 = @vacancy.company_name
 
     / Description
-    - if @vacancy.description.present?
+    - if @vacancy.description_present?
       .mt-3
-        = expandable_text(html: vacancy_description_html(@vacancy))
+        = expandable_text(html: @vacancy.description_html, text: @vacancy.description)
 
   / Meta grid
   div(class="border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-6 py-4")

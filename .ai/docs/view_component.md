@@ -75,15 +75,19 @@ When in doubt, prefer resource-scoped first. Promote to shared only when a secon
 
 ### Rendering untrusted HTML
 
-Scraped markup (a vacancy's `description_html`) goes through `rich_text(html:)` →
+Scraped markup (a vacancy's `description_html`) goes through `rich_text(html:, text:)` →
 `ApplyMate::Component::RichText`, never through `raw` / `html_safe`. That component holds the tag
 allow-list; the typography lives in the `.rich-text` component class in
 `app/stylesheets/application.tailwind.css`. Prose is the one place utility classes do not fit —
 the tags come from the employer, not from us, so the rules must address `ul`/`li`/`p` directly and
 lean on `> * + *` and `:has()`. Enumerating tags as `[&_p]:mb-3` utilities is what previously left
-every unlisted tag with no spacing at all. `expandable_text(html:)` wraps it for collapsed previews, and
-`vacancy_description_html(vacancy)` produces the markup to feed it (falling back to paragraph-wrapped
-plain text for vacancies scraped before `description_html` existed).
+every unlisted tag with no spacing at all.
+
+Pass **both** description columns. `html:` is what renders; `text:` is the plain-text projection the
+component paragraph-wraps for rows scraped before `description_html` existed, and it is also what
+`expandable_text(html:, text:)` clamps into a collapsed preview — `strip_tags` puts no separator
+between blocks, so deriving the teaser from the markup would glue the last word of one paragraph
+onto the first of the next. Views guard on `Vacancy#description_present?` so both cards agree.
 
 ## Shared component (reusable)
 

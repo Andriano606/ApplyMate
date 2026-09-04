@@ -273,21 +273,23 @@ string so they can never describe different content:
 `ApplyMate::Scraper::Base` owns both halves — never hand-roll tag stripping in a scraper:
 
 ```ruby
-# Inner HTML of a description node, minus NON_CONTENT_TAGS (script/style/iframe/…)
-# and inline on* handlers. Structure and emphasis are kept on purpose.
+# Inner HTML of a description node, minus NON_CONTENT_TAGS (script/style/iframe/…),
+# NON_CONTENT_ATTRIBUTES (class/style) and NON_CONTENT_ATTRIBUTE_PREFIXES (on*, data-*).
+# Structure and emphasis are kept on purpose.
 html = content_html(node)
 
-# Plain-text projection. `compact: true` also collapses runs of whitespace.
+# Plain-text projection (Html2Text).
 text = self.class.to_plain_text(html)
 ```
 
 Scope the node to the description **body**, not the page wrapper: once the result is rendered
 as markup rather than flattened to text, share widgets, tracking scripts and reply buttons
-show up as visible noise (Dou: `div.b-typo.vacancy-section`, not `div.l-vacancy`).
+show up as visible noise (Dou: `div.b-typo.vacancy-section`, not `div.l-vacancy`). If a scraper
+also prepends a node from *outside* that scope (Dou's `div.sh-info`), do it only on the narrow
+branch — on the wrapper fallback that node is already inside the markup.
 
-Storing raw markup is safe because nothing renders it directly — `ApplyMate::Component::RichText`
-re-sanitises against a tag allow-list at render time (`rich_text(html:)` /
-`vacancy_description_html(vacancy)` helpers). Keep the write faithful; keep the render strict.
-
-`sanitize_html(html, compact: false)` remains as a private alias of `to_plain_text` for
-scrapers that only need the text projection.
+Storing markup is safe because nothing renders it directly — `ApplyMate::Component::RichText`
+re-sanitises against a tag allow-list at render time. Views pass **both** columns
+(`rich_text(html: v.description_html, text: v.description)`); the component falls back to
+`simple_format(text)` for rows scraped before markup was stored, and guards render on
+`Vacancy#description_present?`. Keep the write faithful; keep the render strict.

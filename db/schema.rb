@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -362,6 +362,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_000001) do
     t.datetime "updated_at", null: false
     t.string "url"
     t.index ["source_id", "external_id"], name: "index_vacancies_on_source_id_and_external_id", unique: true
+    t.index ["source_id", "id"], name: "index_vacancies_pending_description_html", where: "((description_html IS NULL) OR (description_html = ''::text))"
     t.index ["source_id"], name: "index_vacancies_on_source_id"
   end
 
