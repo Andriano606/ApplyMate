@@ -327,6 +327,23 @@ RSpec.describe ApplyMate::Client::Browser do
       second.quit
     end
 
+    # Restoring cookies opens the first page of the session, and Ferrum pins the
+    # first target it ever sees as the context's default forever. Closing that
+    # page left every delegated call on the browser — cookies included — talking
+    # to a dead session, so the second visit (the only one that restores
+    # anything) died with "Session with given id not found".
+    it 'can still browse on a profile that already holds cookies' do
+      first = described_class.new(profile:)
+      seed_cookie(first)
+      first.quit
+
+      second = described_class.new(profile:)
+      response = second.get(fixture_url('classic.html'))
+      expect(response.body).to include('apply-form')
+      expect(response.headers['set-cookie']).to include('am_probe=kept')
+      second.quit
+    end
+
     # A second --user-data-dir does not replace Ferrum's own: Chrome honours the
     # first and the profile silently lands in a temp directory Ferrum deletes.
     it 'passes exactly one profile flag, pointing at the pooled directory' do

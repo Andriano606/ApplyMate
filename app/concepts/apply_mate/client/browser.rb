@@ -72,6 +72,7 @@ class ApplyMate::Client::Browser
       }
     )
 
+    keep_alive_page
     restore_cookies
   end
 
@@ -997,7 +998,7 @@ class ApplyMate::Client::Browser
   def restore_cookies
     return if @profile.nil? || !File.exist?(@profile.cookies_file)
 
-    on_a_page { |page| page.cookies.load(@profile.cookies_file) }
+    keep_alive_page.cookies.load(@profile.cookies_file)
   rescue StandardError => e
     Rails.logger.warn("Browser: could not restore cookies: #{e.message}")
   end
@@ -1005,21 +1006,21 @@ class ApplyMate::Client::Browser
   def store_cookies
     return if @profile.nil?
 
-    on_a_page { |page| page.cookies.store(@profile.cookies_file) }
+    keep_alive_page.cookies.store(@profile.cookies_file)
   rescue StandardError => e
     Rails.logger.warn("Browser: could not store cookies: #{e.message}")
   end
 
-  # Cookies are read and written through a page's CDP session, and #get closes
-  # its page as soon as it has the body — asking the browser afterwards raises
-  # "Session with given id not found", which the rescues above would have turned
-  # into cookies silently never being saved. A page of our own avoids having to
-  # know whose page is still open (Ferrum pages carry no liveness predicate).
-  def on_a_page
-    page = @browser.create_page
-    yield page
-  ensure
-    page&.close
+  # One page opened before any other and closed by nothing but #quit.
+  #
+  # Cookies are read and written over a live CDP session, and every page this
+  # client opens for work gets closed again (#get closes its own as soon as it
+  # has the body). Ferrum pins the FIRST target it ever sees as the context's
+  # default and never re-pins it, so without this the default is some page that
+  # is already gone, and every delegated call on @browser — #cookies among them
+  # — talks to a dead session: "Session with given id not found".
+  def keep_alive_page
+    @browser.page
   end
 
   def profile_option

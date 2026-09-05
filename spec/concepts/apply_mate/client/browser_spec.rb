@@ -13,7 +13,9 @@ RSpec.describe ApplyMate::Client::Browser do
     double('page', command: nil, headers: page_headers, network: network, mouse: mouse,
                    goto: nil, current_url: 'https://jobs.dou.ua/vacancies/', close: nil)
   end
-  let(:ferrum) { double('ferrum', create_page: page, cookies: cookies, quit: nil) }
+  # #page is the browser's default page: opened before any other, closed by
+  # nothing but #quit, and the session cookies are read and written over.
+  let(:ferrum) { double('ferrum', create_page: page, page: page, cookies: cookies, quit: nil) }
 
   before { allow(Ferrum::Browser).to receive(:new).and_return(ferrum) }
 
