@@ -9,6 +9,43 @@ RSpec.describe ApplyMate::Scraper::Dou do
 
   before { allow(client).to receive(:get).and_return(Struct.new(:status, :body).new(200, page_html)) }
 
+  describe '#fetch_listing' do
+    let(:page_html) { '' }
+    let(:item_html) { '<li class="l-vacancy"><a class="vt" href="/companies/acme/vacancies/%d/">Dev</a></li>' }
+    let(:session)   { Struct.new(:status, :body, :headers).new(200, '', { 'set-cookie' => 'csrftoken=tok;' }) }
+
+    before do
+      allow(client).to receive(:get).with(described_class::VACANCIES_URL).and_return(session)
+      allow(client).to receive(:post).and_return(Struct.new(:status, :body).new(200, xhr_body))
+    end
+
+    # Dou sends `last: true` TOGETHER with the final partial page (37 items at count=5800
+    # of 5837). Returning nil on the flag alone dropped that tail on every sync.
+    context 'when the last page still carries vacancies' do
+      let(:xhr_body) { { html: (item_html % 1) + (item_html % 2), last: true, num: 40 }.to_json }
+
+      it 'returns the vacancies instead of treating the page as empty' do
+        expect(scraper.fetch_listing(page: 146).map(&:external_id)).to eq(%w[1 2])
+      end
+    end
+
+    context 'when the page past the tail is empty and flagged last' do
+      let(:xhr_body) { { html: '', last: true, num: 40 }.to_json }
+
+      it 'returns nil to end pagination' do
+        expect(scraper.fetch_listing(page: 147)).to be_nil
+      end
+    end
+
+    context 'when the page is empty but not flagged last' do
+      let(:xhr_body) { { html: '', last: false, num: 40 }.to_json }
+
+      it 'raises DeadProxyError so the page is retried on another proxy' do
+        expect { scraper.fetch_listing(page: 5) }.to raise_error(described_class::DeadProxyError, /empty listing/)
+      end
+    end
+  end
+
   describe '#fetch_description' do
     # `sh-info` lives inside `div.l-vacancy` but outside `div.b-typo.vacancy-section`,
     # so which branch picks the node decides whether prepending it duplicates the line.

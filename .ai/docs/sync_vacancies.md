@@ -237,9 +237,12 @@ StandardError   → log error → @proxy_pool.release(proxy, status: :keep) → 
 barrier.wait
 raise NoProxiesError if stop[0]
 clean_old_vacancies(source, external_ids)
+Vacancy::Component::TotalVacancies.expire_counts!
 ```
 
 `clean_old_vacancies` видаляє всі вакансії цього джерела, яких **не було** серед зібраних `external_ids`. Захищений від порожнього запуску: `return if active_ids.empty?`.
+
+`expire_counts!` скидає кеш лічильників віджета «всього вакансій» (`COUNTS_CACHE_KEY`, TTL 5 хв) — інакше головна сторінка ще до 5 хвилин після синку показує числа попереднього запуску.
 
 ## Phase 2: результат після кожної пачки
 

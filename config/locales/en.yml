@@ -462,6 +462,7 @@ en:
       hide: Hide
       restore: Restore
       view_original: View original posting
+    open_source_listing: Open vacancies on %{source}
     search:
       add: Add
       and: AND

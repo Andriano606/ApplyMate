@@ -9,7 +9,7 @@ aggressive), so reliability is tracked **per (proxy, source)**, not globally.
   with `success_count`, `fail_count`, `failed_at`, `reliability`. Model:
   `ProxySourceStat` (`ready_for_use` / `by_reliability` scopes, `reliability_for`).
 - **`Proxy::Operation::Validate`** — probes a batch of proxies against **each** source's
-  `Scraper.validation_url`, always with the fast pure-Ruby `AsyncHttp` (validation only
+  `Scraper.validation_url` (defaults to `Scraper.listing_url`, the public listing page), always with the fast pure-Ruby `AsyncHttp` (validation only
   needs to learn the proxy reaches the site; no curl subprocess). Accepts **2xx/3xx** OR a
   **403 Cloudflare challenge** — the proxy is alive and only OpenSSL's TLS fingerprint got
   challenged, and the CF source scrapes via `ImpersonateHttp`, which clears it. Records the
