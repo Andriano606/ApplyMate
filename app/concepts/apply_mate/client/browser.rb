@@ -120,8 +120,13 @@ class ApplyMate::Client::Browser
     @page.body
   end
 
-  def current_url
-    @page.current_url
+  # page defaults to the live one; the Cloudflare path passes its own, which it
+  # holds before @page is assigned. Nil rather than raising: a URL we cannot read
+  # is never worth aborting navigation for.
+  def current_url(page = @page)
+    page&.current_url
+  rescue StandardError
+    nil
   end
 
   # Sources of every iframe on the page — used to follow embedded ATS forms,
@@ -954,18 +959,6 @@ class ApplyMate::Client::Browser
     Rails.logger.warn("Browser: quit failed: #{e.message}")
   end
 
-  def wait_for_idle(timeout: 10)
-    @page.network.wait_for_idle(timeout: timeout)
-  rescue Ferrum::TimeoutError, Ferrum::PendingConnectionsError
-    # ignore pending third-party requests
-  end
-
-  def quit
-    @browser.quit
-  rescue StandardError => e
-    Rails.logger.warn("Browser: quit failed: #{e.message}")
-  end
-
   private
 
   def proxy_option(proxy)
@@ -1009,12 +1002,6 @@ class ApplyMate::Client::Browser
     page.body
   rescue StandardError
     ''
-  end
-
-  def current_url(page)
-    page.current_url
-  rescue StandardError
-    nil
   end
 
   def new_page
