@@ -514,6 +514,7 @@ en:
       generate_answer: Згенерувати відповідь на питання
       generate_cv: Згенерувати резюме
     sync:
+      no_access: The source refuses this address — sync stopped
       no_proxies: No proxies available — sync stopped
     total_vacancies: vacancies
     update:

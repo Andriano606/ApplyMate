@@ -49,6 +49,18 @@ RSpec.describe Proxy::Operation::Validate, type: :operation do
     expect(ProxySourceStat.find_by(proxy: hardblock, source: source)).to have_attributes(success_count: 0, fail_count: 1)
   end
 
+  # A source scraped from the app host has no pool to grow, so probing every
+  # candidate against it would spend the run's budget on stats nothing reads.
+  it 'skips a source that is not scraped through the pool' do
+    direct = create(:source, name: 'RubyOnRemote', base_url: 'https://rubyonremote.com/',
+                             scraper: 'ApplyMate::Scraper::RubyOnRemote')
+
+    result = described_class.call(limit: 10, sources: [ source, direct ]).model
+
+    expect(result[:alive].keys).to eq([ source.id ])
+    expect(ProxySourceStat.where(source_id: direct.id)).to be_empty
+  end
+
   it 'probes only proxies without stats yet under the default scope' do
     tested = create(:proxy, host: 'tested.example.com')
     ProxySourceStat.create!(proxy: tested, source: source, success_count: 5, reliability: 1.0)

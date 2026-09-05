@@ -355,6 +355,60 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     end
   end
 
+  # Stands in for ProxyPool for a source that must be scraped from this host's own
+  # address (`Scraper.uses_proxies?` == false, see ApplyMate::Client::Clearance).
+  #
+  # Same API, so the workers below need no branch of their own. One difference that
+  # matters: it hands the address out to ONE fiber at a time, which turns the source's
+  # workers into a single-file queue. That is deliberate — WORKERS_PER_SOURCE parallel
+  # requests from one IP is how a small board decides to block us, and a proxy pool's
+  # whole point (spreading load over addresses) is exactly what is missing here.
+  class DirectPool
+    # A proxy-shaped value with no proxy in it: `url` nil makes every client go direct,
+    # and the id keeps the workers' bookkeeping (which is keyed by proxy) working.
+    Direct = Struct.new(:id, :url)
+
+    # There is only one address, so a dead result cannot be answered by rotating to
+    # another one. After this many the source has to stop — otherwise the workers
+    # would retry the same refusing IP until the job's time limit killed them.
+    DEAD_LIMIT = 5
+
+    def initialize
+      @proxy    = Direct.new(0, nil)
+      @in_use   = false
+      @dropped  = 0
+    end
+
+    def size
+      1
+    end
+
+    def dropped
+      @dropped
+    end
+
+    def acquire
+      return nil if @in_use || exhausted?
+
+      @in_use = true
+      @proxy
+    end
+
+    def release(proxy, status: :keep)
+      return unless proxy
+
+      @dropped += 1 if status == :dead
+      @in_use   = false
+    end
+
+    def exhausted?
+      @dropped >= DEAD_LIMIT
+    end
+
+    # Nothing to persist: no proxy reputations were touched.
+    def flush!; end
+  end
+
   # In-memory buffer for scraped vacancies (Phase 1). Workers append listings here
   # instead of writing per page; the DB is touched only when the buffer reaches
   # VACANCY_BUFFER_LIMIT (bulk upsert + ES import) or on the final flush at the end
@@ -434,7 +488,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     # sources still sync. Only an empty run overall raises NoProxiesError.
     @pools  = {}
     sources = sources.select do |source|
-      @pools[source.id] = ProxyPool.new(@db, source)
+      @pools[source.id] = pool_for(source)
       true
     rescue NoProxiesError
       log(event: 'vacancy_sync_source_skipped', session_id: @session_id,
@@ -468,6 +522,21 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   private
 
+  # Why a source ran out of addresses to try. For a rotating pool it is the pool that
+  # emptied; a direct source has one address all along, so the same stop means the
+  # site refused it — telling them apart is the difference between "buy proxies" and
+  # "this board is blocking the app host".
+  def exhausted_message(pool)
+    pool.is_a?(DirectPool) ? I18n.t('vacancy.sync.no_access') : I18n.t('vacancy.sync.no_proxies')
+  end
+
+  # A source that is scraped from this host (Cloudflare clearance is bound to the
+  # address that earned it) gets the direct pool; everything else rotates.
+  def pool_for(source)
+    scraper = source.scraper.constantize
+    scraper.uses_proxies? ? ProxyPool.new(@db, source) : DirectPool.new
+  end
+
   def sync_source(source)
     pool = @pools[source.id]
     log(event: 'vacancy_sync_source_completed', session_id: @session_id, source: source.name, phase: 'listing') do
@@ -490,7 +559,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       # flushes proxy counters — raising first threw that work away.
       buffer.flush
 
-      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
+      raise NoProxiesError, exhausted_message(pool) if stop[0]
 
       # external_ids could have duplicates
       log(event: 'vacancy_sync_listing_summary', session_id: @session_id, source: source.name,
@@ -546,7 +615,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         end
       end
 
-      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
+      raise NoProxiesError, exhausted_message(pool) if stop[0]
 
       log(event: 'vacancy_sync_description_summary', session_id: @session_id, source: source.name,
           descriptions: done[0], total: total, skipped: skipped[0],

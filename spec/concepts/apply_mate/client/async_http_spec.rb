@@ -449,4 +449,32 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
       expect(response.body).to eq('async ok')
     end
   end
+
+  # Resolv returns whatever record comes first, and for a Cloudflare-fronted host
+  # that is usually the AAAA — on a host with no IPv6 route every direct request
+  # died with ENETUNREACH while an A record sat next to it in the same answer.
+  describe 'address selection' do
+    subject(:client) { described_class.new }
+
+    before { described_class::DNS_CACHE.clear }
+
+    it 'takes the IPv4 address when the host has both' do
+      allow(Resolv).to receive(:getaddresses).with('cf.example.com')
+                                             .and_return([ '2606:4700:20::ac43:4bac', '104.26.12.31' ])
+
+      expect(client.send(:resolve, 'cf.example.com')).to eq('104.26.12.31')
+    end
+
+    it 'still uses IPv6 when that is all the host has' do
+      allow(Resolv).to receive(:getaddresses).with('v6.example.com').and_return([ '2606:4700::1' ])
+
+      expect(client.send(:resolve, 'v6.example.com')).to eq('2606:4700::1')
+    end
+
+    it 'raises when the host resolves to nothing' do
+      allow(Resolv).to receive(:getaddresses).with('nowhere.example.com').and_return([])
+
+      expect { client.send(:resolve, 'nowhere.example.com') }.to raise_error(Resolv::ResolvError)
+    end
+  end
 end

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Source < ApplicationRecord
-  SCRAPERS = %w[ApplyMate::Scraper::Dou ApplyMate::Scraper::Djinni].freeze
+  SCRAPERS = %w[ApplyMate::Scraper::Dou ApplyMate::Scraper::Djinni ApplyMate::Scraper::RubyOnRemote].freeze
 
   has_one_attached :logo
   has_many :vacancies, dependent: :destroy
