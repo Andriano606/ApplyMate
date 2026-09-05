@@ -52,9 +52,19 @@ class ApplyMate::Client::AsyncHttp
     now   = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     return entry[:ip] if entry && entry[:expires_at] > now
 
-    ip = Resolv.getaddress(host)
+    ip = prefer_ipv4(host)
     DNS_CACHE[host] = { ip: ip, expires_at: now + DNS_TTL_S }
     ip
+  end
+
+  # Resolv hands back whatever record comes first, and for a Cloudflare-fronted host
+  # that is usually the AAAA — so a machine with no IPv6 route (the app host, the Pi)
+  # got Errno::ENETUNREACH on every direct request while an IPv4 address sat right
+  # next to it in the answer. Falls back to whatever exists when there is no A record.
+  def prefer_ipv4(host)
+    addresses = Resolv.getaddresses(host)
+    addresses.find { |address| !address.include?(':') } || addresses.first ||
+      raise(Resolv::ResolvError, "no address for #{host}")
   end
 
   def perform(method, url, headers:, body: nil, follow_redirects:)

@@ -120,6 +120,97 @@ remaining proxies split into a true JS-challenge minority and hard IP-blocks (10
 pages per proxy before a ban** and carries full Chrome overhead — so ImpersonateHttp is the
 primary path; `ApplyMate::Client::Browser` is reserved for the rare interactive JS challenge.
 
+**Persistent profiles.** `Browser.new(profile: "dou")` browses with a Chrome profile that
+outlives the session, so a solved Cloudflare challenge (`cf_clearance`) and the site's other
+cookies carry into the next run instead of every visit looking like a browser installed a second
+ago — the "~2 pages per proxy" figure above is measured without one. Omit `profile:` for the
+throwaway profile.
+
+Three gotchas the implementation exists to work around:
+
+- Ferrum seeds its own temporary `user-data-dir` and merges `browser_options` over it, so the
+  override key must be the **string** `'user-data-dir'`; a symbol adds a second flag, Chrome
+  honours the first, and the profile silently lands in the directory Ferrum deletes on quit.
+- Chrome writes its cookie store only on a clean profile shutdown, and Ferrum launches it with
+  `--keep-alive-for-test`, so it never exits cleanly. Cookies are therefore dumped explicitly
+  (`cookies.store` / `cookies.load`) into the profile directory on quit and startup.
+- Cookies travel over a page's CDP session, and Ferrum pins the **first** target it ever sees as
+  the context's default and never re-pins it. So the client opens one page (`keep_alive_page`)
+  before any other and closes it only in `quit`; without it, restoring cookies at startup opened
+  and closed the default target, and every delegated call on the Ferrum browser — `cookies`
+  included — then failed with "Session with given id not found". Only profiled sessions restore
+  cookies, so only they hit it.
+
+**What a profile does not buy.** A site on a Cloudflare *managed* challenge (rubyonremote.com as
+of Sep 2026) is not readable through this client at all: measured on one host, a plain Chrome
+launched by hand — same IP, same binary, same flags, debugging port open but **no CDP session
+attached** — clears the interstitial in seconds, while Ferrum with the identical flag set
+(`ignore_default_browser_options`, headful, no stealth script) never clears it in 40s. Headless
+vs headful, real UA vs spoofed and a warm `cf_clearance` all make no difference; the attached CDP
+session is the tell. Playwright (`channel: 'chrome'`, persistent context) fails the same way, so
+this is not a Ferrum gap to patch. Reading such a site needs the challenge solved by a browser
+nothing is attached to.
+
+Profiles come from a locked pool (`ApplyMate::Client::BrowserProfile`, `BROWSER_PROFILE_POOL`,
+default 4) because Chrome refuses to run two processes against one profile directory; when every
+slot is taken the caller silently gets a throwaway profile rather than waiting. `BrowserProfile.clear(name)`
+drops a profile that has grown or gone bad. `CHROME_PATH` (or a detected `google-chrome-stable`)
+selects real Chrome over bundled Chromium, whose build strings and WebGL renderer differ in ways
+bot checks read.
+
+## Managed Cloudflare challenges — Clearance (browser once, HTTP after)
+
+A *managed* challenge is a harder problem than the passive check above: the interstitial
+("Just a moment…") has to run JS, so no HTTP client passes it whatever its TLS fingerprint —
+and neither does a browser we drive. Measured against **rubyonremote.com**:
+
+| Attempt | Result |
+|---|---|
+| AsyncHttp / ImpersonateHttp, any URL (`/`, `/sitemap.xml`, `/feed`) | 403 interstitial |
+| Ferrum, headless or headful, real Chrome, genuine or spoofed UA, warm profile | never clears |
+| Playwright with a persistent context (`channel: 'chrome'`) | never clears |
+| `--headless=new`, no CDP client attached | never clears |
+| plain Chrome on a display, debugging port open, **nothing attached** | clears in ~6s |
+
+The tell is the attached CDP session, not the flags: the token gets issued and immediately
+re-challenged. So `ApplyMate::Client::Clearance` uses the browser for one thing only — earning
+`cf_clearance` with nobody attached, watched through the debugging port's `/json/list` (plain
+HTTP, opens no session) — and hands the cookie plus the User-Agent that earned it back as
+headers for ordinary requests:
+
+```ruby
+headers = ApplyMate::Client::Clearance.headers(url)         # or (url, proxy: proxy.url)
+client.get(url, headers: headers)                            # plain AsyncHttp, 200
+ApplyMate::Client::Clearance.forget(url)                     # after a 403: earn a fresh one
+```
+
+Cached per (host, proxy) for `CACHE_TTL` (20 min). Cold path measured end to end: 5.2s for the
+warm-up plus the first listing page; every later page ~0.5s.
+
+Four things the implementation exists to work around, each measured:
+
+- **The token is issued to an identity.** The same cookie returns 200 with the warming Chrome's
+  User-Agent and 403 with curl's, so both headers must be sent together. This is also why
+  ImpersonateHttp is the wrong client here: its `curl_chrome136` wrapper hard-codes a macOS
+  Chrome 136 UA and `sec-ch-ua`, curl sends *both* that header and any override (an empty `-H`
+  does not remove a wrapper header either), and Cloudflare refuses the mismatch.
+- **A reused profile never clears again.** Once a profile has failed the challenge, Cloudflare
+  keeps re-challenging the state it left behind; a fresh directory on the same host and IP
+  clears in seconds. Chrome therefore runs in a `session/` subdirectory that is wiped before
+  every warm-up (the pool slot's lock file lives beside it).
+- **`--remote-debugging-port=0` never clears**, while the same Chrome on a fixed port clears in
+  four seconds — so the port is picked with a throwaway `TCPServer` instead.
+- **Chrome needs a display.** `--headless=new` does not clear. Xvfb is enough and just as fast,
+  so a server runs the warm-up under one; without a display the warm-up raises `BrowserError`,
+  which is deliberately NOT the same failure as `ChallengeError` ("the site refused this
+  address") so a misconfigured host is not reported as a blocking site.
+
+A source whose access depends on the clearance must be scraped from the address that earned it:
+it declares `uses_proxies? == false`, `SyncVacancies` gives it a `DirectPool` (one address, no
+rotation, one worker at a time), and `Proxy::Operation::Validate` skips it. Sending those
+requests through the pool would 403 every time AND report each proxy as dead, draining the pool
+Dou and Djinni share.
+
 **Install:** the curl-impersonate binary is arch-specific and NOT committed. Run
 `bin/install-curl-impersonate` once per host (downloads into `vendor/curl-impersonate/`, which is
 gitignored). Override the binary path with `CURL_IMPERSONATE_BIN` (e.g. a `curl_chrome136`

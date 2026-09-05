@@ -173,6 +173,28 @@ en:
         status: Статус
         vacancy: Вакансія
       title: Мої відгуки
+    manual:
+      bookmarklet: Автозаповнення (перетягніть у закладки)
+      bookmarklet_copy: Копіювати код закладки
+      bookmarklet_copy_hint: якщо перетягнути не вдається — створіть закладку вручну
+        і вставте цей код у поле URL
+      bookmarklet_hint: 'Як користуватись автозаповненням:'
+      bookmarklet_step_bar: Увімкніть панель закладок у браузері (Ctrl+Shift+B) —
+        інакше перетягувати нікуди.
+      bookmarklet_step_drag: Перетягніть фіолетову кнопку «Автозаповнення» на цю панель.
+      bookmarklet_step_run: Відкрийте форму вакансії та натисніть створену закладку
+        — поля заповняться, резюме прикріпіть вручну.
+      checked: Відмітити
+      confirmed: Відгук позначено як надісланий
+      copy: Копіювати
+      download_cv: Завантажити резюме
+      hint: Деякі сайти (зокрема Ashby) відхиляють подачу з автоматизованого браузера,
+        навіть якщо форма заповнена правильно. Тоді подайте заявку зі свого звичайного
+        браузера — або скопіюйте відповіді нижче, або скористайтесь автозаповненням.
+      open_form: Відкрити форму на сайті
+      submitted: Я надіслав заявку
+      title: Подати зі свого браузера
+      unchecked: Не відмічати
     new:
       button: Відгукнутись
       form:
@@ -188,6 +210,12 @@ en:
         user_profile: Профіль
       submit: Відгукнутись
       title: Новий відгук
+    retry:
+      enqueued: Відповіді збережено, відгук відправлено повторно
+      hint: Автоматика не змогла відповісти на ці питання форми. Заповніть їх — відповіді
+        збережуться у вашому профілі, і відгук буде надіслано повторно.
+      submit: Відповісти і повторити
+      title: Потрібні ваші відповіді
     show:
       back: До відгуків
       cv_tab_preview: Preview
@@ -209,6 +237,9 @@ en:
       no_data: No data yet
       title: Відгук
     status:
+      blocked_captcha: Заблоковано капчею
+      blocked_login: Потрібен вхід на сайт
+      blocked_requires_account: Потрібна реєстрація акаунта
       checking_applyble: Перевірка доступності
       completed: Завершено
       failed_checking_applyble: Помилка перевірки доступності
@@ -223,6 +254,7 @@ en:
       fetching_form: Отримання форми
       filling_form: Заповнення форми
       generating_cv: Генерація резюме
+      needs_review: Потрібні відповіді
       sending_cv: Надсилання
   apply_mate:
     expandable_text:
@@ -482,6 +514,7 @@ en:
       generate_answer: Згенерувати відповідь на питання
       generate_cv: Згенерувати резюме
     sync:
+      no_access: The source refuses this address — sync stopped
       no_proxies: No proxies available — sync stopped
     total_vacancies: vacancies
     update:

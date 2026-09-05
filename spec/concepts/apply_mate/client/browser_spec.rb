@@ -4,13 +4,18 @@ require 'rails_helper'
 
 RSpec.describe ApplyMate::Client::Browser do
   let(:network) { double('network', wait_for_idle: nil) }
+  # The challenge loop moves the cursor: a page that sits perfectly still while
+  # the challenge solves is itself a signal.
+  let(:mouse) { double('mouse', move: nil) }
   let(:page_headers) { double('headers', set: nil) }
   let(:cookies) { double('cookies', all: {}) }
   let(:page) do
-    double('page', command: nil, headers: page_headers, network: network,
+    double('page', command: nil, headers: page_headers, network: network, mouse: mouse,
                    goto: nil, current_url: 'https://jobs.dou.ua/vacancies/', close: nil)
   end
-  let(:ferrum) { double('ferrum', create_page: page, cookies: cookies, quit: nil) }
+  # #page is the browser's default page: opened before any other, closed by
+  # nothing but #quit, and the session cookies are read and written over.
+  let(:ferrum) { double('ferrum', create_page: page, page: page, cookies: cookies, quit: nil) }
 
   before { allow(Ferrum::Browser).to receive(:new).and_return(ferrum) }
 

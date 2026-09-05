@@ -5,6 +5,7 @@ class UserProfile < ApplicationRecord
   has_many :applies,           dependent: :destroy
   has_many :vacancy_cvs,       dependent: :destroy
   has_many :vacancy_questions, dependent: :destroy
+  has_many :answer_banks,      dependent: :destroy
   has_many :users_as_default,
            class_name: 'User',
            foreign_key: 'default_profile_id',

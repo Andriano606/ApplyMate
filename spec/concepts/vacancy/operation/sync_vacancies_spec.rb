@@ -333,4 +333,73 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       expect(stat.failed_at).to be_present
     end
   end
+
+  # A source whose access is tied to this host's address (a Cloudflare clearance
+  # earned here — see ApplyMate::Client::Clearance) is scraped without the pool.
+  describe 'a source that must be scraped from the app host' do
+    let!(:source) { create(:source, name: 'RubyOnRemote', base_url: 'https://rubyonremote.com/', scraper: 'ApplyMate::Scraper::RubyOnRemote') }
+    let(:operation) { described_class.new(sources: [ source ]) }
+    let(:card) do
+      '<a href="/jobs/1-dev-at-acme"><img src="https://cdn/x"><h2>Dev</h2><p>Acme</p></a>'
+    end
+
+    before do
+      allow(ApplyMate::Client::Clearance).to receive(:headers).and_return({ 'Cookie' => 'cf_clearance=tok' })
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get)
+        .with(a_string_including('rubyonremote.com'), any_args) do |_instance, url|
+          body = url.include?('page=1') ? "<html>#{card}</html>" : '<html><nav>menu</nav></html>'
+          ApplyMate::Client::Response.new(body, {}, 200, url)
+        end
+    end
+
+    it 'scrapes it and touches no proxy reputation at all' do
+      operation.call
+
+      expect(source.vacancies.pluck(:external_id)).to eq(%w[1])
+      expect(ProxySourceStat.where(source_id: source.id)).to be_empty
+    end
+
+    it 'sends the requests from this host, with no proxy in the client' do
+      allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_call_original
+
+      operation.call
+
+      expect(ApplyMate::Client::AsyncHttp).to have_received(:new).with(hash_including(proxy: nil)).at_least(:once)
+    end
+  end
+
+  describe Vacancy::Operation::SyncVacancies::DirectPool do
+    subject(:pool) { described_class.new }
+
+    # One address means requests have to queue: WORKERS_PER_SOURCE fibers hitting a
+    # small board in parallel from one IP is how it decides to block us.
+    it 'lends the address to one worker at a time' do
+      first = pool.acquire
+      expect(pool.acquire).to be_nil
+
+      pool.release(first)
+      expect(pool.acquire).to be_present
+    end
+
+    it 'hands out no proxy, so clients go direct' do
+      expect(pool.acquire.url).to be_nil
+    end
+
+    # There is no other address to rotate to, so without this the workers would retry
+    # a refusing site until the job's time limit killed them.
+    it 'gives up after the site has refused it DEAD_LIMIT times' do
+      described_class::DEAD_LIMIT.times do
+        pool.release(pool.acquire, status: :dead)
+      end
+
+      expect(pool).to be_exhausted
+      expect(pool.acquire).to be_nil
+    end
+
+    it 'does not give up over ordinary empty pages' do
+      10.times { pool.release(pool.acquire, status: :keep) }
+
+      expect(pool).not_to be_exhausted
+    end
+  end
 end

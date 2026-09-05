@@ -33,7 +33,10 @@ class Proxy::Operation::Validate < ApplyMate::Operation::Base
   def perform!(limit: DEFAULT_LIMIT, scope: :untested, sources: nil, **)
     skip_authorize
 
-    sources    = Array(sources).presence || Source.all.to_a
+    # A source scraped from the app host (Scraper.uses_proxies? == false) has no pool
+    # to grow, so probing every candidate against it would be a batch of requests
+    # spent on a per-source stat nothing will ever read.
+    sources    = (Array(sources).presence || Source.all.to_a).select { |source| source.scraper.constantize.uses_proxies? }
     candidates = candidate_scope(scope).limit(limit).to_a
     return self.model = { validated: 0, alive: {} } if candidates.empty? || sources.empty?
 

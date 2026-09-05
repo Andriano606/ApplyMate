@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Autocomplete</title></head>
+<body>
+  <label for="src">How did you hear about us?</label>
+  <input type="text" id="src" role="combobox" aria-autocomplete="list" placeholder="Start typing...">
+  <ul id="list" role="listbox"></ul>
+  <p id="chosen"></p>
+  <script>
+    // Mirrors an ATS autocomplete: options appear only while typing, and the
+    // field counts as answered only once an option is clicked.
+    var OPTIONS = ['Linkedin', 'Other', 'Job fairs', 'Youtube'];
+    var input = document.getElementById('src');
+    var list  = document.getElementById('list');
+    input.addEventListener('input', function () {
+      var q = input.value.trim().toLowerCase();
+      list.innerHTML = '';
+      if (!q) return;
+      OPTIONS.filter(function (o) { return o.toLowerCase().indexOf(q) !== -1; })
+        .forEach(function (o) {
+          var li = document.createElement('li');
+          li.setAttribute('role', 'option');
+          li.textContent = o;
+          li.addEventListener('click', function () {
+            input.value = o;
+            document.getElementById('chosen').textContent = o;
+            list.innerHTML = '';
+          });
+          list.appendChild(li);
+        });
+    });
+  </script>
+</body>
+</html>

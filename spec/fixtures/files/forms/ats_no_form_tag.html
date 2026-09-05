@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Apply — ATS widget</title>
+  <style>.hidden-state { display: none; }</style>
+</head>
+<body>
+  <h1>Junior Data Scientist</h1>
+  <!-- Ashby-style: no <form> element, no type="submit" button, generated ids -->
+  <div class="_container_x1y2">
+    <label for="_systemfield_name">Full Name<span>*</span></label>
+    <input type="text" id="_systemfield_name" name="_systemfield_name" required>
+
+    <label for="_systemfield_email">Email<span>*</span></label>
+    <input type="email" id="_systemfield_email" name="_systemfield_email" required>
+
+    <label for="fld-phone">Phone Number</label>
+    <input type="tel" id="fld-phone" name="278e7851-c14c-4765-8bce-75418a3bf3a9">
+
+    <label for="_systemfield_resume">Resume<span>*</span></label>
+    <input type="file" id="_systemfield_resume" name="_systemfield_resume" required
+           style="display:none">
+
+    <!-- Combobox whose question lives in a sibling label with no "for" -->
+    <div class="_fieldEntry_1">
+      <label>How did you get to know Preply?</label>
+      <input type="text" placeholder="Start typing..." id="src-9931">
+    </div>
+
+    <!-- Autocomplete: value must be CHOSEN from the list, not typed -->
+    <div class="_fieldEntry_4">
+      <label>Where did you hear about us?</label>
+      <input type="text" id="src-combo" role="combobox" aria-autocomplete="list"
+             aria-haspopup="listbox" placeholder="Start typing...">
+    </div>
+
+    <!-- Yes/No question built from buttons; a hidden checkbox holds the state -->
+    <div class="_fieldEntry_2">
+      <label>Are you currently based in Ukraine?</label>
+      <div class="_container_1svni_28 _yesno_1e3gg_148">
+        <button class="_option_1svni_32">Yes</button>
+        <button class="_option_1svni_32">No</button>
+        <input type="checkbox" class="hidden-state">
+      </div>
+    </div>
+
+    <!-- Consent: a real checkbox the form requires -->
+    <div class="_fieldEntry_5">
+      <label><input type="checkbox" name="gdpr_consent"> I acknowledge the privacy policy</label>
+    </div>
+
+    <!-- Radio group whose question is only on the wrapping legend -->
+    <fieldset class="_fieldEntry_3">
+      <legend>Which of the following best describes your gender identity?</legend>
+      <label><input type="radio" name="gender_q" value="woman"> Woman</label>
+      <label><input type="radio" name="gender_q" value="man"> Man</label>
+      <label><input type="radio" name="gender_q" value="nonbinary"> Gender Queer or Non-binary</label>
+    </fieldset>
+
+    <button class="_button_zyh3g_28 _secondary_zyh3g_115">Upload file</button>
+    <button class="_button_zyh3g_28 _primary_zyh3g_97 _submitButton_abc">Submit Application</button>
+  </div>
+</body>
+</html>

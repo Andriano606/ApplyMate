@@ -26,15 +26,23 @@ module Apply::Operation::FormExtractor
       name = el['placeholder'].to_s.strip if name.blank?
       next if name.blank?
 
+      accessible_name = accessible_name_for(doc, el)
+
       entry = {
-        'name'        => name,
-        'selector'    => derive_selector(el),
-        'form_index'  => form_idx,
-        'tag'         => tag,
-        'type'        => type,
-        'label'       => find_label(doc, el),
-        'placeholder' => el['placeholder'].to_s,
-        'value'       => tag == 'textarea' ? el.text.strip : el['value'].to_s
+        'name'            => name,
+        'selector'        => derive_selector(el),
+        'form_index'      => form_idx,
+        'position'        => form_idx,
+        'tag'             => tag,
+        'type'            => type,
+        'accessible_name' => accessible_name,
+        'label'           => accessible_name,
+        'placeholder'     => el['placeholder'].to_s,
+        'required'        => required_field?(el, accessible_name),
+        'autocomplete'    => el['autocomplete'].to_s,
+        'fieldset'        => fieldset_legend_for(el),
+        'role'            => nil,
+        'value'           => tag == 'textarea' ? el.text.strip : el['value'].to_s
       }
 
       if tag == 'select'
@@ -46,6 +54,8 @@ module Apply::Operation::FormExtractor
         entry['options'] ||= []
         entry['options'] << { 'label' => (el['aria-label'] || el['id'] || entry['value']).to_s, 'value' => entry['value'] }
       end
+
+      entry['fingerprint'] = Apply::FieldFingerprint.call(entry)
 
       form_idx += 1
       inputs << entry
@@ -109,6 +119,32 @@ module Apply::Operation::FormExtractor
       !cls.include?(':')         # colons (Tailwind variant prefixes) are invalid in CSS selectors
   end
 
+  # Simplified accname, mirroring Browser#snapshot_fields:
+  # aria-label > label[for] / wrapping label > placeholder.
+  def accessible_name_for(doc, el)
+    aria = el['aria-label'].to_s.strip
+    return aria if aria.present?
+
+    label = find_label(doc, el)
+    return label if label.present?
+
+    el['placeholder'].to_s.strip
+  end
+
+  def required_field?(el, accessible_name)
+    !el['required'].nil? || el['aria-required'] == 'true' || accessible_name.include?('*')
+  end
+
+  def fieldset_legend_for(el)
+    parent = el.parent
+    while parent && parent.name != 'body'
+      return parent.at_css('legend')&.text.to_s.strip if parent.name == 'fieldset'
+      parent = parent.parent
+    end
+
+    ''
+  end
+
   def find_label(doc, el)
     id = el['id'].to_s
     if id.present?
@@ -143,7 +179,20 @@ module Apply::Operation::FormExtractor
       end
     end
 
-    result
+    result.each { |entry| apply_group_label(entry) }
+  end
+
+  # A merged group must be named by its question, not by whichever option came
+  # first — otherwise "Which of the following best describes your gender
+  # identity?" reaches the AI as a field called "Woman".
+  def apply_group_label(entry)
+    label = entry.delete('group_label')
+    return entry unless %w[radio checkbox].include?(entry['type'])
+    return entry if label.blank? || (entry['options'] || []).size < 2
+
+    entry['accessible_name'] = label
+    entry['label']           = label
+    entry
   end
 
   def extract_cookies(headers)

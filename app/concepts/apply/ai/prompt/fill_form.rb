@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
+# Generates free-text values for the fields ResolveValues could not answer
+# deterministically (cover letter + unanswered custom questions). Field
+# instructions derive from canonical roles — no job-board-specific names here.
+# PROMPT_TEMPLATE and its placeholders are public contract: Prompt::Operation::New
+# seeds user-editable templates from it (apply.fill_form_prompt).
 class Apply::Ai::Prompt::FillForm < ApplyMate::Ai::Prompt::Base
   PROMPT_TEMPLATE = <<~PROMPT
     Роль: Ти — професійний кар'єрний консультант та експерт з написання супровідних листів.
 
-    Завдання: На основі опису вакансії та мого досвіду (транскрипту співбесіди/резюме), заповни поля форми для подачі заявки.
+    Завдання: На основі опису вакансії та мого досвіду (транскрипту співбесіди/резюме), заповни перелічені поля форми для подачі заявки.
 
     Контекст вакансії:
     PLACEHOLDER_VACANCY_CONTEXT
@@ -12,69 +17,53 @@ class Apply::Ai::Prompt::FillForm < ApplyMate::Ai::Prompt::Base
     Мій досвід / Співбесіда:
     PLACEHOLDER_USER_EXPERIENCE
 
-    Список полів форми для заповнення:
+    Список полів форми для заповнення (кожне починається зі свого id у квадратних дужках):
     PLACEHOLDER_FORM_FIELDS
   PROMPT
 
-  def initialize(apply)
-    @apply = apply
+  ROLE_INSTRUCTIONS = {
+    'cover_letter'        => 'Мотиваційний лист. Має бути лаконічним (до 1000 символів), ' \
+                             'підкреслювати мій релевантний досвід саме для цієї вакансії.',
+    'salary_expectation'  => 'Очікувана зарплата. Поверни ЛИШЕ число, без валюти, слів і дужок ' \
+                             '(наприклад: 3000). Визнач її на основі контексту вакансії або ' \
+                             'залиш порожньою, якщо в моєму досвіді не вказано конкретну суму.',
+    'custom_question'     => 'Дай коротку і конкретну відповідь на це питання анкети від першої особи.'
+  }.freeze
+
+  def initialize(apply, fields = nil)
+    @apply  = apply
+    @fields = fields
   end
 
   def call
+    fields = Array(@fields)
+    return if fields.blank?
+
     vacancy_context = [ @apply.vacancy.description, @apply.vacancy.details ].select(&:present?).join("\n\n")
-    user_experience = @apply.user_profile.cv
-
-    inputs = @apply.inputs
-    return if inputs.blank?
-
-    fields_info = inputs.filter_map do |input|
-      input = input.with_indifferent_access
-      next if input['type'] == 'file'
-
-      line = "- #{input['name']} (#{input['tag']}#{ " type=#{input['type']}" if input['type'].present? })"
-      line += ": #{input['label']}" if input['label'].present?
-      line += " (Placeholder: #{input['placeholder']})" if input['placeholder'].present?
-      line += ". Current value: #{input['value']}" if input['value'].present?
-
-      if input['type'] == 'radio' && input['options'].present?
-        options_str = input['options'].map { |o| "#{o['label']}=#{o['value']}" }.join(', ')
-        line += ". Options: #{options_str}. INSTRUCTION: Return the value (not label) of your chosen option."
-      end
-
-      if input['tag'] == 'select' && input['options'].present?
-        options_str = input['options'].map { |o| "#{o['label']}=#{o['value']}" }.join(', ')
-        line += ". Options: #{options_str}. INSTRUCTION: Return the value (not label) of your chosen option."
-      end
-
-      case input['name']
-      when 'message'
-        line += '. INSTRUCTION: Мотиваційний лист. Має бути лаконічним (до 1000 символів), підкреслювати мій релевантний досвід саме для цієї вакансії.'
-      when 'save_msg_template'
-        line += ". INSTRUCTION: Always return 'false'."
-      when 'msg_template_name'
-        line += ". INSTRUCTION: Always return ''."
-      when 'save_profile_cv'
-        line += ". INSTRUCTION: Always return 'false'."
-      when 'salary_changed'
-        line += '. INSTRUCTION: Очікувана зарплата. Визнач її на основі контексту вакансії або залиш порожньою, якщо в моєму досвіді не вказано конкретну суму.'
-      when 'apply'
-        line += ". INSTRUCTION: Always return 'true'."
-      when 'csrfmiddlewaretoken'
-        line += '. INSTRUCTION: Keep current value.'
-      end
-
-      line
-    end.join("\n")
-
-    return if fields_info.blank?
+    fields_info     = fields.map { |field| render_field(field.to_h.stringify_keys) }.join("\n")
 
     template
       .sub('PLACEHOLDER_VACANCY_CONTEXT', vacancy_context)
-      .sub('PLACEHOLDER_USER_EXPERIENCE', user_experience)
+      .sub('PLACEHOLDER_USER_EXPERIENCE', @apply.user_profile.cv)
       .sub('PLACEHOLDER_FORM_FIELDS', fields_info)
   end
 
   private
+
+  def render_field(field)
+    line = "- [#{field['fingerprint']}] #{field['accessible_name'].presence || field['label'].presence || field['name']}"
+    line += " (#{field['tag']}#{", type=#{field['type']}" if field['type'].present?})"
+    line += " (Placeholder: #{field['placeholder']})" if field['placeholder'].present?
+    line += ". Current value: #{field['value']}" if field['value'].present?
+
+    if field['options'].present?
+      options_str = field['options'].map { |o| "#{o['label']}=#{o['value']}" }.join(', ')
+      line += ". Options: #{options_str}. INSTRUCTION: Return the value (not label) of your chosen option."
+    end
+
+    instruction = ROLE_INSTRUCTIONS[field['role'].to_s] || ROLE_INSTRUCTIONS['custom_question']
+    "#{line}. INSTRUCTION: #{instruction}"
+  end
 
   def template
     @apply.fill_form_prompt&.content || PROMPT_TEMPLATE

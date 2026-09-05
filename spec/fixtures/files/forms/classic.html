@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"><title>Вакансія — Компанія Classic</title></head>
+<body>
+  <h1>Розробник Ruby</h1>
+  <h2>Подати заявку</h2>
+  <a href="/about">Про компанію</a>
+  <form action="/careers/apply" method="post" id="apply-form">
+    <input type="hidden" name="csrf_token" value="tok-123">
+
+    <fieldset>
+      <legend>Контактні дані</legend>
+      <label for="full-name">Повне ім'я *</label>
+      <input type="text" id="full-name" name="full_name" required autocomplete="name">
+
+      <label for="email-field">Електронна пошта</label>
+      <input type="email" id="email-field" name="email" aria-required="true" autocomplete="email">
+    </fieldset>
+
+    <label for="cover">Супровідний лист</label>
+    <textarea id="cover" name="cover_letter"></textarea>
+
+    <label for="english">Рівень англійської</label>
+    <select id="english" name="english_level">
+      <option value="">—</option>
+      <option value="b1">Intermediate</option>
+      <option value="c1" selected>Advanced</option>
+    </select>
+
+    <p>Готовність до офісу:</p>
+    <label><input type="radio" name="office" value="yes"> Так</label>
+    <label><input type="radio" name="office" value="no"> Ні</label>
+
+    <label for="cv">Резюме</label>
+    <input type="file" id="cv" name="resume">
+
+    <input type="text" name="honeypot_field" style="display:none">
+
+    <button type="submit" class="btn btn-primary">Надіслати заявку</button>
+  </form>
+</body>
+</html>

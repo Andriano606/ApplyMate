@@ -53,6 +53,17 @@ class ApplyMate::Scraper::Base
     false
   end
 
+  # Does this source get scraped through the rotating proxy pool (true), or from the
+  # app host's own address (false)? Rotation is the default and what every ordinary
+  # source wants. A source says false only when its access depends on something the
+  # host holds and a pooled IP cannot carry — a Cloudflare clearance earned here, for
+  # one (see ApplyMate::Client::Clearance): sending those requests through a stranger's
+  # IP would fail every time and, worse, would read as "this proxy is dead" and drain
+  # the pool that Dou and Djinni share.
+  def self.uses_proxies?
+    true
+  end
+
   # Seconds a proxy rests after a burst of requests to this source (sync ProxyPool).
   # Override per source: Cloudflare-protected sites are rate-sensitive (a short cooldown
   # triggers more blocks → proxy churn → slower), CF-free sites just want throughput.
@@ -92,6 +103,16 @@ class ApplyMate::Scraper::Base
 
   def form_selector
     raise NotImplementedError
+  end
+
+  # Board-specific field-name → canonical role mapping, applied deterministically
+  # BEFORE the AI mapping step (see Apply::Operation::Ai::MapFields). Subclasses
+  # override ROLE_OVERRIDES for fields whose meaning is known from the board's
+  # markup (e.g. Djinni's save_msg_template checkbox).
+  ROLE_OVERRIDES = {}.freeze
+
+  def role_overrides
+    self.class::ROLE_OVERRIDES
   end
 
   private

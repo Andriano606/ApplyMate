@@ -64,6 +64,14 @@ RSpec.describe Apply::Operation::FetchInternalForm do
         expect(message).to include('tag' => 'textarea', 'type' => 'textarea')
       end
 
+      it 'emits the shared field IR keys with a fingerprint' do
+        run_operation
+        inputs = apply.reload.inputs
+        expect(inputs).to all(include('accessible_name', 'required', 'autocomplete',
+                                      'fieldset', 'position', 'role' => nil))
+        expect(inputs.map { |i| i['fingerprint'] }).to all(match(/\A[0-9a-f]{40}\z/))
+      end
+
       it 'detects the CV file input' do
         run_operation
         cv = apply.reload.inputs.find { |i| i['name'] == 'cv_file' }

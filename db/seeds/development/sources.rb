@@ -9,6 +9,13 @@ SOURCES = [
     logo_content_type: 'image/webp'
   },
   {
+    name: 'RubyOnRemote',
+    base_url: 'https://rubyonremote.com/',
+    scraper: 'ApplyMate::Scraper::RubyOnRemote',
+    logo_filename: 'rubyonremote-logo.png',
+    logo_content_type: 'image/png'
+  },
+  {
     name: 'Dou',
     base_url: 'https://dou.ua/',
     scraper: 'ApplyMate::Scraper::Dou',
