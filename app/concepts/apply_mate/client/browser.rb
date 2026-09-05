@@ -27,16 +27,38 @@ class ApplyMate::Client::Browser
 
   Response = ApplyMate::Client::Response
 
+  # Real Chrome, in the order a Linux host tends to have it. CHROME_PATH wins,
+  # so a machine with an unusual install (or the container) can say so.
+  CHROME_CANDIDATES = %w[
+    /usr/bin/google-chrome-stable
+    /usr/bin/google-chrome
+    /opt/google/chrome/chrome
+  ].freeze
+
+  def self.chrome_path
+    return @chrome_path if defined?(@chrome_path)
+
+    @chrome_path = ENV['CHROME_PATH'].presence || CHROME_CANDIDATES.find { |candidate| File.executable?(candidate) }
+  end
+
   # proxy: optional proxy URL string ("http://host:port" / "socks5://host:port").
   # Routes Chrome through it so Cloudflare-protected sites see the proxy IP while a
   # real browser solves the JS challenge that the raw HTTP client cannot.
-  def initialize(headless: true, proxy: nil)
+  # profile: a name ("dou") to browse with a profile that outlives this session —
+  # cookies, storage and a solved Cloudflare challenge are kept, which is what
+  # makes the next visit look like a returning visitor rather than a fresh
+  # install. Omit it for the throwaway profile every automated flow used before.
+  def initialize(headless: true, proxy: nil, profile: nil)
+    @profile = profile && ApplyMate::Client::BrowserProfile.acquire(profile)
+
     @browser = Ferrum::Browser.new(
       window_size: [ 1920, 1080 ],
       process_timeout: 20,
       headless: headless,
+      **browser_path_option,
       **proxy_option(proxy),
       browser_options: {
+        **profile_option,
         # Chrome's sandbox needs unprivileged user namespaces, which the staging
         # host (Raspberry Pi) blocks via AppArmor. Without these flags Chrome dies
         # on boot with "No usable sandbox!" and never exposes its CDP websocket.
@@ -49,6 +71,8 @@ class ApplyMate::Client::Browser
         'user-agent': USER_AGENT
       }
     )
+
+    restore_cookies
   end
 
   # Drop-in replacement for ApplyMate::Client::AsyncHttp#get for Cloudflare-protected
@@ -954,12 +978,56 @@ class ApplyMate::Client::Browser
   end
 
   def quit
+    store_cookies
     @browser.quit
   rescue StandardError => e
     Rails.logger.warn("Browser: quit failed: #{e.message}")
+  ensure
+    # Released only after Chrome exits: the lock is what stops a second Chrome
+    # from booting on the same profile directory.
+    @profile&.release
+    @profile = nil
   end
 
   private
+
+  # A returning visitor is one that still holds the site's cookies — including
+  # the cf_clearance a solved Cloudflare challenge grants, which is what keeps
+  # the next visit from being challenged all over again.
+  def restore_cookies
+    return if @profile.nil? || !File.exist?(@profile.cookies_file)
+
+    @browser.cookies.load(@profile.cookies_file)
+  rescue StandardError => e
+    Rails.logger.warn("Browser: could not restore cookies: #{e.message}")
+  end
+
+  def store_cookies
+    return if @profile.nil?
+
+    @browser.cookies.store(@profile.cookies_file)
+  rescue StandardError => e
+    Rails.logger.warn("Browser: could not store cookies: #{e.message}")
+  end
+
+  def profile_option
+    return {} if @profile.nil?
+
+    # STRING key on purpose: Ferrum seeds its own temporary "user-data-dir" and
+    # merges browser_options over it, so a symbol key does not replace it — both
+    # flags reach Chrome, Chrome honours the first, and the profile silently ends
+    # up in the temp directory Ferrum deletes on quit.
+    { 'user-data-dir' => @profile.path }
+  end
+
+  # Ferrum otherwise runs whatever Chromium it finds. Real Chrome differs from
+  # Chromium in ways bot checks read (build strings, codecs, WebGL renderer), so
+  # prefer it when the host has it — and fall back silently where it does not,
+  # such as the staging container, which ships Chromium only.
+  def browser_path_option
+    path = self.class.chrome_path
+    path ? { browser_path: path } : {}
+  end
 
   def proxy_option(proxy)
     return {} if proxy.blank?
@@ -976,14 +1044,25 @@ class ApplyMate::Client::Browser
   # body (still a challenge page if it never clears within the budget).
   def load_past_cloudflare(page, url)
     goto(page, url)
+    nudge(page)
     body  = body_of(page)
     polls = 0
     while cloudflare_challenge?(body) && polls < CHALLENGE_POLLS
       polls += 1
       sleep CHALLENGE_WAIT
+      nudge(page)
       body = body_of(page)
     end
     body
+  end
+
+  # A challenge page watches for signs of a person: a cursor that never moves
+  # while it solves is itself a signal. Cheap, best-effort, never fatal — the
+  # page is being read for its body, not driven.
+  def nudge(page)
+    page.mouse.move(x: rand(80..900), y: rand(80..600))
+  rescue StandardError
+    nil
   end
 
   def goto(page, url)

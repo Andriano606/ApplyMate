@@ -265,6 +265,59 @@ RSpec.describe ApplyMate::Client::Browser do
     end
   end
 
+  # The whole point of a persistent profile: a site's cookies (a solved
+  # Cloudflare challenge among them) outlive the Chrome process. Ferrum launches
+  # Chrome with --keep-alive-for-test, so it never exits cleanly and never writes
+  # its own cookie store — these have to be carried across explicitly.
+  describe 'browsing with a persistent profile' do
+    let(:profile) { "spec_#{SecureRandom.hex(4)}" }
+
+    after { ApplyMate::Client::BrowserProfile.clear(profile) }
+
+    # Set through CDP rather than document.cookie: the fixtures are file:// URLs
+    # and Chrome stores no cookies for those, which would test nothing.
+    def seed_cookie(browser)
+      browser.instance_variable_get(:@browser)
+             .cookies.set(name: 'am_probe', value: 'kept', domain: 'example.com', path: '/')
+    end
+
+    def cookie_names(browser)
+      browser.instance_variable_get(:@browser).cookies.all.keys
+    end
+
+    it 'carries cookies into the next Chrome process' do
+      first = described_class.new(profile:)
+      seed_cookie(first)
+      first.quit
+
+      second = described_class.new(profile:)
+      expect(cookie_names(second)).to include('am_probe')
+      second.quit
+    end
+
+    it 'keeps a throwaway session out of that profile' do
+      seeded = described_class.new(profile:)
+      seed_cookie(seeded)
+      seeded.quit
+
+      plain = described_class.new
+      expect(cookie_names(plain)).not_to include('am_probe')
+      plain.quit
+    end
+
+    # A second --user-data-dir does not replace Ferrum's own: Chrome honours the
+    # first and the profile silently lands in a temp directory Ferrum deletes.
+    it 'passes exactly one profile flag, pointing at the pooled directory' do
+      browser = described_class.new(profile:)
+      pid     = browser.instance_variable_get(:@browser).process.pid
+      argv    = File.read("/proc/#{pid}/cmdline").split("\0").join(' ')
+
+      expect(argv.scan(/--user-data-dir=\S+/).size).to eq(1)
+      expect(argv).to include(browser.instance_variable_get(:@profile).path)
+      browser.quit
+    end
+  end
+
   describe '#observe_state' do
     context 'with a two-step wizard (dynamic steps, validation, success status)' do
       before(:all) { @browser.navigate_to(fixture_url('wizard.html')) }

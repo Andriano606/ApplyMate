@@ -120,6 +120,28 @@ remaining proxies split into a true JS-challenge minority and hard IP-blocks (10
 pages per proxy before a ban** and carries full Chrome overhead — so ImpersonateHttp is the
 primary path; `ApplyMate::Client::Browser` is reserved for the rare interactive JS challenge.
 
+**Persistent profiles.** `Browser.new(profile: "dou")` browses with a Chrome profile that
+outlives the session, so a solved Cloudflare challenge (`cf_clearance`) and the site's other
+cookies carry into the next run instead of every visit looking like a browser installed a second
+ago — the "~2 pages per proxy" figure above is measured without one. Omit `profile:` for the
+throwaway profile.
+
+Two gotchas the implementation exists to work around:
+
+- Ferrum seeds its own temporary `user-data-dir` and merges `browser_options` over it, so the
+  override key must be the **string** `'user-data-dir'`; a symbol adds a second flag, Chrome
+  honours the first, and the profile silently lands in the directory Ferrum deletes on quit.
+- Chrome writes its cookie store only on a clean profile shutdown, and Ferrum launches it with
+  `--keep-alive-for-test`, so it never exits cleanly. Cookies are therefore dumped explicitly
+  (`cookies.store` / `cookies.load`) into the profile directory on quit and startup.
+
+Profiles come from a locked pool (`ApplyMate::Client::BrowserProfile`, `BROWSER_PROFILE_POOL`,
+default 4) because Chrome refuses to run two processes against one profile directory; when every
+slot is taken the caller silently gets a throwaway profile rather than waiting. `BrowserProfile.clear(name)`
+drops a profile that has grown or gone bad. `CHROME_PATH` (or a detected `google-chrome-stable`)
+selects real Chrome over bundled Chromium, whose build strings and WebGL renderer differ in ways
+bot checks read.
+
 **Install:** the curl-impersonate binary is arch-specific and NOT committed. Run
 `bin/install-curl-impersonate` once per host (downloads into `vendor/curl-impersonate/`, which is
 gitignored). Override the binary path with `CURL_IMPERSONATE_BIN` (e.g. a `curl_chrome136`

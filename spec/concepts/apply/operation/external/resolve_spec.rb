@@ -18,6 +18,11 @@ RSpec.describe Apply::Operation::External::Resolve do
       expect(apply.reload.resolved_url).to eq(HoneytechDou::PEOPLEFORCE_URL)
     end
 
+    it 'browses with a profile belonging to the job board, not a throwaway one' do
+      expect(ApplyMate::Client::Browser).to receive(:new).with(profile: 'dou').and_return(browser)
+      run_operation
+    end
+
     it 'records no ATS for a self-hosted page' do
       run_operation
       expect(apply.reload.ats).to be_nil

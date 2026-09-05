@@ -20,7 +20,10 @@ class Apply::Operation::External::Resolve < Apply::Operation::Base
     external_url = apply.vacancy.external_url
     raise 'No external apply URL stored for this vacancy' if external_url.blank?
 
-    browser = ApplyMate::Client::Browser.new
+    # A profile per job board, kept between runs: cookies (a solved Cloudflare
+    # challenge among them) carry over, so the next apply arrives as a returning
+    # visitor instead of a browser installed a second ago.
+    browser = ApplyMate::Client::Browser.new(profile: apply.vacancy.source.name.parameterize)
     handler.browser = browser
 
     browser.navigate_to(external_url)
