@@ -44,7 +44,7 @@ class Apply::Component::Show < ApplyMate::Component::Base
     case field['type']
     when 'checkbox'
       checked = Apply::FormFiller::CHECKED_VALUES.include?(value.downcase)
-      I18n.t(checked ? 'apply.manual.checked' : 'apply.manual.unchecked')
+      checked ? I18n.t('apply.manual.checked') : I18n.t('apply.manual.unchecked')
     when 'radio', 'button_group', 'select'
       option_label(field, value) || value.split('=').first.to_s
     else
