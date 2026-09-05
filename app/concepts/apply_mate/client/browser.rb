@@ -997,7 +997,7 @@ class ApplyMate::Client::Browser
   def restore_cookies
     return if @profile.nil? || !File.exist?(@profile.cookies_file)
 
-    @browser.cookies.load(@profile.cookies_file)
+    on_a_page { |page| page.cookies.load(@profile.cookies_file) }
   rescue StandardError => e
     Rails.logger.warn("Browser: could not restore cookies: #{e.message}")
   end
@@ -1005,9 +1005,21 @@ class ApplyMate::Client::Browser
   def store_cookies
     return if @profile.nil?
 
-    @browser.cookies.store(@profile.cookies_file)
+    on_a_page { |page| page.cookies.store(@profile.cookies_file) }
   rescue StandardError => e
     Rails.logger.warn("Browser: could not store cookies: #{e.message}")
+  end
+
+  # Cookies are read and written through a page's CDP session, and #get closes
+  # its page as soon as it has the body — asking the browser afterwards raises
+  # "Session with given id not found", which the rescues above would have turned
+  # into cookies silently never being saved. A page of our own avoids having to
+  # know whose page is still open (Ferrum pages carry no liveness predicate).
+  def on_a_page
+    page = @browser.create_page
+    yield page
+  ensure
+    page&.close
   end
 
   def profile_option

@@ -276,13 +276,20 @@ RSpec.describe ApplyMate::Client::Browser do
 
     # Set through CDP rather than document.cookie: the fixtures are file:// URLs
     # and Chrome stores no cookies for those, which would test nothing.
+    # On a page of our own: whichever page the browser last used may be closed.
     def seed_cookie(browser)
-      browser.instance_variable_get(:@browser)
-             .cookies.set(name: 'am_probe', value: 'kept', domain: 'example.com', path: '/')
+      on_page(browser) { |page| page.cookies.set(name: 'am_probe', value: 'kept', domain: 'example.com', path: '/') }
     end
 
     def cookie_names(browser)
-      browser.instance_variable_get(:@browser).cookies.all.keys
+      on_page(browser) { |page| page.cookies.all.keys }
+    end
+
+    def on_page(browser)
+      page = browser.instance_variable_get(:@browser).create_page
+      yield page
+    ensure
+      page&.close
     end
 
     it 'carries cookies into the next Chrome process' do
@@ -303,6 +310,21 @@ RSpec.describe ApplyMate::Client::Browser do
       plain = described_class.new
       expect(cookie_names(plain)).not_to include('am_probe')
       plain.quit
+    end
+
+    # #get closes its page as soon as it has the body, and cookies travel over a
+    # page's CDP session — reading them from the browser afterwards raises
+    # "Session with given id not found", which would have meant nothing was ever
+    # saved on the very path the profile exists for.
+    it 'still saves cookies after a request that closed its own page' do
+      first = described_class.new(profile:)
+      first.get(fixture_url('classic.html'))
+      seed_cookie(first)
+      first.quit
+
+      second = described_class.new(profile:)
+      expect(cookie_names(second)).to include('am_probe')
+      second.quit
     end
 
     # A second --user-data-dir does not replace Ferrum's own: Chrome honours the
