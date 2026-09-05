@@ -2,7 +2,7 @@
 name: planner
 description: Architect for non-trivial ApplyMate changes. Use before writing code when a task spans several layers (operation + component + form object + job + specs), touches the vacancy-sync / proxy / apply pipelines, changes DB schema or state machines, or has more than one plausible design. Returns a concrete step-by-step implementation plan with file paths, trade-offs and the risks that this repo's quality rules single out. Read-only — it never edits.
 tools: Read, Grep, Glob, Bash, TodoWrite
-model: opus
+model: fable
 effort: high
 maxTurns: 40
 ---

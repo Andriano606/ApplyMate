@@ -141,7 +141,7 @@ Agent definitions live in `.claude/agents/`. Each one pins its own model and eff
 | Task | Agent | Model / effort |
 |---|---|---|
 | "Where does X live?", "how is X done here?", which `.ai/docs` rules apply | `scout` | haiku / low |
-| Design for a multi-layer, pipeline, schema or state-machine change | `planner` | opus / high |
+| Design for a multi-layer, pipeline, schema or state-machine change | `planner` | fable / high |
 | Operations, form objects, components, turbo handlers, jobs, policies, migrations | `concept-builder` | sonnet / medium |
 | Slim, Tailwind, simple_form, Stimulus/TS, Turbo frames | `frontend-builder` | sonnet / medium |
 | Scrapers, Client::Http/AsyncHttp/Browser, apply handlers, vacancy sync, proxies, fibers, AI prompts | `pipeline-engineer` | opus / high |
@@ -157,7 +157,7 @@ Delegation is for saving *your* context, not for parallelising everything. Befor
 1. **Do it yourself if it is one file and you already know the path.** An agent costs a full extra context load; a `sed -n` costs nothing.
 2. **Never spawn the same search twice.** If you delegated it, wait for the result — do not also run it yourself.
 3. **Fan out only over genuinely independent work.** Two agents editing the same layer will conflict; two agents reading the same files duplicate the bill. Serial `scout → planner → builder → reviewer` is the normal shape, not a swarm.
-4. **Cap the batch at 3 concurrent agents**, and at most one opus-tier agent (`planner`, `pipeline-engineer`, `quality-reviewer`) at a time. Opus agents are for one-shot, high-stakes calls.
+4. **Cap the batch at 3 concurrent agents**, and at most one top-tier agent (`planner` on fable, `pipeline-engineer` and `quality-reviewer` on opus) at a time. Those are for one-shot, high-stakes calls.
 5. **Give the agent the paths you already know.** Every path you hand it is a search it does not have to pay for. Paste the relevant file list, the acceptance criteria and the constraints into the prompt.
 6. **Ask for a conclusion, not a dump.** Agent prompts should end with what to report back and in what form.
 7. **Review once, at the end** — `quality-reviewer` on the finished diff, not after every file.
