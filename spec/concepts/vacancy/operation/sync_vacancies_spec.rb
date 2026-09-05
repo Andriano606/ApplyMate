@@ -60,6 +60,15 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       }.to change { source_djinni.vacancies.count }.by(15)
     end
 
+    # The totals widget caches per-source counts for 5 minutes; without this the page
+    # keeps showing the previous run's numbers after a sync (test cache is a null_store,
+    # so the call itself is the observable).
+    it 'expires the cached per-source totals once the source is synced' do
+      expect(Vacancy::Component::TotalVacancies).to receive(:expire_counts!).at_least(:once)
+
+      operation.call
+    end
+
     it 'updates existing vacancies' do
       existing_vacancy = create(:vacancy, source: source_djinni, external_id: '823988', title: 'Old Title')
       operation.call

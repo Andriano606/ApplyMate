@@ -29,12 +29,20 @@ class ApplyMate::Scraper::Base
     ApplyMate::Client::AsyncHttp
   end
 
+  # Public URL of the source's vacancy listing — the page a person opens to browse
+  # its jobs. Override with the real listing endpoint; the default is the homepage.
+  # Used by the totals widget (each per-source pill links here) and, below, as the
+  # proxy-validation target.
+  def self.listing_url(source)
+    source.base_url.to_s
+  end
+
   # URL the proxy validator (and the sync pool's live re-check) probes to decide a
-  # proxy is usable for this source. Override to the real listing endpoint so that
-  # "working" means the proxy actually reaches the page we scrape, not just the
+  # proxy is usable for this source. Delegates to `listing_url` so that "working"
+  # means the proxy actually reaches the page we scrape, not just the
   # (less-protected) homepage.
   def self.validation_url(source)
-    source.base_url.to_s
+    listing_url(source)
   end
 
   # Does this source fetch the full description from a per-vacancy detail page in the

@@ -3,8 +3,9 @@
 class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   JOB_LIST_URL = 'https://djinni.co/jobs/'
 
-  # Validate against the real jobs listing (not the homepage).
-  def self.validation_url(_source)
+  # The real jobs listing (not the homepage) — what the totals widget links to and
+  # what proxy validation probes.
+  def self.listing_url(_source)
     JOB_LIST_URL
   end
 

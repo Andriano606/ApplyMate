@@ -497,6 +497,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           pages: scraped_pages.size, vacancies: external_ids.size, proxies_deleted: pool.dropped)
 
       clean_old_vacancies(source, external_ids)
+      Vacancy::Component::TotalVacancies.expire_counts!
     end
   end
 

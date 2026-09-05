@@ -19,6 +19,12 @@ class Source < ApplicationRecord
     klass.new(self, klass.http_client_class.new)
   end
 
+  # Public listing page of this source (Dou → /vacancies/, Djinni → /jobs/), owned by
+  # the scraper so the URL lives next to the code that scrapes it.
+  def listing_url
+    scraper.constantize.listing_url(self)
+  end
+
   # The HTTP client this source must be talked to with, for callers that need raw
   # requests rather than a scraper (the apply pipeline fetches the form and POSTs it).
   def http_client(**options)

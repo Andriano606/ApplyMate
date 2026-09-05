@@ -10,8 +10,9 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     ApplyMate::Client::ImpersonateHttp
   end
 
-  # Validate against the real vacancies listing (not the less-protected homepage).
-  def self.validation_url(_source)
+  # The real vacancies listing (not the less-protected homepage) — what the totals
+  # widget links to and what proxy validation probes.
+  def self.listing_url(_source)
     VACANCIES_URL
   end
 
@@ -102,10 +103,14 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     end
 
     nodes = Nokogiri::HTML(data['html'].to_s).css('li.l-vacancy')
-    # data['last'] is Dou's explicit last-page flag — the only reliable end signal.
+    # data['last'] is Dou's explicit last-page flag — the only reliable end signal. It
+    # arrives TOGETHER with the final partial page (e.g. `last: true` + 37 items at
+    # count=5800 of 5837), so it must not short-circuit before the nodes are parsed:
+    # that dropped the tail (total mod 40 vacancies) on every sync. Only "last AND
+    # nothing to parse" is the end; the page after the tail returns exactly that.
     # Empty nodes WITHOUT it means the proxy got a blocked/rate-limited (but valid-JSON)
     # response; retry on another IP instead of truncating pagination as if it were the end.
-    return if data['last'] == true
+    return if nodes.empty? && data['last'] == true
     raise DeadProxyError, 'empty listing (proxy rate-limited)' if nodes.empty?
 
     @items_per_page ||= data['num']

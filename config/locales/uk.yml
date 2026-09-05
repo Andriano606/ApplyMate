@@ -463,6 +463,7 @@ uk:
       hide: Приховати
       restore: Повернути
       view_original: Переглянути оригінал
+    open_source_listing: Відкрити вакансії на %{source}
     search:
       add: Додати
       and: і

@@ -7,6 +7,18 @@ RSpec.describe 'Vacancies index', type: :request do
 
   let(:marker) { 'data-test-id="total-vacancies"' }
 
+  it 'links each per-source pill to the public listing of that source' do
+    dou    = create(:source, name: 'Dou', base_url: 'https://jobs.dou.ua', scraper: 'ApplyMate::Scraper::Dou')
+    djinni = create(:source, name: 'Djinni', base_url: 'https://djinni.co', scraper: 'ApplyMate::Scraper::Djinni')
+
+    get '/vacancies', params: { include_tags: [ 'ruby' ] }
+
+    expect(response.body).to include(%(data-test-id="source-listing-#{dou.hashid}"))
+    expect(response.body).to include(%(href="#{ApplyMate::Scraper::Dou::VACANCIES_URL}"))
+    expect(response.body).to include(%(data-test-id="source-listing-#{djinni.hashid}"))
+    expect(response.body).to include(%(href="#{ApplyMate::Scraper::Djinni::JOB_LIST_URL}"))
+  end
+
   it 'renders the totals bar once on a full page load' do
     get '/vacancies', params: { include_tags: [ 'ruby' ] }
 
