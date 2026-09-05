@@ -134,6 +134,35 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: single-threaded fetch→persist (no validation, no shards), fiber count in FetchCandidates, stop conditions, catalog URL recursion, protocol inference, persist upsert semantics. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
 - `.ai/docs/sync_vacancies.md` — `Vacancy::Operation::SyncVacancies` internals: fiber count per source, stop conditions, empty-page confirmation logic (LAST_PAGE_CONFIRMATIONS), boundary narrowing, shared data structures. **Read before modifying the vacancy sync pipeline.**
 
+## Delegation to Subagents
+
+Agent definitions live in `.claude/agents/`. Each one pins its own model and effort level, so **routing the task to the right agent is what controls cost** — do not override `model` on the Agent call unless there is a specific reason.
+
+| Task | Agent | Model / effort |
+|---|---|---|
+| "Where does X live?", "how is X done here?", which `.ai/docs` rules apply | `scout` | haiku / low |
+| Design for a multi-layer, pipeline, schema or state-machine change | `planner` | opus / high |
+| Operations, form objects, components, turbo handlers, jobs, policies, migrations | `concept-builder` | sonnet / medium |
+| Slim, Tailwind, simple_form, Stimulus/TS, Turbo frames | `frontend-builder` | sonnet / medium |
+| Scrapers, Client::Http/AsyncHttp/Browser, apply handlers, vacancy sync, proxies, fibers, AI prompts | `pipeline-engineer` | opus / high |
+| RSpec, Cucumber, factories | `spec-writer` | sonnet / medium |
+| Just run the checks and report what is red | `checks-runner` | haiku / low |
+| Locale keys, i18n-tasks failures | `i18n-keeper` | haiku / low |
+| Review the finished diff before commit/PR | `quality-reviewer` | opus / high |
+
+### Budget discipline
+
+Delegation is for saving *your* context, not for parallelising everything. Before spawning an agent, apply these:
+
+1. **Do it yourself if it is one file and you already know the path.** An agent costs a full extra context load; a `sed -n` costs nothing.
+2. **Never spawn the same search twice.** If you delegated it, wait for the result — do not also run it yourself.
+3. **Fan out only over genuinely independent work.** Two agents editing the same layer will conflict; two agents reading the same files duplicate the bill. Serial `scout → planner → builder → reviewer` is the normal shape, not a swarm.
+4. **Cap the batch at 3 concurrent agents**, and at most one opus-tier agent (`planner`, `pipeline-engineer`, `quality-reviewer`) at a time. Opus agents are for one-shot, high-stakes calls.
+5. **Give the agent the paths you already know.** Every path you hand it is a search it does not have to pay for. Paste the relevant file list, the acceptance criteria and the constraints into the prompt.
+6. **Ask for a conclusion, not a dump.** Agent prompts should end with what to report back and in what form.
+7. **Review once, at the end** — `quality-reviewer` on the finished diff, not after every file.
+8. Subagents do not have the Agent tool: they cannot spawn further agents. Keep it that way.
+
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
