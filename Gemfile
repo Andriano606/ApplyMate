@@ -64,7 +64,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
-gem 'image_processing', '~> 2.0'
+gem 'image_processing', '~> 2.1'
 # libvips binding — the processor image_processing/Active Storage default to (`:vips`). Without it,
 # variant processing raises mid-stream inside the Active Storage proxy controller (ActionController::Live),
 # which leaks the Puma thread forever and freezes the dev server under repeated reloads.
