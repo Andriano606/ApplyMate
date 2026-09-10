@@ -245,7 +245,7 @@ end
 ```
 
 Available colors: `:yellow` (default), `:green`, `:red`, `:cyan`.  
-The `[Tag]` prefix is the **full class name** (`self.class.name`) — e.g. `[Proxy::Operation::ValidateCandidates]`.  
+The `[Tag]` prefix is the **full class name** (`self.class.name`) — e.g. `[Proxy::Operation::Validate]`.  
 **Do not inline `YELLOW`/`GREEN` constants or define a local `log` method** — always `include ApplyMate::Logging`.
 
 ## Job as pure orchestrator — split complex jobs into operations
@@ -254,11 +254,12 @@ When a job has multiple distinct phases (fetch → validate → persist), each p
 
 ```ruby
 # ✅ job is 4 lines — each step is testable and renameable independently
-class Proxy::Job::FetchProxies < ApplicationJob
+#    (illustrative names; see Proxy::Job::* for the real ones)
+class Report::Job::Build < ApplicationJob
   def perform
-    candidates = Proxy::Operation::FetchCandidates.call.model
-    valid      = Proxy::Operation::ValidateCandidates.call(candidates: candidates).model
-    Proxy::Operation::PersistProxies.call(proxies: valid)
+    rows    = Report::Operation::Collect.call.model
+    ranked  = Report::Operation::Rank.call(rows: rows).model
+    Report::Operation::Persist.call(rows: ranked)
   end
 end
 ```
@@ -266,15 +267,26 @@ end
 Operations called from jobs (not controllers) receive keyword params directly and skip authorization:
 
 ```ruby
-class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
+class Proxy::Job::Validate < ApplicationJob
+  limits_concurrency to: 1, key: 'proxy_validate', duration: 15.minutes
+
+  def perform(limit: Proxy::Operation::Validate::DEFAULT_LIMIT, scope: :untested)
+    Proxy::Operation::Validate.call(limit: limit, scope: scope)
+  end
+end
+
+class Proxy::Operation::Validate < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
-  def perform!(candidates:, **)   # params passed via .call(candidates: ...)
-    # no authorize! needed — called from a job, not a controller
-    self.model = validate(candidates)
+  def perform!(limit: DEFAULT_LIMIT, scope: :untested, sources: nil, **)
+    skip_authorize   # called from a job, not a controller
+
+    self.model = validate(limit:, scope:, sources: Array(sources).presence || Source.all.to_a)
   end
 end
 ```
+
+Note `limits_concurrency` carries an explicit `duration:` sized to the real runtime — Solid Queue's default window is 3 minutes, which a long validation run outlives.
 
 ## Solid Queue — scheduling recurring jobs
 

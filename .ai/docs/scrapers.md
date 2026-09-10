@@ -33,10 +33,11 @@ These two methods serve different callers:
 carries the description (Djinni) must not define the method at all. Returning a sentinel
 string from it to make the pipeline stop is what this predicate replaced.
 
-Constructor always takes `(source, client)`:
+Constructor always takes `(source, client)` — both required, since the caller decides
+which transport and which proxy this instance runs on:
 
 ```ruby
-def initialize(source = Source.find_by(name: 'MySite'), client = ApplyMate::Client::Http.new)
+def initialize(source, client)
   @source = source
   @client = client
 end
@@ -80,13 +81,21 @@ them (see `.ai/docs/sync_vacancies.md`).
 
 ## Source#build_scraper
 
-`Source` has a `build_scraper` helper that instantiates the configured scraper with `Client::Http` (default 15s timeout). The client is always `Http` — scrapers never receive `Client::Browser`:
+`Source` has a `build_scraper` helper that instantiates the configured scraper with the
+client that scraper class asks for. Scrapers never receive `Client::Browser`:
 
 ```ruby
 scraper = source.build_scraper
 # equivalent to:
-scraper = source.scraper.constantize.new(source, ApplyMate::Client::Http.new)
+klass   = source.scraper.constantize
+scraper = klass.new(source, klass.http_client_class.new)
 ```
+
+`Scraper::Base.http_client_class` returns `ApplyMate::Client::AsyncHttp` (15s request
+timeout, 5s connect). Override it per source when the default transport can't reach the
+site — `Scraper::Dou` returns `ApplyMate::Client::ImpersonateHttp` to clear Cloudflare.
+`Source#http_client(**options)` builds the same class with different timeouts, which is
+how `SendApply::Http` submits through the source's own fingerprint.
 
 Use this in operations that need a scraper from an `apply` record:
 
@@ -158,48 +167,48 @@ end
 3. Add migration: `add_column :sources, :scraper, :string` (if not yet present) + backfill migration
 4. Update the admin form select (uses `Source::SCRAPERS` collection)
 
-## ApplyMate::Client::Http API
+## HTTP client API
 
-All methods use the shared connection (browser User-Agent, follow redirects, 15s timeout). Requests fail fast — there is no internal retrying.
-
-Returns a `Response` struct: `.body`, `.headers`, `.status`.
+`ApplyMate::Client::AsyncHttp` and `ApplyMate::Client::ImpersonateHttp` expose the same
+surface, so a scraper works unchanged on either. Requests fail fast — neither client
+retries internally; the sync pipeline handles retries by swapping the proxy.
 
 ```ruby
-client = ApplyMate::Client::Http.new
+client = ApplyMate::Client::AsyncHttp.new                      # 15s request, 5s connect
+client = ApplyMate::Client::AsyncHttp.new(proxy: 'http://user:pass@host:port',
+                                          request_timeout: 30, connect_timeout: 5)
+```
 
-# GET — returns Response or nil on redirect to unexpected URL
+Every request returns an `ApplyMate::Client::Response` — `.body`, `.headers`, `.status`,
+`.final_url` — shared by both clients so the struct cannot drift between transports:
+
+```ruby
+# GET — follows redirects by default; pass follow_redirects: false to inspect a 3xx
 response = client.get(url)
 response = client.get(url, headers: { 'Cookie' => '...' })
+response = client.get(url, follow_redirects: false)
 
-# GET — follow redirects (skips the nil-on-redirect guard)
-# Use when the target URL is expected to redirect (e.g. external employer apply pages)
-response = client.get(url, follow_redirects: true)
+# POST — body is an already-encoded String (e.g. URI.encode_www_form(count: 0))
+response = client.post(url, body: URI.encode_www_form(count: 0), headers: xhr_headers)
 
-# Convenience: GET body only
-body = client.fetch_body(url)
-
-# POST — returns Response
-response = client.post(url, body: form_encoded_string, headers: {})
-
-# Convenience: POST body only (for XHR endpoints)
-body = client.post_xhr(url, URI.encode_www_form(count: 0), xhr_headers)
-```
-
-`get` returns `nil` (body is `nil`) if the server redirects to a different URL than requested — log and skip rather than raise. Pass `follow_redirects: true` to bypass this guard when redirects are expected (e.g. `Apply::Operation::Ai::FetchExternalForm`).
-
-`Response` also has `success?` which returns true for 2xx status codes.
-
-```ruby
-# Multipart POST without redirect-following — use for form submissions where
-# you need to inspect 3xx responses yourself (e.g. to detect apply success).
-# File parts: use Faraday::Multipart::FilePart in the payload hash.
-client = ApplyMate::Client::Http.new(timeout: 30)
-response = client.post_multipart(url, payload: { field: 'value', file_field: file_part }, headers: { 'Cookie' => '...' })
-response.success?        # true for 2xx
+# Multipart POST — never follows redirects, so form submissions can inspect the 3xx
+# themselves to detect apply success. File parts: Faraday::Multipart::FilePart, or any
+# object responding to read/original_filename/content_type.
+response = client.post_multipart(url, payload: { field: 'value', cv: file_part },
+                                 headers: { 'Cookie' => '...' })
 response.status          # Integer
-response.headers         # Hash (check 'location' for redirects)
+response.headers         # Hash — check 'location' for redirects
 response.body            # String
+response.final_url       # String — where the redirect chain ended
 ```
+
+`Response` also answers the two checks the proxy validator and the sync probe share:
+`cloudflare_challenge?` (body still shows the "Just a moment…" interstitial) and
+`alive_or_cf_challenge?` (2xx/3xx, or a 403 that is a CF challenge rather than an IP
+block). There is no `success?` — compare `status` yourself.
+
+`ImpersonateHttp` shells out to curl-impersonate and raises
+`ApplyMate::Client::ImpersonateHttp::RequestError` when the subprocess exits non-zero.
 
 ## CSRF session init pattern (DOU-style XHR scrapers)
 

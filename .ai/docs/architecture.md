@@ -6,25 +6,29 @@ These are enforced boundaries, not guidelines. Violating them causes cross-layer
 
 | Module | Responsibility | Uses |
 |--------|---------------|------|
-| `ApplyMate::Client::Http` | Low-level HTTP transport: GET/POST/multipart, headers, timeouts, redirects | Faraday |
+| `ApplyMate::Client::AsyncHttp` | Low-level HTTP transport: GET/POST/multipart, headers, timeouts, redirects, proxy tunneling | `async-http`, raw sockets |
+| `ApplyMate::Client::ImpersonateHttp` | Same request API behind a real Chrome TLS/HTTP2 fingerprint, for Cloudflare-protected sources | curl-impersonate subprocess |
 | `ApplyMate::Client::Browser` | Low-level browser transport: navigate, click, fill field, screenshot, stealth, reCAPTCHA | Ferrum |
-| `ApplyMate::Scraper::*` | Source-specific parsing: listing, details, applyble, apply_type, form_selector. **Never uses `Client::Browser`** | `Client::Http` |
+| `ApplyMate::Scraper::*` | Source-specific parsing: listing, details, applyble, apply_type, form_selector. **Never uses `Client::Browser`** | its own `http_client_class` |
 | `Apply::Handler::*` | Declares the pipeline via `add_step`. Owns source-specific prompt/schema class knowledge | — |
-| `Apply::Operation::*` | Orchestrates one pipeline step: uses scraper + client, persists result to `apply` | `Client::Http` or `Client::Browser` |
+| `Apply::Operation::*` | Orchestrates one pipeline step: uses scraper + client, persists result to `apply` | an HTTP client or `Client::Browser` |
 
 ## Rules
 
-**Scrapers always get `Client::Http`.**
-`Source#build_scraper` hardcodes `ApplyMate::Client::Http.new` regardless of any source config. Scrapers only parse HTML — they never need a browser.
+**Scrapers never get a browser — the scraper class picks its HTTP client.**
+`Source#build_scraper` asks the scraper class which client it needs instead of hardcoding one. Scrapers only parse HTML, so a browser is never an option; the choice is only *which* HTTP transport.
 
 ```ruby
 def build_scraper
-  self.scraper.constantize.new(self, ApplyMate::Client::Http.new)
+  klass = scraper.constantize
+  klass.new(self, klass.http_client_class.new)
 end
 ```
 
-**Operations instantiate their own client.**
-`SyncVacancies`, `SendApply::Http`, and any operation that needs HTTP always instantiate `ApplyMate::Client::Http.new` directly. The client is not sourced from the database.
+`Scraper::Base.http_client_class` returns `ApplyMate::Client::AsyncHttp`. Cloudflare-protected sources override it — `Scraper::Dou` returns `ApplyMate::Client::ImpersonateHttp`, whose Chrome TLS fingerprint passes the challenge that OpenSSL-based `AsyncHttp` fails. Both clients share the `(proxy:, request_timeout:, connect_timeout:)` constructor and the same `get` / `post` / `post_multipart` API, so every caller treats them interchangeably.
+
+**Operations resolve the client from the source, not by hardcoding one.**
+`SendApply::Http` calls `source.http_client(request_timeout: 30)`; `SyncVacancies` builds `scraper_class.http_client_class.new(proxy:, request_timeout:, connect_timeout:)`. Instantiating a concrete client directly is reserved for operations with no source in hand — `Proxy::Operation::Validate` and the HTTP fallback in `FetchExternalForm`.
 
 **Browser is for operations, not scrapers.**
 `Client::Browser` is used only in `Apply::Operation::*` (e.g. `FetchExternalForm`, `SendApply::Browser`) to automate a headless Chrome session for submitting or scraping content that requires real interaction.

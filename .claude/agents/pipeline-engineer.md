@@ -11,7 +11,7 @@ You own the parts of ApplyMate where things run concurrently, at scale, and agai
 
 ## Read first — these are normative, not background
 
-- `.ai/docs/architecture.md` — the module boundary table (Client / Scraper / Handler / Operation) is **enforced**. Scrapers always get `Client::Http` and never touch `Client::Browser`.
+- `.ai/docs/architecture.md` — the module boundary table (Client / Scraper / Handler / Operation) is **enforced**. Scrapers get the client their class declares via `http_client_class` (`AsyncHttp`, or `ImpersonateHttp` for Cloudflare-protected sources) and never touch `Client::Browser`.
 - `.ai/docs/scrapers.md`, `.ai/docs/async.md`, `.ai/docs/apply_handlers.md`, `.ai/docs/proxy.md`, `.ai/docs/fetch_proxies.md`, `.ai/docs/sync_vacancies.md`, `.ai/docs/ai_prompts_and_schemas.md` — read the ones covering what you touch, all of them, before editing.
 - Skill `test-apply-handler` for handler specs.
 

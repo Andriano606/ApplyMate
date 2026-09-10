@@ -99,10 +99,12 @@ Without the guard, `update_column` on a destroyed record raises `ActiveRecord::R
 
 | Class | Responsibility |
 |-------|---------------|
-| `Proxy::Job::FetchProxies` | Orchestrator — calls the three operations in sequence |
+| `Proxy::Job::FetchProxies` | Thin wrapper — calls `Proxy::Operation::FetchProxies` |
+| `Proxy::Operation::FetchProxies` | Orchestrator: `FetchCandidates` → `PersistProxies`. No validation in this chain |
 | `Proxy::Operation::FetchCandidates` | Downloads public proxy lists, parses candidates |
-| `Proxy::Operation::ValidateCandidates` | Async fiber validation (Phase 1 + Phase 2); receives `candidates:` |
-| `Proxy::Operation::PersistProxies` | Upserts valid proxies; receives `proxies:` |
+| `Proxy::Operation::PersistProxies` | Upserts the parsed candidates; receives `proxies:` |
+| `Proxy::Job::Validate` | Separate job — `limits_concurrency to: 1, duration: 15.minutes` |
+| `Proxy::Operation::Validate` | Async fiber validation (Phase 1 + Phase 2); receives `limit:`, `scope:`, `sources:` |
 
 ## `https` in proxy lists means HTTP CONNECT, not TLS
 
