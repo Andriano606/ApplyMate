@@ -25,9 +25,6 @@ application.register('flash', FlashController);
 import FormSubmitController from './form_submit_controller';
 application.register('form-submit', FormSubmitController);
 
-import HelloController from './hello_controller';
-application.register('hello', HelloController);
-
 import ImageSliderController from './image_slider_controller';
 application.register('image-slider', ImageSliderController);
 

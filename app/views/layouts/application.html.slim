@@ -24,7 +24,7 @@ html
     = stylesheet_link_tag 'application', 'data-turbo-track': 'reload'
     = javascript_include_tag 'application', 'data-turbo-track': 'reload', type: 'module'
 
-  body#body(data-controller="hello form-submit")
+  body#body(data-controller="form-submit")
     = render ApplyMate::Component::Navbar.new
     = render ApplyMate::Component::FlashList.new(flash_list: flash)
 
