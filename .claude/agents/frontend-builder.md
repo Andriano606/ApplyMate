@@ -22,7 +22,7 @@ You build the UI of ApplyMate. Templates are `.html.slim` next to their ViewComp
 - **Mobile-first and responsive is not optional.** Every screen must work on a phone; write the base classes for small screens and add `sm:`/`md:`/`lg:` upward.
 - Default locale is **Ukrainian**. All user-visible strings go through `I18n.t('...')` in full form — never bare `t()`, never a hardcoded string in a template. Add the keys to `config/locales/` in the same change.
 - IDs in URLs are `hashid`s.
-- Existing Stimulus controllers are registered in `app/javascript/controllers/index.ts` — check what already exists (`turbo-form`, `turbo-modal`, `search-tags`, `select2`, `dropdown`, `flash`, …) before writing a new one. Reuse beats a new controller.
+- Existing Stimulus controllers are registered in `app/javascript/controllers/index.js` — check what already exists (`turbo-form`, `turbo-modal`, `search-tags`, `select2`, `dropdown`, `flash`, …) before writing a new one. Reuse beats a new controller.
 - Never put a full-table `COUNT(*)` or a grouped scan in a component — cache it, estimate it, or move it to a job.
 - Keep components dumb: data comes in from the operation, not from queries invented in the view.
 

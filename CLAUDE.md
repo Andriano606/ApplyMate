@@ -106,7 +106,7 @@ Apply these to ALL new and modified code. They are distilled from real review fi
 
 ## Stimulus Controllers
 
-All controllers registered in `app/javascript/controllers/index.ts`. Notable ones:
+All controllers registered in `app/javascript/controllers/index.js`. Notable ones:
 - `turbo-form` — augments forms for Turbo Stream submission; supports real-time updates on change (AbortController-based) and opt-in address-bar sync (`data-turbo-form-history-value`)
 - `turbo-modal` — manages modal open/close lifecycle; nested modal support (parent hidden, child removed)
 - `search-tags` — tag-pill input with AND/OR operators (used in vacancy search bar)
