@@ -290,3 +290,4 @@ You can now access your local instance using https://dev.applymate.io
 
 
 See `CLAUDE.md` for architecture notes and coding conventions.
+Run `bin/dev` to start all development processes.
