@@ -56,7 +56,10 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
 
   minio:
-    image: minio/minio:latest
+    # MinIO no longer publishes images to Docker Hub (minio/minio, minio/mc → "pull access
+    # denied"), so use the pgsty community build. It ships both the server and `mc` (used by
+    # the healthcheck and createbuckets). Pinned: keep in sync with config/deploy.staging.yml.
+    image: &minio_image pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -73,7 +76,7 @@ services:
       retries: 5
 
   createbuckets:
-    image: minio/mc:latest
+    image: *minio_image
     depends_on:
       minio:
         condition: service_healthy
