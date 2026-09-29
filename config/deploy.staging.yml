@@ -94,7 +94,9 @@ accessories:
       - data:/var/lib/postgresql/data
 
   minio:
-    image: minio/minio
+    # minio/minio is gone from Docker Hub — pgsty community build (amd64 + arm64).
+    # Pinned: keep in sync with docker-compose.yml.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     host: 192.168.50.155
     # 9002 = S3 API, 9003 = web console (http://192.168.50.155:9003)
     # Offset by 2 from default to avoid conflict with print_mate_staging-minio on 9000/9001.
