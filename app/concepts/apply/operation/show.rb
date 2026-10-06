@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
+# An apply has no page of its own: AppliesController#show redirects to the apply card on the vacancy page.
 class Apply::Operation::Show < ApplyMate::Operation::Base
   def perform!(params:, current_user:, **)
-    apply = policy_scope(Apply).includes(:vacancy, :user_profile, :ai_integration).find(params[:id])
-    authorize! apply, :show?
-
-    self.model = ApplyMate::Operation::Struct.new(apply:)
+    self.model = policy_scope(Apply).includes(:vacancy).find(params[:id])
+    authorize! model, :show?
   end
 end

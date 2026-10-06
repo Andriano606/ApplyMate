@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# One question/answer card of the vacancy page. Live-updated through VacancyQuestion::TurboHandler::AnswerReady.
 class VacancyQuestion::Component::AnswerContent < ApplyMate::Component::Base
   def initialize(vacancy_question:)
     @vacancy_question = vacancy_question
@@ -8,7 +9,7 @@ class VacancyQuestion::Component::AnswerContent < ApplyMate::Component::Base
 
   private
 
-  def title
-    @vacancy_question.question.truncate(80)
+  def answered?
+    @vacancy_question.answer.present?
   end
 end

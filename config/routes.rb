@@ -34,6 +34,7 @@ Rails.application.routes.draw do
   resources :vacancies, only: [ :index, :show ] do
     resources :vacancy_cvs, only: [ :index, :new, :create ]
     resources :vacancy_questions, only: [ :index, :new, :create ]
+    resources :applies, only: [ :index ], controller: 'vacancy_applies'
     resource :hidden_vacancy, only: [ :create, :destroy ]
   end
   resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]

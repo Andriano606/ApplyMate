@@ -3,9 +3,10 @@
 class VacancyCv::Component::Index < ApplyMate::Component::Base
   LAZY = :lazy
 
-  def initialize(vacancy:, vacancy_cvs:, user: LAZY, **)
+  # cvs: VacancyCv and Apply records, newest first (VacancyCv::Operation::Index).
+  def initialize(vacancy:, cvs:, user: LAZY, **)
     @vacancy     = vacancy
-    @vacancy_cvs = vacancy_cvs
+    @cvs         = cvs
     @user_preset = user
   end
 
@@ -19,7 +20,9 @@ class VacancyCv::Component::Index < ApplyMate::Component::Base
     @page_user
   end
 
-  def cv_title(index)
-    @vacancy_cvs.size == 1 ? I18n.t('apply.show.fields.cv') : "#{I18n.t('apply.show.fields.cv')} #{index + 1}"
+  # Manual CVs still generating get a per-item CvReady subscription; apply CVs refresh per row
+  # on the list stream (VacancyCv::TurboHandler::Index.broadcast_row).
+  def pending_vacancy_cvs
+    @cvs.select { |record| record.is_a?(VacancyCv) && !record.cv.attached? }
   end
 end

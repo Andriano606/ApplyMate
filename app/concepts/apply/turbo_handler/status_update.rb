@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Single entry point for "a user's apply state for a vacancy changed". One [user, vacancy] stream carries
+# every per-user apply view of that vacancy: the status badge (this handler's frame), the vacancy page
+# action box (Apply::TurboHandler::ActionBox) and the applies panel (Apply::TurboHandler::VacancyIndex).
 class Apply::TurboHandler::StatusUpdate < ApplyMate::TurboHandler::Base
   def self.stream_from(vacancy, user, view_context)
     view_context.turbo_stream_from([ user, vacancy ])
@@ -9,11 +12,24 @@ class Apply::TurboHandler::StatusUpdate < ApplyMate::TurboHandler::Base
     view_context.turbo_frame_tag(frame_id(vacancy, user), &block)
   end
 
+  # A pipeline step changed one apply: badge, action box and only that apply's card. Re-rendering the whole
+  # panel here would collapse the accordions / reset the tabs the user opened on the other cards every step.
   def self.broadcast(apply)
-    vacancy = apply.vacancy
-    user = apply.user
+    latest = broadcast_summary(apply.vacancy, apply.user)
+    Apply::TurboHandler::VacancyIndex.broadcast_card(apply, open: apply == latest)
+  end
+
+  # The set of applies changed (Apply::Operation::Create / Destroy): badge, action box and the whole panel.
+  def self.refresh(vacancy, user)
+    broadcast_summary(vacancy, user)
+    Apply::TurboHandler::VacancyIndex.broadcast(vacancy, user)
+  end
+
+  # Returns the latest apply both views were rendered for.
+  def self.broadcast_summary(vacancy, user)
+    apply = Apply.latest_for(vacancy:, user:)
     html = ApplicationController.renderer.render_to_string(
-      Apply::Component::StatusBadge.new(vacancy: vacancy, apply: apply),
+      Apply::Component::StatusBadge.new(vacancy:, apply:, user:),
       layout: false,
     )
 
@@ -23,7 +39,11 @@ class Apply::TurboHandler::StatusUpdate < ApplyMate::TurboHandler::Base
       target: frame_id(vacancy, user),
       html:
     )
+    Apply::TurboHandler::ActionBox.broadcast(vacancy, user, apply)
+    apply
   end
+
+  private_class_method :broadcast_summary
 
   private
 

@@ -47,8 +47,8 @@ module ApplyMate::Component::Helper
     render(ApplyMate::Component::Accordion.new(title:, open:, loading:), &block)
   end
 
-  def expandable_text(html:, text: nil, lines: 3)
-    render(ApplyMate::Component::ExpandableText.new(html:, text:, lines:))
+  def empty_state(icon:, title:, hint: nil, &block)
+    render(ApplyMate::Component::EmptyState.new(icon:, title:, hint:), &block)
   end
 
   def rich_text(html:, text: nil)

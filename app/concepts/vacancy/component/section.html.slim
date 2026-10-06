@@ -1,0 +1,15 @@
+section.scroll-mt-24.min-w-0.rounded-xl.border.border-gray-200.bg-white.dark:border-gray-700.dark:bg-gray-800 [
+  id=@id
+  aria-labelledby=title_id
+  data=@data
+  ]
+  .flex.flex-wrap.items-center.justify-between.gap-3.border-b.border-gray-100.px-4.py-3.dark:border-gray-700.sm:px-6
+    .flex.min-w-0.items-center.gap-3
+      span(class=[ 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                   'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' ] aria-hidden='true')
+        = icon(@icon_name, size: 5)
+      h2.text-base.font-semibold.text-gray-900.dark:text-gray-100 id=title_id = @title
+    - if header_action?
+      = header_action
+  .p-4.sm:p-6
+    = content

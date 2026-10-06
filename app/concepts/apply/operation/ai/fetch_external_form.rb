@@ -55,6 +55,8 @@ class Apply::Operation::Ai::FetchExternalForm < Apply::Operation::Base
     form_data['trigger_selector'] = trigger_selector if trigger_selector.present?
 
     apply.update!(form_data: form_data)
+    # The form's open questions become "ask about it" suggestions on the vacancy page.
+    VacancyQuestion::TurboHandler::Index.broadcast(apply.vacancy, apply.user)
   end
 
   def cleanup

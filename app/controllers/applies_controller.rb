@@ -6,7 +6,11 @@ class AppliesController < ApplicationController
   end
 
   def show
-    endpoint Apply::Operation::Show, Apply::Component::Show
+    endpoint Apply::Operation::Show do |m|
+      m.success do |result|
+        redirect_to vacancy_path(result.model.vacancy, anchor: "apply_#{result.model.hashid}")
+      end
+    end
   end
 
   def new

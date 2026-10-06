@@ -1,0 +1,11 @@
+= Apply::TurboHandler::VacancyIndex.frame_tag(@vacancy, @user, helpers) do
+  - if @applies.empty?
+    = empty_state(icon: :send, title: I18n.t('apply.vacancy_index.empty'), \
+        hint: I18n.t('apply.vacancy_index.empty_hint')) do
+      = link(url: new_apply_path, variant: :primary, class: 'gap-2', data: { turbo_stream: true }) do
+        = icon(:send, size: 4)
+        = I18n.t('apply.action_box.apply')
+  - else
+    .space-y-4
+      - @applies.each_with_index do |apply, index|
+        = render Apply::Component::VacancyApplyCard.new(apply:, open: index.zero?)

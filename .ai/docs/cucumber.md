@@ -73,6 +73,19 @@ refresh, and the default interval (1s) is too slow to rely on mid-scenario:
 Given the vacancy search index is refreshed
 ```
 
+### Applies of the signed-in user
+
+`Apply` needs a profile, an AI integration and a source profile, so these steps build it
+with FactoryBot for the user logged in by `I am logged in as Andrii Kuluev`
+(`features/steps/apply/given.rb`):
+
+```gherkin
+Given I have a "failed_sending_cv" apply for the last Vacancy
+Given I have a "completed" apply for the last Vacancy with the filled form:
+  | name | tag      | type     | label   | value       |
+  | why  | textarea | textarea | Why us? | I love Ruby |
+```
+
 ## When Steps
 
 ### Navigate to a page
@@ -145,6 +158,16 @@ Then I see alert "Invalid input"
 Then the vacancy card "Ruby Developer" is hidden       # [data-hidden="true"] on the card
 Then the vacancy card "Ruby Developer" is not hidden
 Then I do not see button "Повернути"                    # visibility-aware: opacity 0 counts as not visible
+```
+
+### Apply cards on the vacancy page
+
+There is no apply page — `/applies/:id` redirects to `/vacancies/:id#apply_<hashid>`:
+
+```gherkin
+Then I am on the vacancy page at the last Apply card          # path + #apply_<hashid> fragment + card present
+Then the last Apply card shows status "Завершено"
+Then the last Apply card shows the field "Why us?" filled with "I love Ruby"   # by aria-label
 ```
 
 ### Saved filter pills

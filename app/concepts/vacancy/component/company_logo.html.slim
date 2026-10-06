@@ -1,0 +1,15 @@
+.bg-gray-100.dark:bg-gray-700.shrink-0.flex.items-center.justify-center.overflow-hidden [
+  class=size_classes
+  id=element_id
+  data-turbo-permanent='true'
+  aria-hidden='true'
+  ]
+  - if valid_icon_url?
+    img.max-w-full.max-h-full.object-contain(
+      src=@vacancy.company_icon_url
+      alt=''
+      onerror="this.style.display='none';this.nextElementSibling.style.display=''"
+    )
+    span.font-bold.text-gray-500.dark:text-gray-400 style='display:none' = company_initial
+  - else
+    span.font-bold.text-gray-500.dark:text-gray-400 = company_initial

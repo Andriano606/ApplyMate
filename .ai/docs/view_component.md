@@ -182,33 +182,28 @@ end
 
 `ApplicationController.renderer.render_to_string(MyComponent.new(...))` has **no request context** — `current_user` returns `nil`. Components rendered this way must not rely on `current_user`.
 
-**Pattern:** accept the record directly as a keyword argument (bypassing the lookup), and derive the user from it:
+**Pattern:** accept the record and the user directly as keyword arguments (bypassing the lookup), defaulting to a `LAZY` sentinel that is resolved in `before_render`:
 
 ```ruby
 LAZY = :lazy
 
-def initialize(vacancy:, apply: LAZY, **)
-  @vacancy = vacancy
+def initialize(vacancy:, apply: LAZY, user: LAZY, **)
+  @vacancy      = vacancy
   @apply_preset = apply
+  @user_preset  = user
 end
 
 def before_render
-  # In a normal request, look up by current_user.
-  # In a broadcast (ApplicationController.renderer), apply: is passed directly.
-  @apply = (@apply_preset == LAZY) ? @vacancy.applies.where(user: current_user).last : @apply_preset
-end
-
-private
-
-def frame_user
-  # @apply.user avoids calling current_user when apply is known (e.g. during broadcast)
-  @apply.nil? ? current_user : @apply.user
+  # In a normal request, fall back to current_user and look the apply up.
+  # In a broadcast (ApplicationController.renderer), apply: and user: are passed directly.
+  @user  = @user_preset == LAZY ? current_user : @user_preset
+  @apply = @apply_preset == LAZY ? Apply.latest_for(vacancy: @vacancy, user: @user) : @apply_preset
 end
 ```
 
-Broadcast call passes the record explicitly:
+Broadcast call passes everything explicitly — including `user:`, because `apply` may be `nil` (nothing to derive the user from):
 ```ruby
-Apply::Component::StatusBadge.new(vacancy: vacancy, apply: apply)  # no current_user needed
+Apply::Component::StatusBadge.new(vacancy:, apply:, user:)  # no current_user needed
 ```
 
 ## Slots

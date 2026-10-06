@@ -1,0 +1,6 @@
+span(class="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium #{color_class}")
+  = icon(status_icon, size: 4)
+  = label
+  - if in_progress?
+    span(class='inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent' \
+        aria-hidden='true')

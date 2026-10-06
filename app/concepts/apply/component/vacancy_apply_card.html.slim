@@ -1,0 +1,66 @@
+article(id=anchor_id data-model-id=@apply.id class=CARD_CLASSES)
+  / Status + date + delete
+  .flex.flex-wrap.items-center.justify-between.gap-x-3.gap-y-2.px-4.pt-4.sm:px-5
+    = render Apply::Component::StatusPill.new(apply: @apply)
+    .flex.items-center.gap-1
+      time.text-xs.text-gray-500.dark:text-gray-400 datetime=@apply.created_at.iso8601
+        = I18n.l(@apply.created_at, format: :short)
+      = link(url: helpers.apply_path(@apply), variant: :icon, title: I18n.t('apply.card.delete'), \
+          aria: { label: I18n.t('apply.card.delete') }, \
+          data: { turbo_method: :delete, turbo_confirm: I18n.t('apply.destroy.confirm') }) do
+        = icon(:trash, size: 4)
+
+  / Who / how it was sent
+  dl.mt-3.flex.flex-wrap.gap-2.px-4.sm:px-5
+    - meta_items.each do |item|
+      div(class=META_CHIP_CLASSES title=item[:label])
+        dt.sr-only = item[:label]
+        dd.flex.items-center.gap-1
+          = icon(item[:icon], size: 4, class: 'shrink-0 text-gray-400 dark:text-gray-500')
+          span.truncate = item[:value]
+
+  - if @apply.error.present?
+    div(class=ERROR_BOX_CLASSES role='alert')
+      .flex.items-start.gap-2
+        = icon(:x_circle, size: 5, class: 'shrink-0 text-red-600 dark:text-red-400')
+        .min-w-0.flex-1
+          p.text-sm.font-medium.text-red-800.dark:text-red-300 = I18n.t('apply.card.error_title')
+          p.mt-1.max-h-40.overflow-auto.whitespace-pre-wrap.break-words.font-mono.text-xs.text-red-700.dark:text-red-300
+            = @apply.error
+          - if @apply.failed?
+            .mt-3
+              = link(url: new_apply_path, variant: :primary, class: 'gap-2', data: { turbo_stream: true }) do
+                = icon(:refresh, size: 4)
+                = I18n.t('apply.action_box.retry')
+
+  .mt-4.space-y-3.px-4.pb-4.sm:px-5.sm:pb-5
+    = accordion(title: I18n.t('apply.card.filled_form'), open: @open) do
+      .border-t.border-gray-100.px-4.py-4.dark:border-gray-700.sm:px-6
+        - if @apply.filled_inputs.present?
+          = tabs(base_url: helpers.vacancy_applies_path(@vacancy), id: "tabs_#{anchor_id}") do |t|
+            - t.with_tab(label: I18n.t('apply.card.fields_tab')) do
+              = render Apply::Component::FilledFormPreview.new(filled_inputs: @apply.filled_inputs, vacancy: @vacancy, \
+                  cv_attached: @apply.cv.attached?)
+            - t.with_tab(label: I18n.t('apply.card.prompt_tab')) do
+              .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.break-words.font-mono.leading-relaxed
+                = Apply::Ai::Prompt::FillForm.call(@apply)
+        - else
+          p.text-sm.text-gray-400.dark:text-gray-500.italic = I18n.t('apply.card.no_data')
+
+    - if @apply.screenshot.attached?
+      = accordion(title: I18n.t('apply.card.screenshot')) do
+        .border-t.border-gray-100.px-4.py-4.dark:border-gray-700.sm:px-6
+          = helpers.link_to screenshot_path, target: '_blank', rel: 'noopener noreferrer' do
+            = helpers.image_tag screenshot_path, loading: 'lazy', alt: I18n.t('apply.card.screenshot'), \
+                class: 'w-full rounded-lg border border-gray-200 dark:border-gray-600'
+
+    - if @apply.cv.attached?
+      div(class=CV_ROW_CLASSES)
+        .flex.items-center.gap-2.text-sm.font-medium.text-gray-700.dark:text-gray-200
+          = icon(:document_text, size: 5, class: 'text-indigo-500 dark:text-indigo-400')
+          = I18n.t('apply.card.cv')
+        .flex.flex-wrap.gap-2
+          = link(url: cv_anchor, label: I18n.t('apply.card.go_to_cv'), variant: :outline, size: :sm, \
+              data: { turbo: false, action: Vacancy::Component::Show::ANCHOR_JUMP })
+          = link(url: helpers.rails_blob_path(@apply.cv, disposition: 'attachment'), \
+              label: I18n.t('vacancy_cv.download'), variant: :outline, size: :sm, data: { turbo: false })

@@ -17,6 +17,8 @@ class Apply::Operation::Create < ApplyMate::Operation::Base
       )
     end
 
+    # A new card joins the vacancy page panel: refresh the whole list, not just one card.
+    Apply::TurboHandler::StatusUpdate.refresh(model.vacancy, current_user)
     Apply::Job::Apply.perform_later(model.id)
     notice(I18n.t('apply.create.success'))
   end

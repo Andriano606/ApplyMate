@@ -232,7 +232,8 @@ module ApplyMate::Component::IconHelper
     entry = ICONS[name.to_sym]
     return ''.html_safe unless entry
 
-    css_class = "#{ICON_SIZES[size] || "w-#{size} h-#{size}"} inline-block"
+    # shrink-0: as a flex item next to a wrapping label the svg would otherwise get squeezed out of square
+    css_class = "#{ICON_SIZES[size] || "w-#{size} h-#{size}"} inline-block shrink-0"
     css_class = "#{css_class} #{html_options.delete(:class)}" if html_options[:class]
 
     svg_attrs = { class: css_class, xmlns: 'http://www.w3.org/2000/svg', viewBox: entry[:view_box] }

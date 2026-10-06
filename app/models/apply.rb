@@ -47,8 +47,22 @@ class Apply < ApplicationRecord
     completed: 4
   }
 
+  # Applies that belong in the vacancy page CV list: a CV is attached, or the pipeline is generating one.
+  # The EXISTS rides index_active_storage_attachments_uniqueness (record_type, record_id, name, blob_id).
+  scope :with_cv_or_generating_cv, lambda {
+    cv_attachment = ActiveStorage::Attachment.where(record_type: name, name: 'cv')
+                                             .where(ActiveStorage::Attachment.arel_table[:record_id].eq(arel_table[:id]))
+    where(status: :generating_cv).or(where(cv_attachment.arel.exists))
+  }
+
+  # The apply a vacancy's status badge and action box describe. Rides index_applies_on_vacancy_id.
+  def self.latest_for(vacancy:, user:)
+    where(vacancy:, user:).order(:created_at).last
+  end
+
+  # A freshly created apply has no status until Apply::Job::Apply starts its first step.
   def in_progress?
-    checking_applyble? || fetching_apply_type? || fetching_details? ||
+    status.nil? || checking_applyble? || fetching_apply_type? || fetching_details? ||
       fetching_form? || filling_form? || generating_cv? ||
       sending_cv?
   end

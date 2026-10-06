@@ -1,0 +1,8 @@
+div role='status'
+  span.sr-only = I18n.t('vacancy.show.loading')
+  .animate-pulse.space-y-3 aria-hidden='true'
+    - @rows.times do
+      .space-y-3.rounded-xl.border.border-gray-100.p-4.dark:border-gray-700
+        div(class='h-3 w-1/3 rounded bg-gray-200 dark:bg-gray-700')
+        div(class='h-3 w-2/3 rounded bg-gray-200 dark:bg-gray-700')
+        div(class='h-3 w-1/2 rounded bg-gray-200 dark:bg-gray-700')
