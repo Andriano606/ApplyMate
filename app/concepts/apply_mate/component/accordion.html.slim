@@ -4,7 +4,8 @@ details(class='bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:
     .flex.items-center.gap-2.flex-1
       span.text-xs.font-medium.text-gray-400.dark:text-gray-500.uppercase.tracking-wide = @title
       - if @loading
-        .animate-spin.rounded-full.h-3.5.w-3.5.border-2.border-gray-200.dark:border-gray-600.border-t-indigo-500
+        span(class=[ 'inline-block h-3.5 w-3.5 animate-spin rounded-full border-2',
+                     'border-gray-200 dark:border-gray-600 border-t-indigo-500' ] aria-hidden='true')
       span.text-gray-400.transition-transform.duration-200.group-open:rotate-180
         = icon(:chevron_down, size: 4)
     - if actions?

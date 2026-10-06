@@ -1,0 +1,47 @@
+aside.space-y-4 aria-label=I18n.t('vacancy.show.actions')
+  div(class="#{CARD_CLASSES} space-y-4 p-4 sm:p-5")
+    / Apply action and the original link sit as close together as the AI-tool buttons (gap-2)
+    .space-y-2
+      - if signed_in?
+        / Wrapped: the box renders inside an inline <turbo-frame>, which space-y cannot push apart
+        div
+          = render Apply::Component::ActionBox.new(vacancy: @vacancy)
+      - else
+        .space-y-3
+          div
+            p.text-sm.font-semibold.text-gray-900.dark:text-gray-100 = I18n.t('vacancy.show.guest.title')
+            p.mt-1.text-xs.leading-relaxed.text-gray-500.dark:text-gray-400 = I18n.t('vacancy.show.guest.hint')
+          = link(url: helpers.login_path, variant: :primary, class: 'w-full justify-center gap-2') do
+            = icon(:lock_closed, size: 4)
+            = I18n.t('vacancy.show.guest.sign_in')
+
+      - if @vacancy.url.present?
+        = link(url: @vacancy.url, variant: :outline, class: 'w-full gap-2', target: '_blank', \
+            rel: 'noopener noreferrer') do
+          = icon(:external_link, size: 4)
+          = I18n.t('vacancy.show.open_original')
+          span.sr-only = I18n.t('vacancy.show.new_tab')
+
+    - if signed_in?
+      .border-t.border-gray-100.pt-4.dark:border-gray-700
+        p.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+          = I18n.t('vacancy.show.ai_tools.title')
+        .mt-3.grid.grid-cols-1.gap-2.sm:grid-cols-2.lg:grid-cols-1
+          = link(url: helpers.new_vacancy_vacancy_cv_path(@vacancy), variant: :outline, \
+              class: 'w-full gap-2', data: { turbo_stream: true }) do
+            = icon(:sparkles, size: 4, class: 'text-indigo-500 dark:text-indigo-400')
+            = I18n.t('vacancy.show.generate_cv')
+          = link(url: helpers.new_vacancy_vacancy_question_path(@vacancy), variant: :outline, \
+              class: 'w-full gap-2', data: { turbo_stream: true }) do
+            = icon(:chat_bubble, size: 4, class: 'text-indigo-500 dark:text-indigo-400')
+            = I18n.t('vacancy.show.ai_tools.answer_question')
+
+  nav(class="#{CARD_CLASSES} p-3" aria-label=I18n.t('vacancy.show.nav.title'))
+    p.px-2.text-xs.font-medium.uppercase.tracking-wider.text-gray-400.dark:text-gray-500
+      = I18n.t('vacancy.show.nav.title')
+    ul.mt-2.flex.flex-wrap.gap-1.lg:flex-col
+      - nav_items.each do |anchor, label, icon_name|
+        li
+          = link(url: "##{anchor}", size: :sm, class: 'gap-2 lg:w-full lg:justify-start', data: { turbo: false }) do
+            = icon(icon_name, size: 4)
+            = label

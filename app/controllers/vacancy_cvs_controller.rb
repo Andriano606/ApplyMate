@@ -12,7 +12,7 @@ class VacancyCvsController < ApplicationController
   def create
     endpoint VacancyCv::Operation::Create, VacancyCv::Component::NewModal do |m|
       m.success do |result|
-        VacancyCv::TurboHandler::Index.broadcast(result.model.vacancy_cv)
+        VacancyCv::TurboHandler::Index.broadcast(result.model.vacancy, current_user)
         turbo_actions = [ turbo_stream.close_active_modal ]
         turbo_actions << turbo_stream.flash([ [ result.message_level, result.notice[:text] ] ])
         render turbo_stream: turbo_actions

@@ -9,14 +9,13 @@ class VacancyQuestion::TurboHandler::Index < ApplyMate::TurboHandler::Base
     view_context.turbo_frame_tag(frame_id(vacancy), src:, &block)
   end
 
-  def self.broadcast(vacancy_question)
-    user              = vacancy_question.user
-    vacancy           = vacancy_question.vacancy
-    vacancy_questions = VacancyQuestion.joins(:user_profile)
-                                       .where(user_profiles: { user: }, vacancy:)
-                                       .order(:created_at)
+  # Renders exactly what VacancyQuestionsController#index renders, through the same operation.
+  # Callers: VacancyQuestionsController#create (new question), Apply::Operation::FetchInternalForm and
+  # Apply::Operation::Ai::FetchExternalForm (new form → new suggestions), Apply::Operation::Destroy.
+  def self.broadcast(vacancy, user)
+    result = VacancyQuestion::Operation::Index.call(params: { vacancy_id: vacancy.id }, current_user: user)
     html = ApplicationController.renderer.render_to_string(
-      VacancyQuestion::Component::Index.new(vacancy:, vacancy_questions:, user:),
+      VacancyQuestion::Component::Index.new(**result.model.to_h, user:),
       layout: false
     )
     Turbo::StreamsChannel.broadcast_action_to(

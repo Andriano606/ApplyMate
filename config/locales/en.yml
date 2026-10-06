@@ -154,10 +154,40 @@ en:
     update:
       success: AI integration updated
   apply:
+    action_box:
+      apply: Apply
+      apply_again: Apply again
+      completed: Application sent
+      failed_hint: The application could not be sent. See the error under "My applies".
+      in_progress_hint: Your application is being processed — this page updates automatically.
+      ready_hint: AI tailors a CV to this vacancy, fills in the application form and
+        sends it. Progress shows up on this page.
+      ready_title: Ready to apply?
+      retry: Try again
+      view_progress: View progress
     apply_type:
       external: External
       internal: Internal
       unknown: Unknown
+    card:
+      cv: Resume
+      cv_attached: Resume attached
+      cv_not_attached: No resume attached
+      delete: Delete apply
+      error_title: Error
+      fields_tab: Fields
+      filled_form: Filled form
+      generate_answer: Generate answer
+      go_to_cv: Go to resume
+      meta:
+        ai_integration: AI integration
+        apply_type: Application type
+        source_profile: Account
+        user_profile: Profile
+      no_data: No data
+      no_fields: No fields to display
+      prompt_tab: Prompt
+      screenshot: Screenshot after submit
     create:
       success: Відгук створено
     destroy:
@@ -188,26 +218,6 @@ en:
         user_profile: Профіль
       submit: Відгукнутись
       title: Новий відгук
-    show:
-      back: До відгуків
-      cv_tab_preview: Preview
-      cv_tab_prompt: Prompt
-      download_cv: Завантажити резюме
-      fields:
-        ai_integration: AI Integration
-        apply_type: Type
-        created_at: Date
-        cv: Resume
-        error: Error
-        profile: Profile
-        screenshot: Submit screenshot
-        source: Source
-        source_profile: Account
-      filled_form_data: Filled Form Data
-      filled_form_no_fields: No fields to display
-      filled_form_tab_fields: Fields
-      no_data: No data yet
-      title: Відгук
     status:
       checking_applyble: Перевірка доступності
       completed: Завершено
@@ -223,11 +233,12 @@ en:
       fetching_form: Отримання форми
       filling_form: Заповнення форми
       generating_cv: Генерація резюме
+      queued: Queued
       sending_cv: Надсилання
-  apply_mate:
-    expandable_text:
-      collapse: Згорнути
-      expand: Розгорнути
+    vacancy_index:
+      empty: You have not applied to this vacancy yet
+      empty_hint: Click "Apply" — progress, the filled form and the CV will appear
+        here.
   components:
     debug_button:
       label: Admin
@@ -478,9 +489,36 @@ en:
         one: Found %{count} vacancy
         other: Found %{count} vacancies
     show:
+      actions: Vacancy actions
+      added_on: Added %{date}
+      ai_tools:
+        answer_question: Answer a question
+        title: AI tools
+      all_applies: All applies
       back: До вакансій
       generate_answer: Згенерувати відповідь на питання
       generate_cv: Згенерувати резюме
+      guest:
+        hint: Applications, CVs and answers to questions are available after signing
+          in.
+        sign_in: Sign in
+        title: Sign in to apply
+      loading: Loading…
+      nav:
+        applies: My applies
+        cvs: Resumes
+        description: Description
+        questions: Questions
+        title: On this page
+      new_tab: "(opens in a new tab)"
+      no_description: No description
+      open_original: Open original
+      sections:
+        applies: My applies
+        cvs: Resumes
+        description: Vacancy description
+        questions: Answers to questions
+      source: Source
     sync:
       no_proxies: No proxies available — sync stopped
     total_vacancies: vacancies
@@ -488,13 +526,29 @@ en:
       generate_answer_started: Генерацію відповіді розпочато
       generate_cv_started: Генерацію резюме розпочато
   vacancy_cv:
+    download: Download resume
+    empty: No resumes yet
+    empty_hint: Generate a resume for this vacancy — resumes generated during an apply
+      show up here too.
+    from_apply: From apply
     generating: Генерація резюме...
+    go_to_apply: Go to apply
+    tab_preview: Preview
+    tab_prompt: Prompt
   vacancy_question:
+    ask: Ask a question
+    copy: Copy
+    empty: No questions yet
+    empty_hint: Paste a question from the application form or from a recruiter — AI
+      answers it using your profile and the vacancy.
     generating: Генерація відповіді...
     new:
       form:
         question: Питання
         question_placeholder: Введіть питання з форми подачі заявки...
+    suggestions:
+      hint: You can also paste a question from a recruiter — click "Ask a question".
+      title: Questions from the application form
     tab_answer: Відповідь
     tab_prompt: Промпт
   will_paginate:

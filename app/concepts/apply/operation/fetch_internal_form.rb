@@ -29,5 +29,7 @@ class Apply::Operation::FetchInternalForm < Apply::Operation::Base
     form_data = extract_form_data(doc, url, cookies, selector: scraper.form_selector)
 
     apply.update!(form_data: form_data)
+    # The form's open questions become "ask about it" suggestions on the vacancy page.
+    VacancyQuestion::TurboHandler::Index.broadcast(apply.vacancy, apply.user)
   end
 end

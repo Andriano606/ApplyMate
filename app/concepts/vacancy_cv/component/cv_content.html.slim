@@ -1,22 +1,38 @@
-= VacancyCv::TurboHandler::CvReady.frame_tag(@vacancy_cv, helpers) do
-  = accordion(title: @title, loading: !@vacancy_cv.cv.attached?) do |a|
-    - if @vacancy_cv.cv.attached?
+/ The frame id doubles as the "#cv_<model>_<hashid>" anchor; scroll-mt clears the sticky navbar.
+= VacancyCv::TurboHandler::CvReady.frame_tag(@record, helpers, class: 'block scroll-mt-24') do
+  = accordion(title:, loading: generating?) do |a|
+    - if from_apply?
       - a.with_actions do
-        = link(url: helpers.rails_blob_path(@vacancy_cv.cv, disposition: 'attachment'), size: :md) do
-          = I18n.t('apply.show.download_cv')
-    .px-6.py-4
-      - if @vacancy_cv.cv.attached?
-        = tabs(base_url: helpers.vacancy_vacancy_cvs_path(@vacancy), id: "tabs_vacancy_cv_#{@vacancy_cv.hashid}") do |t|
-          - t.with_tab(label: I18n.t('apply.show.cv_tab_preview')) do
-            iframe.w-full.rounded-lg.border.border-gray-200.dark:border-gray-700(
-              src="#{helpers.rails_blob_path(@vacancy_cv.cv, disposition: 'inline')}#toolbar=0"
-              style='height:600px'
-            )
-          - t.with_tab(label: I18n.t('apply.show.cv_tab_prompt')) do
-            .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.font-mono.leading-relaxed
-              = Apply::Ai::Prompt::GenerateCv.call(user_profile: @vacancy_cv.user_profile, \
-                  vacancy: @vacancy, generate_cv_prompt: @vacancy_cv.generate_cv_prompt)
+        = badge(label: I18n.t('vacancy_cv.from_apply'), color: :orange)
+
+    .border-t.border-gray-100.px-4.py-4.dark:border-gray-700.sm:px-6
+      .mb-4.flex.flex-wrap.items-center.justify-between.gap-3
+        .flex.flex-wrap.items-center.gap-x-3.gap-y-1.text-xs.text-gray-500.dark:text-gray-400
+          span.inline-flex.items-center.gap-1
+            = icon(:sparkles, size: 4, class: 'text-gray-400 dark:text-gray-500')
+            = @record.ai_integration.label
+          - if from_apply?
+            = helpers.link_to apply_anchor, data: { turbo: false, action: Vacancy::Component::Show::ANCHOR_JUMP }, \
+                class: 'inline-flex items-center gap-1 text-indigo-600 hover:underline dark:text-indigo-400' do
+              = icon(:send, size: 4)
+              = I18n.t('vacancy_cv.go_to_apply')
+        - unless generating?
+          = link(url: helpers.rails_blob_path(@record.cv, disposition: 'attachment'), \
+              label: I18n.t('vacancy_cv.download'), variant: :outline, size: :sm, data: { turbo: false })
+
+      - if generating?
+        p.text-sm.text-gray-500.dark:text-gray-400 = I18n.t('vacancy_cv.generating')
       - else
-        p.text-sm.text-gray-500.dark:text-gray-400.mb-3 = I18n.t('vacancy_cv.generating')
-        .w-full.bg-gray-200.dark:bg-gray-700.rounded-full.h-1.5
-          .bg-indigo-500.h-1.5.rounded-full.animate-pulse style="width: 60%"
+        = tabs(base_url: helpers.vacancy_vacancy_cvs_path(@vacancy), \
+            id: "tabs_#{VacancyCv::TurboHandler::CvReady.frame_id(@record)}") do |t|
+          - t.with_tab(label: I18n.t('vacancy_cv.tab_preview')) do
+            iframe(
+              src="#{helpers.rails_blob_path(@record.cv, disposition: 'inline')}#toolbar=0"
+              title=title
+              loading='lazy'
+              class='h-[70vh] w-full rounded-lg border border-gray-200 dark:border-gray-700 sm:h-[640px]'
+            )
+          - t.with_tab(label: I18n.t('vacancy_cv.tab_prompt')) do
+            .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.break-words.font-mono.leading-relaxed
+              = Apply::Ai::Prompt::GenerateCv.call(user_profile: @record.user_profile, \
+                  vacancy: @vacancy, generate_cv_prompt: @record.generate_cv_prompt)

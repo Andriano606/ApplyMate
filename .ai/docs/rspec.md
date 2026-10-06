@@ -286,11 +286,14 @@ stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
   .to_return(gemini_json_response('```json\n{"key":"value"}\n```'))
 ```
 
-Always suppress `Apply::TurboHandler::StatusUpdate.broadcast` and `Grover#to_pdf` in specs that run operations end-to-end:
+Always suppress `Apply::TurboHandler::StatusUpdate.broadcast`, `VacancyCv::TurboHandler::Index.broadcast` and `.broadcast_row` (called by `Apply::Operation::Ai::GeneratePdfCv`), `VacancyQuestion::TurboHandler::Index.broadcast` (called by the fetch-form operations) and `Grover#to_pdf` in specs that run operations end-to-end:
 
 ```ruby
 before do
   allow(Apply::TurboHandler::StatusUpdate).to receive(:broadcast)
+  allow(VacancyCv::TurboHandler::Index).to receive(:broadcast)
+  allow(VacancyCv::TurboHandler::Index).to receive(:broadcast_row)
+  allow(VacancyQuestion::TurboHandler::Index).to receive(:broadcast)
   allow_any_instance_of(Grover).to receive(:to_pdf).and_return('%PDF-1.4 fake')
 end
 ```

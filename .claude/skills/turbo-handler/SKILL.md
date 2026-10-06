@@ -128,15 +128,13 @@ Call `broadcast` every time the state the component displays changes — includi
 
 ## Real example: Apply::TurboHandler::StatusUpdate
 
-- Handler: `app/concepts/apply/turbo_handler/status_update.rb`
+- Handler: `app/concepts/apply/turbo_handler/status_update.rb` — `broadcast(apply)` (one apply changed: badge, action box, that card via `VacancyIndex.broadcast_card`) / `refresh(vacancy, user)` (applies added/removed: badge, action box, whole panel via `VacancyIndex.broadcast`) on the same `[user, vacancy]` stream
 - Component using `frame_tag`: `app/concepts/apply/component/status_badge.html.slim`
 - `stream_from` callers:
-  - Show page: `app/concepts/apply/component/show.html.slim` (before the status row)
+  - Vacancy page: `app/concepts/vacancy/component/show.html.slim` (the one subscription for the action box and applies panel; the status badge is on vacancy cards and the applies table, not here)
   - Index table status column: `app/concepts/apply/component/table.rb` (via `safe_join` inside `add_column`)
-  - Vacancy card: `app/concepts/vacancy/component/card.slim` (line 26)
-- Broadcast callers: `Apply::Operation::Ai::GeneratePdfCv` — called on every status transition (`generating_cv`, `cv_generated`, `failed_cv_generation`)
-
----
+  - Vacancy card: `app/concepts/vacancy/component/card.html.slim`
+- Broadcast callers: `Apply::Operation::Base` on every pipeline step (start, success, failure), `Apply::Operation::Create`, `Apply::Operation::Destroy` (`refresh`)
 
 ## Checklist
 

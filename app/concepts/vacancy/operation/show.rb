@@ -2,7 +2,7 @@
 
 class Vacancy::Operation::Show < ApplyMate::Operation::Base
   def perform!(params:, current_user:, **)
-    vacancy = Vacancy.includes(:source, :vacancy_cvs).find(params[:id])
+    vacancy = Vacancy.includes(:source).find(params[:id])
     authorize! vacancy, :show?
 
     self.model = ApplyMate::Operation::Struct.new(vacancy:)

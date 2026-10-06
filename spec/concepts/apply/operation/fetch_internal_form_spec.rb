@@ -53,6 +53,11 @@ RSpec.describe Apply::Operation::FetchInternalForm do
         expect(apply.reload.submit_selector).to eq('#job_apply')
       end
 
+      it "refreshes the vacancy page question suggestions from the new form's fields" do
+        run_operation
+        expect(VacancyQuestion::TurboHandler::Index).to have_received(:broadcast).with(apply.vacancy, apply.user)
+      end
+
       it 'stores cookies from the response' do
         run_operation
         expect(apply.reload.cookies).to include('sessionid=test-session-id')

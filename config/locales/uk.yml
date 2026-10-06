@@ -154,10 +154,40 @@ uk:
     update:
       success: AI інтеграцію оновлено
   apply:
+    action_box:
+      apply: Відгукнутися
+      apply_again: Відгукнутися ще раз
+      completed: Відгук надіслано
+      failed_hint: Відгук не вдалося надіслати. Деталі помилки — у розділі «Мої відгуки».
+      in_progress_hint: Відгук обробляється — сторінка оновиться автоматично.
+      ready_hint: AI згенерує резюме під вакансію, заповнить анкету й надішле відгук.
+        Прогрес видно на цій сторінці.
+      ready_title: Готові відгукнутися?
+      retry: Спробувати ще раз
+      view_progress: Переглянути прогрес
     apply_type:
       external: Зовнішній
       internal: Внутрішній
       unknown: Невідомо
+    card:
+      cv: Резюме
+      cv_attached: Резюме прикріплено
+      cv_not_attached: Резюме не прикріплено
+      delete: Видалити відгук
+      error_title: Помилка
+      fields_tab: Поля
+      filled_form: Заповнена форма
+      generate_answer: Згенерувати відповідь
+      go_to_cv: Перейти до резюме
+      meta:
+        ai_integration: AI інтеграція
+        apply_type: Тип відгуку
+        source_profile: Аккаунт
+        user_profile: Профіль
+      no_data: Дані відсутні
+      no_fields: Немає полів для відображення
+      prompt_tab: Промпт
+      screenshot: Скріншот після відправки
     create:
       success: Відгук створено
     destroy:
@@ -188,26 +218,6 @@ uk:
         user_profile: Профіль
       submit: Відгукнутись
       title: Новий відгук
-    show:
-      back: До відгуків
-      cv_tab_preview: Превью
-      cv_tab_prompt: Промпт
-      download_cv: Завантажити резюме
-      fields:
-        ai_integration: AI інтеграція
-        apply_type: Тип
-        created_at: Дата
-        cv: Резюме
-        error: Помилка
-        profile: Профіль
-        screenshot: Скріншот після відправки
-        source: Джерело
-        source_profile: Аккаунт
-      filled_form_data: Заповнена форма
-      filled_form_no_fields: Немає полів для відображення
-      filled_form_tab_fields: Поля
-      no_data: Дані відсутні
-      title: Відгук
     status:
       checking_applyble: Перевірка доступності
       completed: Завершено
@@ -223,11 +233,12 @@ uk:
       fetching_form: Отримання форми
       filling_form: Заповнення форми
       generating_cv: Генерація резюме
+      queued: В черзі
       sending_cv: Надсилання
-  apply_mate:
-    expandable_text:
-      collapse: Згорнути
-      expand: Розгорнути
+    vacancy_index:
+      empty: Ви ще не відгукувалися на цю вакансію
+      empty_hint: Натисніть «Відгукнутися» — тут з’явиться прогрес, заповнена форма
+        й резюме.
   components:
     debug_button:
       label: Адмін
@@ -478,9 +489,35 @@ uk:
         one: Знайдено %{count} вакансію
         other: Знайдено %{count} вакансій
     show:
+      actions: Дії з вакансією
+      added_on: Додано %{date}
+      ai_tools:
+        answer_question: Відповісти на питання
+        title: AI-інструменти
+      all_applies: Усі відгуки
       back: До вакансій
       generate_answer: Згенерувати відповідь на питання
       generate_cv: Згенерувати резюме
+      guest:
+        hint: Відгуки, резюме та відповіді на питання доступні після входу.
+        sign_in: Увійти
+        title: Увійдіть, щоб відгукнутися
+      loading: Завантаження…
+      nav:
+        applies: Мої відгуки
+        cvs: Резюме
+        description: Опис
+        questions: Питання
+        title: На цій сторінці
+      new_tab: "(відкриється в новій вкладці)"
+      no_description: Опис вакансії відсутній
+      open_original: Відкрити оригінал
+      sections:
+        applies: Мої відгуки
+        cvs: Резюме
+        description: Опис вакансії
+        questions: Відповіді на питання
+      source: Джерело
     sync:
       no_proxies: Немає доступних проксі — синхронізацію зупинено
     total_vacancies: вакансій
@@ -488,13 +525,29 @@ uk:
       generate_answer_started: Генерацію відповіді розпочато
       generate_cv_started: Генерацію резюме розпочато
   vacancy_cv:
+    download: Завантажити резюме
+    empty: Резюме ще немає
+    empty_hint: Згенеруйте резюме під цю вакансію — резюме, створені під час відгуку,
+      теж з’являться тут.
+    from_apply: Під час відгуку
     generating: Генерація резюме...
+    go_to_apply: До відгуку
+    tab_preview: Превью
+    tab_prompt: Промпт
   vacancy_question:
+    ask: Поставити питання
+    copy: Копіювати
+    empty: Питань ще немає
+    empty_hint: Вставте питання з анкети або від рекрутера — AI відповість з урахуванням
+      вашого профілю та вакансії.
     generating: Генерація відповіді...
     new:
       form:
         question: Питання
         question_placeholder: Введіть питання з форми подачі заявки...
+    suggestions:
+      hint: Можна також вставити питання від рекрутера — натисніть «Поставити питання».
+      title: Питання з анкети
     tab_answer: Відповідь
     tab_prompt: Промпт
   will_paginate:

@@ -7,6 +7,10 @@ class ApplyMate::Component::Button < ApplyMate::Component::Base
              'disabled:opacity-50 disabled:cursor-not-allowed',
     secondary: 'inline-flex items-center justify-center text-gray-600 dark:text-gray-400 px-4 py-2 rounded-lg ' \
                 'hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+    # Bordered neutral action; padding and text size come from SIZES.
+    outline: 'inline-flex items-center justify-center font-medium text-gray-700 dark:text-gray-200 rounded-lg ' \
+             'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 ' \
+             'hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors',
     danger: 'inline-flex items-center px-4 py-2 text-sm font-medium text-white ' \
             'bg-red-600 rounded-lg hover:bg-red-700 transition-colors',
     icon: 'inline-flex items-center justify-center relative p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ' \

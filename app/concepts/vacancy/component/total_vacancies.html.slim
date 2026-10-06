@@ -19,7 +19,7 @@
             data: { test_id: "source-listing-#{item.source.hashid}" } do
           - if item.source.logo.attached?
             = helpers.image_tag(item.source.logo, \
-                class: 'w-5 h-5 object-contain rounded', \
+                class: 'h-5 w-auto max-w-16 shrink-0 object-contain rounded', \
                 alt: item.source.name)
           span.text-sm.font-medium.text-gray-700.dark:text-gray-300 = item.source.name
           span.inline-flex.items-center.justify-center.rounded-full.bg-indigo-100.dark:bg-indigo-900 (

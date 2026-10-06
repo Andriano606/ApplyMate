@@ -1,16 +1,38 @@
-= VacancyQuestion::TurboHandler::AnswerReady.frame_tag(@vacancy_question, helpers) do
-  = accordion(title:, loading: @vacancy_question.answer.blank?) do |a|
-    .px-6.py-4
-      - if @vacancy_question.answer.present?
+/ block: an inline <turbo-frame> would ignore the list's space-y gap between answers
+= VacancyQuestion::TurboHandler::AnswerReady.frame_tag(@vacancy_question, helpers, class: 'block') do
+  article.rounded-xl.border.border-gray-200.bg-white.p-4.dark:border-gray-700.dark:bg-gray-800.sm:p-5
+    .flex.items-start.gap-3
+      span(class=[ 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                   'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' ] aria-hidden='true')
+        = icon(:chat_bubble, size: 4)
+      .min-w-0.flex-1
+        h3.text-sm.font-semibold.leading-snug.text-gray-900.dark:text-gray-100.whitespace-pre-line.break-words
+          = @vacancy_question.question
+        time.mt-1.block.text-xs.text-gray-500.dark:text-gray-400 datetime=@vacancy_question.created_at.iso8601
+          = I18n.l(@vacancy_question.created_at, format: :short)
+
+    .mt-4
+      - if answered?
         = tabs(base_url: helpers.vacancy_vacancy_questions_path(@vacancy), \
             id: "tabs_vacancy_question_#{@vacancy_question.hashid}") do |t|
           - t.with_tab(label: I18n.t('vacancy_question.tab_answer')) do
-            .text-sm.text-gray-700.dark:text-gray-300.whitespace-pre-wrap.leading-relaxed
-              = @vacancy_question.answer
+            div(class='rounded-lg border border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40' \
+              data-controller='clipboard')
+              .flex.justify-end.px-2.pt-2
+                = button(variant: :icon, size: :sm, class: 'gap-1', title: I18n.t('vacancy_question.copy'), \
+                    aria: { label: I18n.t('vacancy_question.copy') }, \
+                    data: { clipboard_target: 'button', action: 'click->clipboard#copy' }) do
+                  = icon(:clipboard_list, size: 4)
+                  span.hidden.sm:inline = I18n.t('vacancy_question.copy')
+              .px-3.pb-3.text-sm.leading-relaxed.text-gray-800.dark:text-gray-200.whitespace-pre-wrap.break-words [
+                data-clipboard-target='source'
+                ]
+                = @vacancy_question.answer
           - t.with_tab(label: I18n.t('vacancy_question.tab_prompt')) do
-            .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.font-mono.leading-relaxed
+            .text-sm.text-gray-600.dark:text-gray-400.whitespace-pre-wrap.break-words.font-mono.leading-relaxed
               = VacancyQuestion::Ai::Prompt::AnswerQuestion.call(@vacancy_question)
       - else
-        p.text-sm.text-gray-500.dark:text-gray-400.mb-3 = I18n.t('vacancy_question.generating')
-        .w-full.bg-gray-200.dark:bg-gray-700.rounded-full.h-1.5
-          .bg-indigo-500.h-1.5.rounded-full.animate-pulse style="width: 60%"
+        .flex.items-center.gap-2.text-sm.text-gray-500.dark:text-gray-400
+          span(class=[ 'inline-block h-3.5 w-3.5 animate-spin rounded-full border-2',
+                       'border-gray-200 border-t-indigo-500 dark:border-gray-600' ] aria-hidden='true')
+          = I18n.t('vacancy_question.generating')

@@ -4,6 +4,9 @@
 
 import { application } from './application';
 
+import AnchorScrollController from './anchor_scroll_controller';
+application.register('anchor-scroll', AnchorScrollController);
+
 import ClipboardController from './clipboard_controller';
 application.register('clipboard', ClipboardController);
 

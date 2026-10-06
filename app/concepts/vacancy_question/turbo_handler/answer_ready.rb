@@ -5,8 +5,8 @@ class VacancyQuestion::TurboHandler::AnswerReady < ApplyMate::TurboHandler::Base
     view_context.turbo_stream_from([ user, vacancy_question ])
   end
 
-  def self.frame_tag(vacancy_question, view_context, &block)
-    view_context.turbo_frame_tag(frame_id(vacancy_question), &block)
+  def self.frame_tag(vacancy_question, view_context, **options, &block)
+    view_context.turbo_frame_tag(frame_id(vacancy_question), **options, &block)
   end
 
   def self.broadcast(vacancy_question)

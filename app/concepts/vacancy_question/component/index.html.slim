@@ -3,11 +3,29 @@
   - @vacancy_questions.select { |vq| vq.answer.blank? }.each do |vacancy_question|
     = VacancyQuestion::TurboHandler::AnswerReady.stream_from(vacancy_question, page_user, helpers)
 
-  .mt-4
-    = link(url: helpers.new_vacancy_vacancy_question_path(@vacancy), label: I18n.t('vacancy.show.generate_answer'), \
-        variant: :primary, data: { turbo_stream: true })
+  .space-y-4
+    - if @question_suggestions.any?
+      div(class=SUGGESTIONS_CLASSES)
+        p.flex.items-center.gap-2.text-sm.font-medium.text-indigo-900.dark:text-indigo-200
+          = icon(:clipboard_list, size: 4)
+          = I18n.t('vacancy_question.suggestions.title')
+        ul.mt-3.flex.flex-wrap.gap-2
+          - @question_suggestions.each do |question|
+            li.max-w-full
+              / Scraped text: passed as block content so it is escaped (link's label: is rendered html_safe).
+              = link(url: new_question_path(question), variant: :outline, size: :sm, \
+                  class: 'max-w-full gap-1 text-left', title: question, data: { turbo_stream: true }) do
+                = icon(:sparkles, size: 4, class: 'shrink-0 text-indigo-500 dark:text-indigo-400')
+                span.truncate = question
+        p.mt-3.text-xs.text-indigo-800.dark:text-indigo-300 = I18n.t('vacancy_question.suggestions.hint')
 
-  - if @vacancy_questions.any?
-    .mt-4.space-y-3
-      - @vacancy_questions.each do |vacancy_question|
-        = render VacancyQuestion::Component::AnswerContent.new(vacancy_question:)
+    - if @vacancy_questions.any?
+      .space-y-3
+        - @vacancy_questions.each do |vacancy_question|
+          = render VacancyQuestion::Component::AnswerContent.new(vacancy_question:)
+    - else
+      = empty_state(icon: :chat_bubble, title: I18n.t('vacancy_question.empty'), \
+          hint: I18n.t('vacancy_question.empty_hint')) do
+        = link(url: new_question_path, variant: :primary, class: 'gap-2', data: { turbo_stream: true }) do
+          = icon(:chat_bubble, size: 4)
+          = I18n.t('vacancy_question.ask')

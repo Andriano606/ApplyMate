@@ -50,7 +50,7 @@ This applies to any Rails helper: `turbo_frame_tag`, `link_to`, `image_tag`, `co
 ## Decision tree — before creating a component
 
 **Step 1 — check if it already exists.**
-Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, `rich_text`, `expandable_text`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
+Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, `rich_text`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
 
 ```slim
 / ✅ use the helper
@@ -84,10 +84,10 @@ lean on `> * + *` and `:has()`. Enumerating tags as `[&_p]:mb-3` utilities is wh
 every unlisted tag with no spacing at all.
 
 Pass **both** description columns. `html:` is what renders; `text:` is the plain-text projection the
-component paragraph-wraps for rows scraped before `description_html` existed, and it is also what
-`expandable_text(html:, text:)` clamps into a collapsed preview — `strip_tags` puts no separator
-between blocks, so deriving the teaser from the markup would glue the last word of one paragraph
-onto the first of the next. Views guard on `Vacancy#description_present?` so both cards agree.
+component paragraph-wraps for rows scraped before `description_html` existed. Teasers (the
+`Vacancy::Component::Card` preview) read `description` too — `strip_tags` puts no separator between
+blocks, so deriving one from the markup would glue the last word of one paragraph onto the first of
+the next. The vacancy page (`Vacancy::Component::Show`) guards on `Vacancy#description_present?`.
 
 ## Shared component (reusable)
 
@@ -182,33 +182,28 @@ end
 
 `ApplicationController.renderer.render_to_string(MyComponent.new(...))` has **no request context** — `current_user` returns `nil`. Components rendered this way must not rely on `current_user`.
 
-**Pattern:** accept the record directly as a keyword argument (bypassing the lookup), and derive the user from it:
+**Pattern:** accept the record and the user directly as keyword arguments (bypassing the lookup), defaulting to a `LAZY` sentinel that is resolved in `before_render`:
 
 ```ruby
 LAZY = :lazy
 
-def initialize(vacancy:, apply: LAZY, **)
-  @vacancy = vacancy
+def initialize(vacancy:, apply: LAZY, user: LAZY, **)
+  @vacancy      = vacancy
   @apply_preset = apply
+  @user_preset  = user
 end
 
 def before_render
-  # In a normal request, look up by current_user.
-  # In a broadcast (ApplicationController.renderer), apply: is passed directly.
-  @apply = (@apply_preset == LAZY) ? @vacancy.applies.where(user: current_user).last : @apply_preset
-end
-
-private
-
-def frame_user
-  # @apply.user avoids calling current_user when apply is known (e.g. during broadcast)
-  @apply.nil? ? current_user : @apply.user
+  # In a normal request, fall back to current_user and look the apply up.
+  # In a broadcast (ApplicationController.renderer), apply: and user: are passed directly.
+  @user  = @user_preset == LAZY ? current_user : @user_preset
+  @apply = @apply_preset == LAZY ? Apply.latest_for(vacancy: @vacancy, user: @user) : @apply_preset
 end
 ```
 
-Broadcast call passes the record explicitly:
+Broadcast call passes everything explicitly — including `user:`, because `apply` may be `nil` (nothing to derive the user from):
 ```ruby
-Apply::Component::StatusBadge.new(vacancy: vacancy, apply: apply)  # no current_user needed
+Apply::Component::StatusBadge.new(vacancy:, apply:, user:)  # no current_user needed
 ```
 
 ## Slots
