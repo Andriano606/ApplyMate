@@ -37,6 +37,7 @@ def main
   compose_up!
   wait_for_tcp('localhost', db_port, 'PostgreSQL')
   install_dependencies
+  install_curl_impersonate
   prepare_databases
   build_assets
 
@@ -161,6 +162,43 @@ def install_dependencies
   puts '📦 Installing Ruby + JS dependencies...'
   system!('bundle', 'install')
   system!('bun', 'install')
+end
+
+# ApplyMate::Client::ImpersonateHttp shells out to vendor/curl-impersonate/curl_chrome136
+# (used by the Dou scraper and apply flow). vendor/curl-impersonate/ is gitignored, so a
+# fresh worktree doesn't have it — applying then fails with ENOENT. Reuse the root
+# checkout's copy when it's runnable (no download), otherwise run the installer.
+CURL_IMPERSONATE_DIR = 'vendor/curl-impersonate'
+CURL_IMPERSONATE_BIN = "#{CURL_IMPERSONATE_DIR}/curl_chrome136".freeze
+
+def install_curl_impersonate
+  puts ''
+  puts '🌀 Installing curl-impersonate...'
+  if curl_impersonate_runnable?(workspace_root)
+    puts "✅ #{CURL_IMPERSONATE_BIN} already present"
+    return
+  end
+
+  root = root_path
+  if File.expand_path(root) != File.expand_path(workspace_root) && curl_impersonate_runnable?(root)
+    FileUtils.mkdir_p(File.join(workspace_root, 'vendor'))
+    FileUtils.rm_rf(File.join(workspace_root, CURL_IMPERSONATE_DIR))
+    FileUtils.cp_r(File.join(root, CURL_IMPERSONATE_DIR), File.join(workspace_root, 'vendor'), preserve: true)
+    puts "✅ Copied #{CURL_IMPERSONATE_DIR} from root checkout"
+  else
+    system!('bin/install-curl-impersonate')
+  end
+
+  # The installer only WARNs when the binary can't run — fail setup loudly instead.
+  return if curl_impersonate_runnable?(workspace_root)
+
+  error_exit("#{CURL_IMPERSONATE_BIN} is not runnable on this host",
+             'Run bin/install-curl-impersonate manually and check its output.')
+end
+
+def curl_impersonate_runnable?(dir)
+  bin = File.join(dir, CURL_IMPERSONATE_BIN)
+  File.executable?(bin) && system(bin, '--version', out: File::NULL, err: File::NULL)
 end
 
 def prepare_databases
