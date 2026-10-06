@@ -37,7 +37,7 @@ class Apply::Component::Table < ApplyMate::Component::Base
 
     table.add_column(header: I18n.t('apply.index.table.actions'), type: :actions) do |apply|
       helpers.safe_join([
-        show_table_button(link: helpers.vacancy_path(apply.vacancy, anchor: "apply_#{apply.hashid}")),
+        show_table_button(link: helpers.vacancy_path(apply.vacancy, anchor: Apply::Component::VacancyApplyCard.anchor_id(apply))),
         delete_table_button(link: helpers.apply_path(apply), confirm: I18n.t('apply.destroy.confirm'))
       ], ' ')
     end

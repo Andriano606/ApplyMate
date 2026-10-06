@@ -14,3 +14,7 @@ end
 When('I hover over the vacancy card {string}') do |title|
   find_vacancy_card(title).hover
 end
+
+When('I click on {string} in the vacancy page navigation') do |text|
+  within("nav[aria-label='#{I18n.t('vacancy.show.nav.title')}']") { click_link(text) }
+end

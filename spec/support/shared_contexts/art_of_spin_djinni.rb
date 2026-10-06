@@ -72,6 +72,7 @@ RSpec.shared_context 'art of spin djinni' do
   # ── Misc stubs ────────────────────────────────────────────────────────────────
   before do
     allow(Apply::TurboHandler::StatusUpdate).to receive(:broadcast)
+    allow(VacancyCv::TurboHandler::Index).to receive(:broadcast)
     allow(VacancyCv::TurboHandler::Index).to receive(:broadcast_row)
     allow(VacancyQuestion::TurboHandler::Index).to receive(:broadcast)
     allow_any_instance_of(Grover).to receive(:to_pdf).and_return('%PDF-1.4 fake-pdf-content')

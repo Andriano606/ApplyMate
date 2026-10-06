@@ -8,7 +8,7 @@ class AppliesController < ApplicationController
   def show
     endpoint Apply::Operation::Show do |m|
       m.success do |result|
-        redirect_to vacancy_path(result.model.vacancy, anchor: "apply_#{result.model.hashid}")
+        redirect_to vacancy_path(result.model.vacancy, anchor: Apply::Component::VacancyApplyCard.anchor_id(result.model))
       end
     end
   end

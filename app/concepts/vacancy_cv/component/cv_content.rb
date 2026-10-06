@@ -22,6 +22,6 @@ class VacancyCv::Component::CvContent < ApplyMate::Component::Base
   end
 
   def apply_anchor
-    "#apply_#{@record.hashid}"
+    "##{Apply::Component::VacancyApplyCard.anchor_id(@record)}"
   end
 end

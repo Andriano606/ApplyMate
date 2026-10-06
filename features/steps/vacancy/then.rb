@@ -19,3 +19,16 @@ end
 Then('the vacancy description contains no {string} element') do |tag|
   expect(page).to have_no_css("#{VACANCY_DESCRIPTION} #{tag}", visible: :all)
 end
+
+def expect_vacancy_page_at(anchor)
+  expect(page).to have_current_path(vacancy_path(Vacancy.last))
+  wait_for { URI.parse(page.current_url).fragment }.to eq(anchor)
+end
+
+Then('the vacancy page is at the {string} anchor') do |anchor|
+  expect_vacancy_page_at(anchor)
+end
+
+Then('the vacancy page is at the CV of the last Apply') do
+  expect_vacancy_page_at(VacancyCv::TurboHandler::CvReady.frame_id(Apply.last))
+end

@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 # Single entry point for "a user's apply state for a vacancy changed". One [user, vacancy] stream carries
-# every per-user apply view of that vacancy: the status badge (this handler's frame), the vacancy page
-# action box (Apply::TurboHandler::ActionBox) and the applies panel (Apply::TurboHandler::VacancyIndex).
+# every per-user apply view of that vacancy: the status badge (this handler's frame, on vacancy cards and the
+# "My applies" table) and, on the vacancy page, the action box (Apply::TurboHandler::ActionBox) and the applies
+# panel (Apply::TurboHandler::VacancyIndex). The vacancy page renders no status badge.
 class Apply::TurboHandler::StatusUpdate < ApplyMate::TurboHandler::Base
   def self.stream_from(vacancy, user, view_context)
     view_context.turbo_stream_from([ user, vacancy ])

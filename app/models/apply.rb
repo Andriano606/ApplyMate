@@ -55,7 +55,8 @@ class Apply < ApplicationRecord
     where(status: :generating_cv).or(where(cv_attachment.arel.exists))
   }
 
-  # The apply a vacancy's status badge and action box describe. Rides index_applies_on_vacancy_id.
+  # The apply a vacancy card's status badge and the vacancy page's action box describe.
+  # Rides index_applies_on_vacancy_id.
   def self.latest_for(vacancy:, user:)
     where(vacancy:, user:).order(:created_at).last
   end

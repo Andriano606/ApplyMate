@@ -267,7 +267,7 @@ string so they can never describe different content:
 
 | Column | Content | Read by |
 |---|---|---|
-| `description_html` | the source's markup, kept as-is | `Vacancy::Component::InfoCard` → `ApplyMate::Component::RichText` |
+| `description_html` | the source's markup, kept as-is | `Vacancy::Component::Show` → `rich_text` → `ApplyMate::Component::RichText` |
 | `description` | plain-text projection of that markup | Elasticsearch `as_indexed_json`, AI prompts, `Vacancy::Component::Card` preview |
 
 `ApplyMate::Scraper::Base` owns both halves — never hand-roll tag stripping in a scraper:

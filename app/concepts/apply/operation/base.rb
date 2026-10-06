@@ -33,10 +33,18 @@ class Apply::Operation::Base < ApplyMate::Operation::Base
     Apply::TurboHandler::StatusUpdate.broadcast(apply)
     raise e
   ensure
-    cleanup
+    run_cleanup
   end
 
   private
+
+  # The status and error are already stored when cleanup runs; a failing cleanup (browser quit, live-update
+  # broadcast) must neither fail a finished step nor replace the step's own exception.
+  def run_cleanup
+    cleanup
+  rescue StandardError => e
+    Rails.logger.error("#{self.class} cleanup failed: #{e.class}: #{e.message}")
+  end
 
   def run!(apply:, handler:, **)
     raise NotImplementedError, "#{self.class} must define run!"

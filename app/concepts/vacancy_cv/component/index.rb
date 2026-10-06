@@ -20,8 +20,8 @@ class VacancyCv::Component::Index < ApplyMate::Component::Base
     @page_user
   end
 
-  # Manual CVs still generating get a per-item CvReady subscription; apply CVs refresh per row
-  # on the list stream (VacancyCv::TurboHandler::Index.broadcast_row).
+  # Manual CVs still generating get a per-item CvReady subscription; apply CVs refresh on the list stream
+  # (VacancyCv::TurboHandler::Index.broadcast when the placeholder appears, .broadcast_row when it resolves).
   def pending_vacancy_cvs
     @cvs.select { |record| record.is_a?(VacancyCv) && !record.cv.attached? }
   end

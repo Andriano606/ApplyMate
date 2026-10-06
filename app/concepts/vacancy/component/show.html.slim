@@ -1,7 +1,7 @@
 = header(**header_opts)
 
 - if signed_in?
-  / The one [user, vacancy] subscription: status badge, action box and applies panel all ride it.
+  / The one [user, vacancy] subscription: the action box and the applies panel ride it (no status badge here).
   = Apply::TurboHandler::StatusUpdate.stream_from(@vacancy, current_user, helpers)
 
 div(class=GRID_CLASSES)

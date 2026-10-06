@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 def last_apply_card
-  find("#apply_#{Apply.last.hashid}")
+  find("##{Apply::Component::VacancyApplyCard.anchor_id(Apply.last)}")
 end
 
 Then('I am on the vacancy page at the last Apply card') do
   apply = Apply.last
   expect(page).to have_current_path(vacancy_path(apply.vacancy))
-  expect(URI.parse(page.current_url).fragment).to eq("apply_#{apply.hashid}")
-  expect(page).to have_css("#apply_#{apply.hashid}")
+  expect(URI.parse(page.current_url).fragment).to eq(Apply::Component::VacancyApplyCard.anchor_id(apply))
+  expect(page).to have_css("##{Apply::Component::VacancyApplyCard.anchor_id(apply)}")
 end
 
 Then('the last Apply card shows status {string}') do |status|

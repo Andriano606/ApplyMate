@@ -2,23 +2,23 @@ import { Controller } from '@hotwired/stimulus';
 
 // Opens, scrolls to and marks (data-highlighted) the element a URL fragment points at:
 // - reveal (turbo:frame-load): the browser and Turbo only scroll to an anchor that exists at render time, so
-//   /vacancies/:id#apply_<hashid> would otherwise stay at the top. Runs once per element: later loads (tab
-//   switches inside the frame) and broadcast replacements must not yank the page back.
+//   /vacancies/:id#apply_<hashid> would otherwise stay at the top. Runs once per element, on the section's own
+//   lazy frame (always the first load), whether or not the hash matched: later loads (tab switches inside the
+//   frame bubble up here too) and broadcast replacements must not yank the page back.
 // - follow (hashchange@window): back/forward between in-page anchors.
 // - jump (click on an in-page link): its target sits in a collapsed <details>, and clicking the same link
 //   again fires no hashchange.
+// A section-level anchor (#vacancy-cvs, the sidebar nav) only scrolls: no item in it was asked for.
 // CSS :target never matches here (lazily inserted nodes, Turbo's pushState), hence the data attribute.
 export default class extends Controller {
   private revealed = false;
 
   reveal(): void {
     if (this.revealed) return;
+    this.revealed = true;
 
     const target = this.findTarget(window.location.hash);
-    if (!target || !this.element.contains(target)) return;
-
-    this.revealed = true;
-    this.open(target);
+    if (target && this.element.contains(target)) this.open(target);
   }
 
   follow(): void {
@@ -41,6 +41,11 @@ export default class extends Controller {
   }
 
   private open(target: HTMLElement): void {
+    if (target === this.element) {
+      target.scrollIntoView({ block: 'start' });
+      return;
+    }
+
     document
       .querySelectorAll<HTMLElement>('[data-highlighted]')
       .forEach((element) => {

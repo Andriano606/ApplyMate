@@ -31,7 +31,7 @@ class Apply::Component::StatusBadge < ApplyMate::Component::Base
     if @apply.nil?
       helpers.new_apply_path(vacancy_id: @vacancy.hashid)
     else
-      helpers.vacancy_path(@vacancy, anchor: "apply_#{@apply.hashid}")
+      helpers.vacancy_path(@vacancy, anchor: Apply::Component::VacancyApplyCard.anchor_id(@apply))
     end
   end
 end

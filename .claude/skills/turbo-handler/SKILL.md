@@ -131,7 +131,7 @@ Call `broadcast` every time the state the component displays changes — includi
 - Handler: `app/concepts/apply/turbo_handler/status_update.rb` — `broadcast(apply)` (one apply changed: badge, action box, that card via `VacancyIndex.broadcast_card`) / `refresh(vacancy, user)` (applies added/removed: badge, action box, whole panel via `VacancyIndex.broadcast`) on the same `[user, vacancy]` stream
 - Component using `frame_tag`: `app/concepts/apply/component/status_badge.html.slim`
 - `stream_from` callers:
-  - Vacancy page: `app/concepts/vacancy/component/show.html.slim` (the one subscription for badge, action box and applies panel)
+  - Vacancy page: `app/concepts/vacancy/component/show.html.slim` (the one subscription for the action box and applies panel; the status badge is on vacancy cards and the applies table, not here)
   - Index table status column: `app/concepts/apply/component/table.rb` (via `safe_join` inside `add_column`)
   - Vacancy card: `app/concepts/vacancy/component/card.html.slim`
 - Broadcast callers: `Apply::Operation::Base` on every pipeline step (start, success, failure), `Apply::Operation::Create`, `Apply::Operation::Destroy` (`refresh`)

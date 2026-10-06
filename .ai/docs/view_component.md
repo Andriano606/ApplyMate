@@ -50,7 +50,7 @@ This applies to any Rails helper: `turbo_frame_tag`, `link_to`, `image_tag`, `co
 ## Decision tree — before creating a component
 
 **Step 1 — check if it already exists.**
-Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, `rich_text`, `expandable_text`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
+Look in `app/concepts/apply_mate/component/helper.rb`. Every shared component has a helper method there (`button`, `link`, `badge`, `alert`, `accordion`, `tabs`, `turbo_form_modal`, `file_drop`, `rich_text`, etc.). If a matching helper exists, use it — do not write raw HTML or call `helpers.link_to` / `helpers.content_tag` when a component covers the use case.
 
 ```slim
 / ✅ use the helper
@@ -84,10 +84,10 @@ lean on `> * + *` and `:has()`. Enumerating tags as `[&_p]:mb-3` utilities is wh
 every unlisted tag with no spacing at all.
 
 Pass **both** description columns. `html:` is what renders; `text:` is the plain-text projection the
-component paragraph-wraps for rows scraped before `description_html` existed, and it is also what
-`expandable_text(html:, text:)` clamps into a collapsed preview — `strip_tags` puts no separator
-between blocks, so deriving the teaser from the markup would glue the last word of one paragraph
-onto the first of the next. Views guard on `Vacancy#description_present?` so both cards agree.
+component paragraph-wraps for rows scraped before `description_html` existed. Teasers (the
+`Vacancy::Component::Card` preview) read `description` too — `strip_tags` puts no separator between
+blocks, so deriving one from the markup would glue the last word of one paragraph onto the first of
+the next. The vacancy page (`Vacancy::Component::Show`) guards on `Vacancy#description_present?`.
 
 ## Shared component (reusable)
 

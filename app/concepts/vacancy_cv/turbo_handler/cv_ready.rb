@@ -2,7 +2,7 @@
 
 # Per-CV frame of VacancyCv::Component::CvContent. frame_tag accepts any CV record (VacancyCv or Apply) and
 # doubles as the "#cv_<record>" anchor; only manual VacancyCvs are broadcast here (VacancyCv::Job::Create) —
-# apply CVs refresh through VacancyCv::TurboHandler::Index.broadcast_row.
+# apply CVs refresh through VacancyCv::TurboHandler::Index (broadcast, then broadcast_row).
 class VacancyCv::TurboHandler::CvReady < ApplyMate::TurboHandler::Base
   def self.stream_from(vacancy_cv, user, view_context)
     view_context.turbo_stream_from([ user, vacancy_cv ])

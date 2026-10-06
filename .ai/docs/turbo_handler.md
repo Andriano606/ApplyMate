@@ -67,7 +67,7 @@ And inside the component template that wraps itself in the frame:
 
 ## One stream, several frames: the vacancy page
 
-Every per-user apply view of a vacancy rides the single `[user, vacancy]` stream. The vacancy page subscribes **once** (`Apply::TurboHandler::StatusUpdate.stream_from`); the other handlers' `stream_from` delegate to it and must not be called a second time on the same page.
+Every per-user apply view of a vacancy rides the single `[user, vacancy]` stream. The vacancy page subscribes **once** (`Apply::TurboHandler::StatusUpdate.stream_from`); the other handlers' `stream_from` delegate to it and must not be called a second time on the same page. The vacancy page renders the action box and the applies panel, not the status badge — `Apply::Component::StatusBadge` lives on vacancy cards (`Vacancy::Component::Card`) and in the "My applies" table (`Apply::Component::Table`), which subscribe to the same stream; a broadcast whose frame is not on the page is simply ignored.
 
 | Handler | Frame id | Component | Broadcast |
 |---|---|---|---|
@@ -79,7 +79,7 @@ Every per-user apply view of a vacancy rides the single `[user, vacancy]` stream
 
 **Live updates are as narrow as the change.** A broadcast that replaces a whole list re-renders native `<details>` (accordions) closed and tabs on their default tab, so the user's open accordions/selected tabs on *other* items reset. Replace only the item that changed; replace the whole list only when items are added or removed.
 
-The CV list (`VacancyCv::TurboHandler::Index`, stream `[user, vacancy, :vacancy_cvs]`) is separate: `broadcast(vacancy, user)` (whole list) is called by `VacancyCvsController#create` and `Apply::Operation::Destroy`; `broadcast_row(record)` (removes the row, then re-inserts it `before`/`after` its sorted neighbour; whole list only when the empty state swaps in or out) is called by `Apply::Operation::Ai::GeneratePdfCv` on start and in `cleanup`, after the final status is stored.
+The CV list (`VacancyCv::TurboHandler::Index`, stream `[user, vacancy, :vacancy_cvs]`) is separate: `broadcast(vacancy, user)` (whole list) is called by `VacancyCvsController#create`, `Apply::Operation::Destroy` and `Apply::Operation::Ai::GeneratePdfCv` on start (its placeholder row appears); `broadcast_row(record)` (replaces that row's own `cv_<record>` frame in place, or removes it; whole list only when the last row is gone and the empty state swaps in) is called by `GeneratePdfCv` in `cleanup`, after the final status is stored. Rows are never inserted relative to a sibling: if that sibling were not rendered yet (two applies starting at once), Turbo would drop the action and the list would never recover.
 
 The questions list (`VacancyQuestion::TurboHandler::Index`, stream `[user, vacancy, :vacancy_questions]`): `broadcast(vacancy, user)` is called by `VacancyQuestionsController#create`, by `Apply::Operation::FetchInternalForm` / `Apply::Operation::Ai::FetchExternalForm` (a new form brings new question suggestions) and by `Apply::Operation::Destroy`.
 

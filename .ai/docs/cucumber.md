@@ -81,6 +81,8 @@ with FactoryBot for the user logged in by `I am logged in as Andrii Kuluev`
 
 ```gherkin
 Given I have a "failed_sending_cv" apply for the last Vacancy
+Given I have a "completed" apply with a CV for the last Vacancy   # also lists it in the CV section
+Given I have a generated CV for the last Vacancy                    # a manual VacancyCv, created a day ago
 Given I have a "completed" apply for the last Vacancy with the filled form:
   | name | tag      | type     | label   | value       |
   | why  | textarea | textarea | Why us? | I love Ruby |
@@ -169,6 +171,26 @@ Then I am on the vacancy page at the last Apply card          # path + #apply_<h
 Then the last Apply card shows status "Завершено"
 Then the last Apply card shows the field "Why us?" filled with "I love Ruby"   # by aria-label
 ```
+
+### CV cards and in-page anchors on the vacancy page
+
+A CV card is `the last VacancyCv` or `the CV of the last Apply` (`features/steps/vacancy_cv/`):
+
+```gherkin
+Then I see the last VacancyCv                       # waits for the CV frame's [complete] (= its turbo:frame-load ran)
+When I click on "Резюме" in the vacancy page navigation
+Then the vacancy page is at the "vacancy-cvs" anchor
+Then the vacancy page is at the CV of the last Apply
+When I expand the last VacancyCv / When I collapse the CV of the last Apply
+When I click on "Промпт" in the last VacancyCv      # waits for the tab frame to swap in
+Then the CV of the last Apply is expanded / collapsed
+```
+
+The anchor-scroll controller opens accordions from `hashchange`, `turbo:frame-load` and
+`requestAnimationFrame` callbacks, which can still be queued when the next step runs. The toggle and
+"collapsed" steps let them run first (`settle_page`) — otherwise a negative assertion passes before
+the wrong expand happens. Wait for `Then I see the last VacancyCv` before following a link into the
+CV list, or its first frame-load may land after the click.
 
 ### Saved filter pills
 
