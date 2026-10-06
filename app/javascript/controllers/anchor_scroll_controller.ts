@@ -41,9 +41,11 @@ export default class extends Controller {
   }
 
   private open(target: HTMLElement): void {
-    document.querySelectorAll<HTMLElement>('[data-highlighted]').forEach((element) => {
-      if (element !== target) delete element.dataset.highlighted;
-    });
+    document
+      .querySelectorAll<HTMLElement>('[data-highlighted]')
+      .forEach((element) => {
+        if (element !== target) delete element.dataset.highlighted;
+      });
     target.dataset.highlighted = '';
     target.querySelector('details')?.setAttribute('open', '');
     target.scrollIntoView({ block: 'start' });
