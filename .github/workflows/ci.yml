@@ -147,7 +147,12 @@ jobs:
         env:
           RAILS_ENV: test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432
-        run: bin/rails db:create db:migrate
+        # db:migrate re-dumps db/schema.rb. The dumper swallows per-table errors
+        # (it writes "Could not dump table ..." instead), and RSpec would then reload
+        # the test DB from that broken dump — fail here with the diff instead.
+        run: |
+          bin/rails db:create db:migrate
+          git diff --exit-code -- db/schema.rb || { echo "::error file=db/schema.rb::db/schema.rb changed after db:migrate — see the diff above"; exit 1; }
 
       - name: Run RSpec
         env:
