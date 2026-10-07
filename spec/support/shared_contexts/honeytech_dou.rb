@@ -135,13 +135,4 @@ RSpec.shared_context 'honeytech dou' do
 
   # Same fields as filled_inputs but with blank values — the state before AI filling.
   let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
-
-  # ── Helper ────────────────────────────────────────────────────────────────────
-  def gemini_json_response(text)
-    {
-      status:  200,
-      body:    { candidates: [ { content: { parts: [ { text: } ] } } ] }.to_json,
-      headers: { 'Content-Type' => 'application/json' }
-    }
-  end
 end

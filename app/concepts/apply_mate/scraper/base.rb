@@ -60,6 +60,13 @@ class ApplyMate::Scraper::Base
     5
   end
 
+  # Name of the cookie that carries a logged-in session on this platform —
+  # `SourceProfile#session_id` is sent under this name. Declared per platform, like
+  # `form_selector`, so no caller hardcodes one board's cookie name.
+  def self.session_cookie_name
+    raise NotImplementedError
+  end
+
   # Plain-text projection of a description's HTML. `description_html` is what the
   # vacancy page renders; this is what Elasticsearch indexes, what the AI prompts
   # embed and what the card preview truncates — so it must be derived here, in one
@@ -92,6 +99,15 @@ class ApplyMate::Scraper::Base
 
   def form_selector
     raise NotImplementedError
+  end
+
+  # Request headers that authenticate as the user's session on this platform — the one
+  # implementation of the session-cookie header (scrapers and apply operations alike).
+  # No session → no Cookie header, so the page is fetched anonymously.
+  def session_headers(session_id)
+    return {} if session_id.blank?
+
+    { 'Cookie' => "#{self.class.session_cookie_name}=#{session_id}" }
   end
 
   private

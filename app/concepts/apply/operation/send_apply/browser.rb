@@ -65,6 +65,9 @@ class Apply::Operation::SendApply::Browser < Apply::Operation::Base
     )
   end
 
+  # The form is already submitted here. Until phase 1 (claim + submit_unverified), a verdict the
+  # model could not produce counts as success, exactly like an unparseable one
+  # (CheckSubmitResult.extract): failing would invite the user to retry and apply twice.
   def verify_submit(apply, body)
     result = ApplyMate::Ai::AiHandler.call(
       prompt_instance:       Apply::Ai::Prompt::Browser::CheckSubmitResult.new(body),
@@ -72,6 +75,8 @@ class Apply::Operation::SendApply::Browser < Apply::Operation::Base
       ai_integration:        apply.ai_integration
     )
     raise result['reason'].presence || 'Submit verification failed' unless result['success']
+  rescue ApplyMate::Ai::Client::Base::EmptyResponse => e
+    Rails.logger.warn("[#{self.class.name}] apply #{apply.id}: submit verdict unavailable, counted as sent: #{e.message}")
   end
 
   def write_cv_tempfile(apply)

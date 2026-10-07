@@ -102,6 +102,9 @@ gem 'rubyzip'
 gem 'rswag-api'
 gem 'rswag-ui'
 
+# JSON Schema validation of AI answers (ApplyMate::Ai::ResponseSchema::Json)
+gem 'json-schema'
+
 group :development, :test do
   # Load environment variables from .env
   gem 'dotenv-rails'

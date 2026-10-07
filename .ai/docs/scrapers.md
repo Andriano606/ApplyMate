@@ -4,13 +4,21 @@
 
 Scrapers live in `app/concepts/apply_mate/scraper/`. Each scraper inherits `ApplyMate::Scraper::Base` (which already `include`s `ApplyMate::Logging`) and implements:
 
-| Method | Purpose |
-|--------|---------|
-| `fetch_listing(page:)` | Makes **one** HTTP request for that page/offset. Returns array of vacancy structs, or `nil` when the page is empty. No per-vacancy HTTP calls. |
-| `fetch_description(url)` | Fetches a single vacancy's description and returns it as **HTML**. Called in the second async pass by `fetch_description_worker`. Only implemented by scrapers whose `fetches_description?` is `true`. |
-| `fetch_details(url)` | Used by the **apply flow** (not sync). Returns structured details needed to fill an application form. |
-| `fetch_applyble(url, session_id:)` | Returns `true`/`false` — can the user apply to this vacancy? |
-| `fetch_form_data(url, session_id: nil)` | Returns a hash representing the HTML application form (inputs, action, method, cookies) |
+| Method                               | Purpose                                                                                                                                                                                                        |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fetch_listing(page:)`               | Makes **one** HTTP request for that page/offset. Returns array of vacancy structs, or `nil` when the page is empty. No per-vacancy HTTP calls.                                                                 |
+| `fetch_description(url)`             | Fetches a single vacancy's description and returns it as **HTML**. Called in the second async pass by `fetch_description_worker`. Only implemented by scrapers whose `fetches_description?` is `true`.         |
+| `fetch_details(url)`                 | Used by the **apply flow** (not sync). Returns structured details needed to fill an application form.                                                                                                          |
+| `fetch_applyble(url, session_id:)`   | Returns `true`/`false` — can the user apply to this vacancy?                                                                                                                                                   |
+| `fetch_apply_type(url, session_id:)` | Returns `{ type: 'internal' \| 'external', external_url: }`, or `nil` when it can't tell.                                                                                                                      |
+| `form_selector`                      | CSS selector of the platform's own apply form (Dou `form#replied-id`, Djinni `form#apply_form`), read by `Apply::Operation::FetchInternalForm`.                                                                |
+| `self.session_cookie_name`           | **Class method, declared per platform.** Name of the cookie that carries a logged-in session (`SourceProfile#session_id`). Dou and Djinni are Django sites → `'sessionid'`. Base raises `NotImplementedError`. |
+
+Inherited from `Base`, never overridden:
+
+| Method                        | Purpose                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_headers(session_id)` | `{ 'Cookie' => "<session_cookie_name>=<session_id>" }`, or `{}` when `session_id` is blank. The **one** implementation of the session-cookie header — use it for every authenticated request (`fetch_applyble`, `fetch_apply_type`, `FetchInternalForm`'s GET) instead of building the hash inline. Callers without a scraper (`SendApply::Http`'s cookie jar) read the name via `Source#session_cookie_name`. |
 
 ### fetch_listing must stay pure
 
@@ -20,23 +28,25 @@ Scrapers live in `app/concepts/apply_mate/scraper/`. Each scraper inherits `Appl
 
 These two methods serve different callers:
 
-| | `fetch_description` | `fetch_details` |
-|---|---|---|
-| Called by | `SyncVacancies` second pass | Apply flow |
-| Purpose | Enrich vacancy description in DB | Provide form/apply details |
-| Returns | HTML string | plain text |
-| Dou | ✅ implemented | empty |
-| Djinni | not implemented | ✅ implemented |
+|           | `fetch_description`              | `fetch_details`            |
+| --------- | -------------------------------- | -------------------------- |
+| Called by | `SyncVacancies` second pass      | Apply flow                 |
+| Purpose   | Enrich vacancy description in DB | Provide form/apply details |
+| Returns   | HTML string                      | plain text                 |
+| Dou       | ✅ implemented                   | empty                      |
+| Djinni    | not implemented                  | ✅ implemented             |
 
 `fetch_description` is called **only** when the scraper's `fetches_description?` is `true`
 — `SyncVacancies` skips the whole second pass otherwise, so a source whose listing already
 carries the description (Djinni) must not define the method at all. Returning a sentinel
 string from it to make the pipeline stop is what this predicate replaced.
 
-Constructor always takes `(source, client)`:
+Constructor always takes `(source, client)` with no defaults — the client is whatever
+`klass.http_client_class.new` builds (see `Source#build_scraper` below), or the proxied client
+the sync pool hands in:
 
 ```ruby
-def initialize(source = Source.find_by(name: 'MySite'), client = ApplyMate::Client::Http.new)
+def initialize(source, client)
   @source = source
   @client = client
 end
@@ -80,12 +90,15 @@ them (see `.ai/docs/sync_vacancies.md`).
 
 ## Source#build_scraper
 
-`Source` has a `build_scraper` helper that instantiates the configured scraper with `Client::Http` (default 15s timeout). The client is always `Http` — scrapers never receive `Client::Browser`:
+`Source#build_scraper` instantiates the configured scraper with the client its class declares
+(`Scraper.http_client_class` — `AsyncHttp` by default, `ImpersonateHttp` for Dou), with the
+client's default timeouts and no proxy. Scrapers never receive `Client::Browser`:
 
 ```ruby
-scraper = source.build_scraper
-# equivalent to:
-scraper = source.scraper.constantize.new(source, ApplyMate::Client::Http.new)
+def build_scraper
+  klass = scraper.constantize
+  klass.new(self, klass.http_client_class.new)
+end
 ```
 
 Use this in operations that need a scraper from an `apply` record:
@@ -94,10 +107,15 @@ Use this in operations that need a scraper from an `apply` record:
 scraper = apply.vacancy.source.build_scraper
 ```
 
+Operations that need raw requests rather than a scraper (the apply flow fetches and POSTs the
+form) use `Source#http_client(**options)`, which builds the same class with the given options —
+e.g. `source.http_client(request_timeout: 30)` in `Apply::Operation::SendApply::Http`.
+`Source#listing_url` and `Source#session_cookie_name` delegate to the scraper class the same way.
+
 ## Cloudflare-protected sites — ImpersonateHttp (TLS fingerprint, no browser)
 
 Some sources (e.g. **Dou** = `jobs.dou.ua`) sit behind **Cloudflare**. A raw request
-(`AsyncHttp`/`Http`) gets a **403 "Just a moment…"** page regardless of HTTP headers —
+(`AsyncHttp`) gets a **403 "Just a moment…"** page regardless of HTTP headers —
 masking `Accept`/`Sec-*` does not help (measured: 22 vs 20 of 120 proxies). The discriminator
 is the **TLS/JA3 fingerprint**: Ruby's OpenSSL handshake isn't Chrome's, so Cloudflare blocks it.
 
@@ -122,84 +140,82 @@ primary path; `ApplyMate::Client::Browser` is reserved for the rare interactive 
 
 **Install:** the curl-impersonate binary is arch-specific and NOT committed. Run
 `bin/install-curl-impersonate` once per host (downloads into `vendor/curl-impersonate/`, which is
-gitignored). Override the binary path with `CURL_IMPERSONATE_BIN` (e.g. a `curl_chrome136`
-wrapper already on the host).
+gitignored). The script verifies the archive in a temp staging dir and **exits non-zero** (printing
+`ERROR: …` to stderr) when the download fails, the archive lacks `curl_chrome136`, or
+`curl_chrome136 --version` does not run on this host; a failed run never overwrites a working
+install. The Dockerfile runs it in the build stage, so an unusable binary **fails the image build**.
+Overrides: `CURL_IMPERSONATE_VERSION` (release tag, default `v1.5.6`), `CURL_IMPERSONATE_DEST`
+(install dir, default `vendor/curl-impersonate`; used by `spec/bin/install_curl_impersonate_spec.rb`),
+and — read by the client, not the script — `CURL_IMPERSONATE_BIN` (e.g. a `curl_chrome136` wrapper
+already on the host).
 
 **Concurrency:** `ImpersonateHttp` shells out via `Open3`, but the `async` reactor hooks
 `process_wait`, so a fiber **yields** while its curl subprocess runs — 8 concurrent requests
-measured 0.07s vs 0.46s sequential. So it cooperates with the existing **50-fiber** model in
-`SyncVacancies`; no thread pool is needed. A source selects its client via
+measured 0.07s vs 0.46s sequential. So it cooperates with the fiber model in
+`Vacancy::Operation::SyncVacancies` — `WORKERS_PER_SOURCE = 100` listing fibers and
+`DESCRIPTION_WORKERS = 140` detail fibers per source (see `.ai/docs/sync_vacancies.md`); no
+thread pool is needed. A source selects its client via
 `Scraper.http_client_class` (Dou → `ImpersonateHttp`, default → `AsyncHttp`); both share the
 `(proxy:, request_timeout:, connect_timeout:)` constructor, so the pool/workers build either one
 interchangeably.
 
 ## SyncVacancies job dispatch
 
-`Vacancy::Operation::SyncVacancies` calls `fetch_listing(page:)` per worker, treating `nil` as the stop signal:
-
-```ruby
-listing = scraper.fetch_listing(page: page)
-
-if listing&.any?
-  sync_vacancies_batch(listing, source)
-  all_external_ids.concat(listing.map(&:external_id))
-else
-  pages_queue.clear   # signals all other workers to stop
-  break
-end
-```
+`Vacancy::Operation::SyncVacancies` calls `fetch_listing(page:)` from its listing fibers and
+treats `nil` as a _candidate_ last page, confirmed `LAST_PAGE_CONFIRMATIONS` times before the
+boundary narrows; a `DeadProxyError` re-queues the same page on another proxy. The full flow
+(fiber counts, stop conditions, boundary narrowing) is in `.ai/docs/sync_vacancies.md`.
 
 `Source::SCRAPERS` lists allowed class name strings. Add the new class there and add a migration to backfill existing rows.
 
 ## Adding a new scraper
 
 1. Create `app/concepts/apply_mate/scraper/my_site.rb` inheriting `ApplyMate::Scraper::Base`
+   — implement the methods table above, including `self.session_cookie_name` and, for a
+   Cloudflare-protected site, `self.http_client_class`
 2. Add `'ApplyMate::Scraper::MySite'` to `Source::SCRAPERS` in `app/models/source.rb`
 3. Add migration: `add_column :sources, :scraper, :string` (if not yet present) + backfill migration
 4. Update the admin form select (uses `Source::SCRAPERS` collection)
 
-## ApplyMate::Client::Http API
+## HTTP clients
 
-All methods use the shared connection (browser User-Agent, follow redirects, 15s timeout). Requests fail fast — there is no internal retrying.
+Two interchangeable HTTP clients live in `app/concepts/apply_mate/client/`; a scraper's
+`http_client_class` picks one. Both include `ApplyMate::Client::Multipart` and return the shared
+`ApplyMate::Client::Response` struct, so callers never branch on the transport.
 
-Returns a `Response` struct: `.body`, `.headers`, `.status`.
-
-```ruby
-client = ApplyMate::Client::Http.new
-
-# GET — returns Response or nil on redirect to unexpected URL
-response = client.get(url)
-response = client.get(url, headers: { 'Cookie' => '...' })
-
-# GET — follow redirects (skips the nil-on-redirect guard)
-# Use when the target URL is expected to redirect (e.g. external employer apply pages)
-response = client.get(url, follow_redirects: true)
-
-# Convenience: GET body only
-body = client.fetch_body(url)
-
-# POST — returns Response
-response = client.post(url, body: form_encoded_string, headers: {})
-
-# Convenience: POST body only (for XHR endpoints)
-body = client.post_xhr(url, URI.encode_www_form(count: 0), xhr_headers)
-```
-
-`get` returns `nil` (body is `nil`) if the server redirects to a different URL than requested — log and skip rather than raise. Pass `follow_redirects: true` to bypass this guard when redirects are expected (e.g. `Apply::Operation::Ai::FetchExternalForm`).
-
-`Response` also has `success?` which returns true for 2xx status codes.
+| Client                               | Transport                                                                           | Used by                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `ApplyMate::Client::AsyncHttp`       | pure Ruby sockets inside the `async` reactor (HTTP/SOCKS5 proxy tunnels, DNS cache) | default (`Scraper::Base.http_client_class`) — Djinni |
+| `ApplyMate::Client::ImpersonateHttp` | forks `curl-impersonate` (Chrome TLS fingerprint) via `Open3`                       | Cloudflare-protected sources — Dou                   |
 
 ```ruby
-# Multipart POST without redirect-following — use for form submissions where
-# you need to inspect 3xx responses yourself (e.g. to detect apply success).
-# File parts: use Faraday::Multipart::FilePart in the payload hash.
-client = ApplyMate::Client::Http.new(timeout: 30)
-response = client.post_multipart(url, payload: { field: 'value', file_field: file_part }, headers: { 'Cookie' => '...' })
-response.success?        # true for 2xx
-response.status          # Integer
-response.headers         # Hash (check 'location' for redirects)
-response.body            # String
+client = source.http_client                         # or klass.http_client_class.new(...)
+client = ApplyMate::Client::AsyncHttp.new(proxy: nil, request_timeout: 15, connect_timeout: 5)
+
+response = client.get(url, headers: {}, follow_redirects: true)    # redirects followed by default
+response = client.post(url, body: form_encoded_string, headers: {}) # always follows redirects
+response = client.post_multipart(url, payload: { field: 'value', file_field: file_part }, headers: {})
+                                                   # never follows redirects — inspect the 3xx yourself
+
+response.body       # String
+response.headers    # Hash, lower-case keys; 'set-cookie' may be an Array
+response.status     # Integer
+response.final_url  # AsyncHttp: URL of the last hop after followed redirects; ImpersonateHttp: the request URL
+response.cloudflare_challenge?   # body carries a "Just a moment…" marker
 ```
+
+- Constructor: both take `(proxy:, request_timeout:, connect_timeout:)`; defaults are 15 s /
+  5 s and no proxy.
+- Failures: requests fail fast with no internal retry. `AsyncHttp` returns `nil` when the
+  proxy tunnel or TLS handshake is refused or no status line arrives, and raises on connect
+  errors and on timeout (`Async::TimeoutError`). `ImpersonateHttp` raises
+  `ImpersonateHttp::RequestError` when curl exits non-zero. Scrapers wrap sync-path calls in
+  `via_proxy`, which turns all of these into `DeadProxyError`.
+- Multipart: file parts are any object responding to `read`, `original_filename` and
+  `content_type`.
+
+Fiber/timeout semantics, the `Protocol::HTTP::Headers` gotchas and error-handler compatibility
+are in `.ai/docs/async.md`.
 
 ## CSRF session init pattern (DOU-style XHR scrapers)
 
@@ -207,9 +223,10 @@ Some sites require a CSRF token extracted from cookies before XHR requests will 
 
 ```ruby
 def initialize_session
-  response = @client.get(VACANCIES_URL)
-  csrf_match = response&.headers&.[]('set-cookie').to_s.match(/csrftoken=([^;,\s]+)/)
+  response    = via_proxy { @client.get(VACANCIES_URL) }
+  csrf_match  = Array(response.headers['set-cookie']).join('; ').match(/csrftoken=([^;,\s]+)/)
   @csrf_token = csrf_match&.[](1)
+  raise DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
 end
 
 def xhr_headers
@@ -228,7 +245,7 @@ Call `initialize_session` at the top of `fetch_listing` (not in the constructor)
 If CSRF extraction fails (proxy served a captcha), raise `DeadProxyError` immediately — continuing with a nil token causes every subsequent request to fail silently:
 
 ```ruby
-raise ApplyMate::Client::Base::DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
+raise DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
 ```
 
 ## Proxy-blocked responses — raise DeadProxyError
@@ -241,7 +258,7 @@ When a proxy is blocked the site returns HTML instead of expected content. Two g
 begin
   data = JSON.parse(body)
 rescue JSON::ParserError
-  raise ApplyMate::Client::Base::DeadProxyError, 'non-JSON response (proxy blocked)'
+  raise DeadProxyError, 'non-JSON response (proxy blocked)'
 end
 ```
 
@@ -265,10 +282,10 @@ Never call `Rails.logger` directly inside a scraper.
 A vacancy description is stored twice, and a scraper must produce both from the **same**
 string so they can never describe different content:
 
-| Column | Content | Read by |
-|---|---|---|
-| `description_html` | the source's markup, kept as-is | `Vacancy::Component::Show` → `rich_text` → `ApplyMate::Component::RichText` |
-| `description` | plain-text projection of that markup | Elasticsearch `as_indexed_json`, AI prompts, `Vacancy::Component::Card` preview |
+| Column             | Content                              | Read by                                                                         |
+| ------------------ | ------------------------------------ | ------------------------------------------------------------------------------- |
+| `description_html` | the source's markup, kept as-is      | `Vacancy::Component::Show` → `rich_text` → `ApplyMate::Component::RichText`     |
+| `description`      | plain-text projection of that markup | Elasticsearch `as_indexed_json`, AI prompts, `Vacancy::Component::Card` preview |
 
 `ApplyMate::Scraper::Base` owns both halves — never hand-roll tag stripping in a scraper:
 
@@ -285,7 +302,7 @@ text = self.class.to_plain_text(html)
 Scope the node to the description **body**, not the page wrapper: once the result is rendered
 as markup rather than flattened to text, share widgets, tracking scripts and reply buttons
 show up as visible noise (Dou: `div.b-typo.vacancy-section`, not `div.l-vacancy`). If a scraper
-also prepends a node from *outside* that scope (Dou's `div.sh-info`), do it only on the narrow
+also prepends a node from _outside_ that scope (Dou's `div.sh-info`), do it only on the narrow
 branch — on the wrapper fallback that node is already inside the markup.
 
 Storing markup is safe because nothing renders it directly — `ApplyMate::Component::RichText`

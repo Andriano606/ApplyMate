@@ -31,7 +31,7 @@ servers:
       - 192.168.50.155
     options:
       ulimit:
-        - "nofile=65536:65536"
+        - 'nofile=65536:65536'
 
   worker:
     hosts:
@@ -39,14 +39,31 @@ servers:
     cmd: bin/jobs
     options:
       ulimit:
-        - "nofile=65536:65536"
+        - 'nofile=65536:65536'
     env:
       clear:
-        SQ_QUEUES: "*"
-        SQ_POLLING_INTERVAL: "1"
-        SQ_PROCESSES: "4"
-        SQ_THREADS: "2"
+        SQ_ROLE: general
+        SQ_PROCESSES: '3'
+        SQ_THREADS: '2'
+        SQ_POLLING_INTERVAL: '1'
 
+  # Browser/AI jobs (queue :apply). APPLY_SLOTS is the single source for the apply
+  # worker's thread count (and, from phase 2, browserd MAX_BROWSERS).
+  apply_worker:
+    hosts:
+      - 192.168.50.155
+    cmd: bin/jobs
+    options:
+      memory: 3g
+      memory-swap: 3g
+      shm-size: 512m
+      ulimit:
+        - 'nofile=65536:65536'
+    env:
+      clear:
+        SQ_ROLE: apply
+        APPLY_SLOTS: '3'
+        SQ_POLLING_INTERVAL: '1'
 
 registry:
   username: andriano606
@@ -65,7 +82,7 @@ env:
     SOLID_QUEUE_IN_PUMA: false
     # Accessory container name = {service}-db (used by web + worker on RPi via Docker network).
     DB_HOST: apply_mate_staging-db
-    DB_PORT: "5432"
+    DB_PORT: '5432'
     RAILS_LOG_LEVEL: info
     WEB_CONCURRENCY: 2
     RAILS_MAX_THREADS: 2
@@ -83,7 +100,7 @@ accessories:
     image: postgres:17
     host: 192.168.50.155
     # External port 5434 avoids conflict with print_mate_staging-db on 5433.
-    port: "5434:5432"
+    port: '5434:5432'
     env:
       clear:
         POSTGRES_USER: apply_mate
@@ -102,8 +119,8 @@ accessories:
     # Offset by 2 from default to avoid conflict with print_mate_staging-minio on 9000/9001.
     options:
       publish:
-        - "9002:9000"
-        - "9003:9001"
+        - '9002:9000'
+        - '9003:9001'
     cmd: server /data --console-address ":9001"
     env:
       secret:
@@ -117,13 +134,13 @@ accessories:
     host: 192.168.50.155
     # External port 9201 avoids conflict if another app uses 9200.
     # App containers reach ES via Docker network on the internal port 9200.
-    port: "9201:9200"
+    port: '9201:9200'
     env:
       clear:
         discovery.type: single-node
-        xpack.security.enabled: "false"
+        xpack.security.enabled: 'false'
         # Kept low for RPi — raise to 512m/512m if you have headroom.
-        ES_JAVA_OPTS: "-Xms256m -Xmx256m"
+        ES_JAVA_OPTS: '-Xms256m -Xmx256m'
     directories:
       - data:/usr/share/elasticsearch/data
 
@@ -131,21 +148,21 @@ accessories:
     image: andriano606/apply_mate_chrome_vnc:latest
     host: 192.168.50.155
     options:
-      shm-size: "2gb"
+      shm-size: '2gb'
       security-opt: seccomp:unconfined
       # network-alias gives the container a valid RFC hostname (no underscores)
       # so Ruby's URI.join can parse it. Default CHROME_HOST='chrome-vnc' works as-is.
       network-alias: chrome-vnc
       publish:
-        - "6081:6080"   # noVNC web UI
-        - "5901:5900"   # VNC (RealVNC / TigerVNC)
-        - "9222:9222"   # Chrome DevTools Protocol
+        - '6081:6080' # noVNC web UI
+        - '5901:5900' # VNC (RealVNC / TigerVNC)
+        - '9222:9222' # Chrome DevTools Protocol
     env:
       clear:
-        SCREEN_WIDTH: "1920"
-        SCREEN_HEIGHT: "1080"
-        SCREEN_DEPTH: "24"
-        VNC_PASSWORD: ""
+        SCREEN_WIDTH: '1920'
+        SCREEN_HEIGHT: '1080'
+        SCREEN_DEPTH: '24'
+        VNC_PASSWORD: ''
 
   # ---- Observability stack: Loki + Promtail + Grafana ----
   # Other Kamal-managed containers reach Loki via the internal Docker network
@@ -161,7 +178,7 @@ accessories:
     # Run as root because Kamal's bind-mount host dir is owned by the SSH
     # user (andrii), and Loki's default UID 10001 can't write to it.
     options:
-      user: "0"
+      user: '0'
 
   # Promtail scrapes Docker container logs (Rails web + worker write to STDOUT;
   # captured by Docker's json-file driver) and forwards them to Loki.
@@ -176,22 +193,22 @@ accessories:
     directories:
       - positions:/tmp/positions
     options:
-      user: "root"
+      user: 'root'
       volume:
-        - "/var/run/docker.sock:/var/run/docker.sock:ro"
-        - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
+        - '/var/run/docker.sock:/var/run/docker.sock:ro'
+        - '/var/lib/docker/containers:/var/lib/docker/containers:ro'
 
   # Grafana UI on host port 3001. Anonymous Admin access — keep this server
   # off the public internet, or put it behind auth / reverse proxy.
   grafana:
     image: grafana/grafana:11.0.0
     host: 192.168.50.155
-    port: "3001:3000"
+    port: '3001:3000'
     env:
       clear:
-        GF_AUTH_ANONYMOUS_ENABLED: "true"
-        GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
-        GF_AUTH_DISABLE_LOGIN_FORM: "true"
+        GF_AUTH_ANONYMOUS_ENABLED: 'true'
+        GF_AUTH_ANONYMOUS_ORG_ROLE: 'Admin'
+        GF_AUTH_DISABLE_LOGIN_FORM: 'true'
     files:
       - docker/grafana/provisioning/dashboards/applymate.yml:/etc/grafana/provisioning/dashboards/applymate.yml
       - docker/grafana/provisioning/dashboards/sync_vacancies.json:/etc/grafana/provisioning/dashboards/sync_vacancies.json
@@ -202,4 +219,4 @@ accessories:
     # Run as root because Kamal's bind-mount host dir is owned by the SSH
     # user (andrii), and Grafana's default UID 472 can't write to it.
     options:
-      user: "0"
+      user: '0'

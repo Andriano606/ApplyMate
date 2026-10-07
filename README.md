@@ -2,46 +2,48 @@
 
 ## Local Development
 
-| Service        | URL                        | Notes                        |
-|----------------|----------------------------|------------------------------|
-| App            | http://localhost:3000      |                              |
-| MinIO API      | http://localhost:9000      | S3-compatible endpoint       |
-| MinIO Console  | http://localhost:9001      | user: minioadmin / minioadmin |
+| Service       | URL                   | Notes                         |
+| ------------- | --------------------- | ----------------------------- |
+| App           | http://localhost:3000 |                               |
+| MinIO API     | http://localhost:9000 | S3-compatible endpoint        |
+| MinIO Console | http://localhost:9001 | user: minioadmin / minioadmin |
 
 ## Deployment
 
 Deployed via [Kamal](https://kamal-deploy.org/).
 
-| Environment       | URL                                                         | Notes                          |
-|-------------------|-------------------------------------------------------------|--------------------------------|
-| localhost (Caddy) | https://dev.applymate.io                                    |                                |
-| Staging (public)  | https://staging.beapply.xyz                                 | Via Cloudflare Tunnel, SSL     |
-| Staging (local)   | http://staging.applymate.local                              | Requires `/etc/hosts` entry    |
+| Environment       | URL                            | Notes                       |
+| ----------------- | ------------------------------ | --------------------------- |
+| localhost (Caddy) | https://dev.applymate.io       |                             |
+| Staging (public)  | https://staging.beapply.xyz    | Via Cloudflare Tunnel, SSL  |
+| Staging (local)   | http://staging.applymate.local | Requires `/etc/hosts` entry |
 
 ### Staging infrastructure
 
-| Role       | Host           | Description                                           |
-|------------|----------------|-------------------------------------------------------|
-| `web`      | 192.168.50.155 | Puma (Raspberry Pi 5, arm64)                          |
-| `worker`   | 192.168.50.155  | Solid Queue — всі черги                               |
+| Role           | Host           | Description                                                           |
+| -------------- | -------------- | --------------------------------------------------------------------- |
+| `web`          | 192.168.50.155 | Puma (Raspberry Pi 5, arm64)                                          |
+| `worker`       | 192.168.50.155 | Solid Queue — черга default (`SQ_ROLE=general`)                       |
+| `apply_worker` | 192.168.50.155 | Solid Queue — черга apply, threads = `APPLY_SLOTS` (браузер/AI-джоби) |
 
 ### Staging accessory URLs
 
-| Accessory      | URL                                                               | Notes                          |
-|----------------|-------------------------------------------------------------------|--------------------------------|
-| App (public)   | [https://staging.beapply.xyz](https://staging.beapply.xyz)       | Via Cloudflare Tunnel          |
-| App (local)    | [http://staging.applymate.local](http://staging.applymate.local) | Requires `/etc/hosts` entry    |
-| PostgreSQL     | `192.168.50.155:5434`                                             | No web UI                      |
-| MinIO S3 API   | [http://192.168.50.155:9002](http://192.168.50.155:9002)           | S3-compatible endpoint         |
-| MinIO Console  | [http://192.168.50.155:9003](http://192.168.50.155:9003)           | Web UI for bucket management   |
-| Elasticsearch  | [http://192.168.50.155:9201](http://192.168.50.155:9201)           | REST API                       |
-| Chrome noVNC   | [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html) | Browser-based VNC UI  |
-| Chrome VNC     | `192.168.50.155:5901`                                             | VNC client (RealVNC/TigerVNC)  |
-| Chrome CDP     | `192.168.50.155:9222`                                             | Chrome DevTools Protocol       |
+| Accessory     | URL                                                                        | Notes                         |
+| ------------- | -------------------------------------------------------------------------- | ----------------------------- |
+| App (public)  | [https://staging.beapply.xyz](https://staging.beapply.xyz)                 | Via Cloudflare Tunnel         |
+| App (local)   | [http://staging.applymate.local](http://staging.applymate.local)           | Requires `/etc/hosts` entry   |
+| PostgreSQL    | `192.168.50.155:5434`                                                      | No web UI                     |
+| MinIO S3 API  | [http://192.168.50.155:9002](http://192.168.50.155:9002)                   | S3-compatible endpoint        |
+| MinIO Console | [http://192.168.50.155:9003](http://192.168.50.155:9003)                   | Web UI for bucket management  |
+| Elasticsearch | [http://192.168.50.155:9201](http://192.168.50.155:9201)                   | REST API                      |
+| Chrome noVNC  | [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html) | Browser-based VNC UI          |
+| Chrome VNC    | `192.168.50.155:5901`                                                      | VNC client (RealVNC/TigerVNC) |
+| Chrome CDP    | `192.168.50.155:9222`                                                      | Chrome DevTools Protocol      |
 
 ### Prerequisites
 
 Add to `/etc/hosts` on your machine (for local access):
+
 ```
 192.168.50.155 staging.applymate.local
 ```
@@ -50,12 +52,12 @@ Add to `/etc/hosts` on your machine (for local access):
 
 Staging is publicly accessible via a named Cloudflare Tunnel — no port forwarding required.
 
-| What               | Value                                              |
-|--------------------|----------------------------------------------------|
-| Domain             | `staging.beapply.xyz` (DNS managed by Cloudflare) |
-| Tunnel name        | `apply-mate-staging`                               |
+| What               | Value                                                                        |
+| ------------------ | ---------------------------------------------------------------------------- |
+| Domain             | `staging.beapply.xyz` (DNS managed by Cloudflare)                            |
+| Tunnel name        | `apply-mate-staging`                                                         |
 | Tunnel credentials | `/home/andrii/.cloudflared/19a80cfc-968d-48cc-9197-9494e6b1071a.json` on RPi |
-| Config             | `/etc/cloudflared/config.yml` on RPi               |
+| Config             | `/etc/cloudflared/config.yml` on RPi                                         |
 
 The `cloudflared` daemon runs as a systemd service on the RPi and maintains 4 persistent connections to Cloudflare edge (Warsaw). SSL is handled automatically by Cloudflare.
 
@@ -160,6 +162,7 @@ ssh andrii@192.168.50.155 "sudo ufw allow from 192.168.31.0/24 to any port 9002 
 ```
 
 **Доступ:**
+
 - S3 API: `http://192.168.50.155:9002`
 - Веб-консоль: `http://192.168.50.155:9003`
 
@@ -169,6 +172,7 @@ Chrome з VNC-доступом для автоматизації та дебаг
 Dockerfile: `docker/chrome_vnc/Dockerfile`.
 
 Архітектура всередині контейнера:
+
 - **Xvfb** — віртуальний дисплей
 - **Fluxbox** — мінімальний window manager
 - **x11vnc** — VNC-сервер (порт 5900)
@@ -198,6 +202,7 @@ bin/kamal accessory boot chrome_vnc -d staging
 ```
 
 **Доступ:**
+
 - noVNC (веб): [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html)
 - VNC клієнт: `192.168.50.155:5901`
 - Chrome CDP: `192.168.50.155:9222`
@@ -225,12 +230,13 @@ EDITOR=nano bin/rails credentials:edit --environment staging
 ```
 
 Expected structure:
+
 ```yaml
 kamal:
   registry_password: your_docker_hub_access_token
   postgres_password: your_secure_db_password
 
-secret_key_base: your_secret_key_base  # generate with: bin/rails secret
+secret_key_base: your_secret_key_base # generate with: bin/rails secret
 
 google:
   client_id: your_google_client_id
@@ -238,14 +244,16 @@ google:
 
 # Staging only
 minio:
-  access_key_id: your_minio_user      # мінімум 3 символи
-  secret_access_key: your_minio_pass  # мінімум 8 символів
+  access_key_id: your_minio_user # мінімум 3 символи
+  secret_access_key: your_minio_pass # мінімум 8 символів
 ```
 
 > Keep `config/credentials/staging.key` in a password manager — without it the credentials cannot be decrypted.
 
 ### Running in SSL mode in development
+
 The benefits of running in SSL mode are:
+
 1. You run closer to what we do in production
 2. You get the benefit of http2.
 3. Some features only work over SSL such as using javascript to access the clipboard (copy/paste)
@@ -253,25 +261,30 @@ The benefits of running in SSL mode are:
 You need to have Caddy installed, eg with `brew install Caddy`
 
 Put the following line in `/etc/hosts`:
+
 ```
 127.0.0.1       dev.applymate.io
 ```
 
 Then run Caddy:
+
 ```bash
 caddy run --config config/Caddyfile.dev
 ```
+
 (this is also in Procfile.dev, so it should be automatically run with `bin/dev`)
 
 The first time you should probably run it manually, since it will then request some root privileges to install
 necessary root certificates locally.
 
 **Trust the Caddy local CA:**
+
 ```bash
 caddy trust
 ```
 
 **Chrome on Linux** uses its own NSS database and requires an extra step:
+
 ```bash
 # Install certutil if needed
 sudo apt install libnss3-tools
@@ -287,4 +300,3 @@ certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "Caddy Local Authority" \
 Then fully restart Chrome (`chrome://restart`).
 
 You can now access your local instance using https://dev.applymate.io
-

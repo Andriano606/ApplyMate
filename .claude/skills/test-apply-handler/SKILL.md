@@ -36,7 +36,7 @@ spec/fixtures/files/dou/external/honeytech/
 
 One file per `(source, company)` pair. Keep URL constants in a companion **module** (not inside the `shared_context` block) — constants defined inside `RSpec.describe` blocks are hoisted to `Object` and clash across files.
 
-```ruby
+````ruby
 # spec/support/shared_contexts/honeytech_dou.rb
 module HoneytechDou
   FIXTURES_DIR    = Rails.root.join('spec/fixtures/files/dou/external/honeytech')
@@ -117,17 +117,10 @@ RSpec.shared_context 'honeytech dou' do
     ]
   end
   let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
-
-  # ── Helper ────────────────────────────────────────────────────────────────
-  def gemini_json_response(text)
-    { status: 200,
-      body: { candidates: [{ content: { parts: [{ text: }] } }] }.to_json,
-      headers: { 'Content-Type' => 'application/json' } }
-  end
 end
-```
+````
 
-`spec/support/**/*.rb` is auto-required by `rails_helper.rb` — no explicit require needed.
+`spec/support/**/*.rb` is auto-required by `rails_helper.rb` — no explicit require needed. `gemini_json_response(text, usage: nil)` (and `ollama_chat_response`) come from `spec/support/ai_responses.rb`, included in every spec — do not redefine them in the shared context.
 
 ## Step 3 — Full-pipeline handler spec
 

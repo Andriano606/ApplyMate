@@ -1,6 +1,21 @@
 # frozen_string_literal: true
 
-class Apply::Ai::ResponseSchema::Browser::CheckSubmitResult < ApplyMate::Ai::ResponseSchema::Base
+class Apply::Ai::ResponseSchema::Browser::CheckSubmitResult < ApplyMate::Ai::ResponseSchema::Json
+  def self.kind
+    :verify
+  end
+
+  def self.json_schema
+    {
+      type:       'object',
+      required:   %w[success reason],
+      properties: {
+        success: { type: 'boolean' },
+        reason:  { type: 'string' }
+      }
+    }
+  end
+
   def self.format_instructions
     <<~INSTRUCTIONS
       Return a JSON object with exactly two keys:
@@ -11,16 +26,13 @@ class Apply::Ai::ResponseSchema::Browser::CheckSubmitResult < ApplyMate::Ai::Res
     INSTRUCTIONS
   end
 
+  # Deliberately lenient until phase 1 (design §15 rows 0/1): an unusable verdict still counts as
+  # success. A client EmptyResponse (no text at all) gets the same treatment in
+  # Apply::Operation::SendApply::Browser#verify_submit. Phase 1 replaces both with
+  # claim + submit_unverified, and this override goes away.
   def self.extract(raw_response)
-    return { 'success' => true, 'reason' => 'No AI response' } if raw_response.blank?
-
-    match    = raw_response.match(/```json\s+(.*?)\s+```/m)
-    json_str = match ? match[1] : raw_response
-    json_str = json_str.match(/(\{.*\})/m)&.[](0) || json_str
-
-    JSON.parse(json_str).with_indifferent_access
-  rescue StandardError => e
-    Rails.logger.error("CheckSubmitResult schema parse error: #{e.message}")
-    { 'success' => true, 'reason' => 'Could not parse AI response' }
+    super
+  rescue InvalidResponse
+    { 'success' => true, 'reason' => 'Could not parse AI response' }.with_indifferent_access
   end
 end

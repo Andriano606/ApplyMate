@@ -75,13 +75,4 @@ RSpec.shared_context 'coidea dou' do
     allow(VacancyQuestion::TurboHandler::Index).to receive(:broadcast)
     allow_any_instance_of(Grover).to receive(:to_pdf).and_return('%PDF-1.4 fake-pdf-content')
   end
-
-  # ── Helper ────────────────────────────────────────────────────────────────────
-  def gemini_json_response(text)
-    {
-      status:  200,
-      body:    { candidates: [ { content: { parts: [ { text: } ] } } ] }.to_json,
-      headers: { 'Content-Type' => 'application/json' }
-    }
-  end
 end

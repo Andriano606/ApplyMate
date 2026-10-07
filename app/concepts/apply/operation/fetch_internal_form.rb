@@ -18,7 +18,7 @@ class Apply::Operation::FetchInternalForm < Apply::Operation::Base
     session_id = apply.source_profile&.session_id
     url        = apply.vacancy.url
 
-    headers  = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
+    headers  = scraper.session_headers(session_id)
     # The source's own client — Cloudflare-protected boards (Dou) need the Chrome TLS
     # fingerprint here too; plain AsyncHttp gets a 403 challenge page instead of the form.
     response = apply.vacancy.source.http_client.get(url, headers:, follow_redirects: true)

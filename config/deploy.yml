@@ -14,7 +14,7 @@ builder:
 
 # Persistent storage for Active Storage files.
 volumes:
-  - "apply_mate_storage:/rails/storage"
+  - 'apply_mate_storage:/rails/storage'
 
 # Bridge fingerprinted assets between versions.
 asset_path: /rails/public/assets
@@ -24,7 +24,6 @@ env:
   clear:
     WEB_CONCURRENCY: 3
     RAILS_MAX_THREADS: 3
-    JOB_CONCURRENCY: 2
 
 # Aliases are triggered with "bin/kamal <alias>".
 aliases:

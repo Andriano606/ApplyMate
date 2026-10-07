@@ -49,3 +49,7 @@
 # Ignore Docker-related files
 /.dockerignore
 /Dockerfile*
+
+# Ignore a host-installed curl-impersonate: it is arch-specific, and the image
+# downloads and verifies its own copy via bin/install-curl-impersonate.
+/vendor/curl-impersonate/

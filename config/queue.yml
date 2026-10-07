@@ -1,16 +1,35 @@
+# SQ_ROLE selects which workers this process starts: general | apply | all (dev default: all).
+# SQ_ROLE and APPLY_SLOTS are read only through Apply::Operation::AssertQueueTopology.role /
+# .apply_slots, which raise on an unknown role or a non-positive slot count.
+#   general - worker on [default] only        (Kamal role `worker`)
+#   apply   - worker on [apply] only          (Kamal role `apply_worker`)
+#   all     - both workers in one supervisor  (dev, Conductor)
+# The general worker NEVER lists '*': Solid Queue has no exclusion syntax, so '*'
+# would drain the apply queue past APPLY_SLOTS. Checked at boot by
+# Apply::Operation::AssertQueueTopology (see .ai/docs/architecture.md, "Queue topology").
+#
+# ERB control tags sit inside YAML comments on purpose: ERB still evaluates them
+# (leaving an empty `#` comment behind), while the raw file stays valid YAML for
+# prettier. Only `<%= %>` output tags may appear in value position.
+# <% role = Apply::Operation::AssertQueueTopology.role %>
 default: &default
   dispatchers:
     - polling_interval: 1
       batch_size: 500
       finished_jobs_retention: 1.day
   workers:
-    # Queue(s) and polling interval are injected per-role via Kamal env.
-    # worker role:        SQ_QUEUES=default,          SQ_POLLING_INTERVAL=1
-    # render_worker role: SQ_QUEUES=heavy_processing,default  SQ_POLLING_INTERVAL=5
-    - queues: <%= ENV.fetch('SQ_QUEUES', '*').split(',') %>
-      threads: <%= ENV.fetch("SQ_THREADS", 2) %>
-      processes: <%= ENV.fetch("SQ_PROCESSES", 2) %>
-      polling_interval: <%= ENV.fetch("SQ_POLLING_INTERVAL", 0.1) %>
+    # <% if role != 'apply' %>
+    - queues: [default]
+      threads: <%= ENV.fetch('SQ_THREADS', 2) %>
+      processes: <%= ENV.fetch('SQ_PROCESSES', 2) %>
+      polling_interval: <%= ENV.fetch('SQ_POLLING_INTERVAL', 0.1) %>
+    # <% end %>
+    # <% if role != 'general' %>
+    - queues: [apply]
+      threads: <%= Apply::Operation::AssertQueueTopology.apply_slots %>
+      processes: 1
+      polling_interval: 1
+    # <% end %>
 
 development:
   <<: *default

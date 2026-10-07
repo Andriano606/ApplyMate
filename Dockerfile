@@ -21,7 +21,7 @@ RUN apt-get update -qq && \
     ln -s /usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Set production environment variables and enable jemalloc for reduced memory usage and latency.
@@ -73,8 +73,10 @@ RUN bundle exec bootsnap precompile -j 1 app/ lib/
 RUN bun run build:css && bun run build
 RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 
-
-RUN rm -rf node_modules
+# Grover resolves puppeteer-core from process.cwd() (/rails/node_modules), so ship the
+# pinned production dependencies. `bun install --production` does not prune an existing
+# node_modules, hence the rm: reinstall from the lockfile without devDependencies.
+RUN rm -rf node_modules && bun install --frozen-lockfile --production
 
 
 # Final stage for app image
@@ -87,9 +89,6 @@ RUN groupadd --system --gid 1000 rails && \
 # Copy built artifacts: gems, application
 COPY --chown=rails:rails --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --chown=rails:rails --from=build /rails /rails
-
-# Install puppeteer locally so Grover can find it via require('puppeteer')
-RUN cd /rails && npm install puppeteer && chown -R rails:rails node_modules
 
 USER 1000:1000
 

@@ -4,13 +4,13 @@
 
 All specs with `type: :operation` automatically include the `"with shared operation spec variables"` context (wired in `spec/rails_helper.rb`). This provides:
 
-| `let` | Default | Description |
-|-------|---------|-------------|
-| `operation` | `described_class.new(params:, current_user:)` | Operation instance |
-| `result` | `operation.tap(&:call).result` | Result after calling |
-| `model` | `result.model` | Shorthand for the result model |
-| `params` | `{}` | Override per example/context |
-| `current_user` | `nil` | Override with a real user |
+| `let`          | Default                                       | Description                    |
+| -------------- | --------------------------------------------- | ------------------------------ |
+| `operation`    | `described_class.new(params:, current_user:)` | Operation instance             |
+| `result`       | `operation.tap(&:call).result`                | Result after calling           |
+| `model`        | `result.model`                                | Shorthand for the result model |
+| `params`       | `{}`                                          | Override per example/context   |
+| `current_user` | `nil`                                         | Override with a real user      |
 
 Override with `let(:params) { { ... } }` or `let(:current_user) { create(:user) }`.
 
@@ -97,7 +97,7 @@ FactoryBot.define do
     name     { "Test Source" }
     base_url { "https://example.com" }
     scraper  { "ApplyMate::Scraper::Djinni" }
-    # no `client` — the Source model hardcodes the client in build_scraper
+    # no `client` — Source#build_scraper builds the scraper class's http_client_class
 
     after(:build) do |source|
       source.logo.attach(
@@ -132,6 +132,7 @@ described_class.call(apply:)
 ```
 
 `perform!` sets `start_status` at the top, calls `run!`, then sets `success_status` (if non-nil). After calling:
+
 - `apply.reload.status` reflects the last status set by the operation
 - `apply.reload.error` is `nil` on success
 
@@ -196,11 +197,11 @@ expect(browser).to have_received(:click).with('button[type="submit"]', text: 'Ap
 
 Spec files must be named after the **class under test**, not after the company/fixture. The path mirrors the class hierarchy:
 
-| Class | Spec file |
-|-------|-----------|
+| Class                                 | Spec file                                                   |
+| ------------------------------------- | ----------------------------------------------------------- |
 | `Apply::Operation::FetchInternalForm` | `spec/concepts/apply/operation/fetch_internal_form_spec.rb` |
-| `Apply::Operation::SendApply::Http` | `spec/concepts/apply/operation/send_apply/http_spec.rb` |
-| `Apply::Handler::Dou` | `spec/concepts/apply/handler/dou_spec.rb` |
+| `Apply::Operation::SendApply::Http`   | `spec/concepts/apply/operation/send_apply/http_spec.rb`     |
+| `Apply::Handler::Dou`                 | `spec/concepts/apply/handler/dou_spec.rb`                   |
 
 When multiple company fixtures test the **same class**, wrap each in a `context` block inside one file — do not create `honeytech_spec.rb`, `coidea_spec.rb`, etc. If the file already has `include_context` at the top-level `RSpec.describe`, move the existing content into a context block and keep shared helpers (e.g. `http_response`) at the describe level:
 
@@ -233,7 +234,7 @@ RSpec.shared_context 'honeytech dou' do
   let(:vacancy_external_url) { nil }          # override per spec to pre-set external_url
   let(:vacancy) { create(:vacancy, external_url: vacancy_external_url, ...) }
 
-  # Canned AI responses reused across specs
+  # Canned AI responses reused across specs — gemini_json_response comes from spec/support/ai_responses.rb
   let(:gemini_check_form_page)     { gemini_json_response('{"has_form":true,...}') }
   let(:gemini_check_submit_result) { gemini_json_response('{"success":true,...}') }
 
@@ -271,20 +272,33 @@ stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
 
 `stub_request(...).to_return(r1, r2, r3)` serves responses in call order — each invocation consumes the next entry.
 
-## Stubbing Gemini (WebMock)
+## Stubbing AI providers (WebMock)
 
-```ruby
-def gemini_json_response(text)
-  {
-    status:  200,
-    body:    { candidates: [{ content: { parts: [{ text: }] } }] }.to_json,
-    headers: { 'Content-Type' => 'application/json' }
-  }
-end
+The canned provider payloads live once in `spec/support/ai_responses.rb` (module `AiResponses`, included for every spec in `rails_helper.rb`). **Never redefine them in a shared context or spec.**
 
+| Helper                                                        | Returns a `to_return` hash for                                                                                                                                                                                 |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gemini_json_response(text, usage: nil)`                      | Gemini `generateContent`: `candidates[0].content.parts[0].text = text`; `usage: { prompt:, candidates:, thoughts: }` adds `usageMetadata` (`promptTokenCount` / `candidatesTokenCount` / `thoughtsTokenCount`) |
+| `ollama_chat_response(text, prompt_eval_count:, eval_count:)` | Ollama non-streaming `/api/chat`: `message.content = text` plus the token counts                                                                                                                               |
+
+````ruby
 stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
   .to_return(gemini_json_response('```json\n{"key":"value"}\n```'))
+
+stub_request(:post, 'http://ollama.test:11434/api/chat')
+  .to_return(ollama_chat_response('{"answer":"hi"}', prompt_eval_count: 12, eval_count: 3))
+````
+
+To assert what the client sent, capture bodies in a `with` block (see `spec/concepts/apply_mate/ai/client/gemini_spec.rb`):
+
+```ruby
+let(:sent_bodies) { [] }
+stub_request(:post, endpoint).with { |req| sent_bodies << JSON.parse(req.body) }.to_return(gemini_json_response('ok'))
+# …
+expect(sent_bodies.sole['generation_config']).to eq('max_output_tokens' => 512)
 ```
+
+`ApplyMate::Ai::Client::GeminiScraping` launches Chrome inside its private `scrape_answer`; stub `Ferrum::Browser.new` (or `scrape_answer` itself) so no browser starts.
 
 Always suppress `Apply::TurboHandler::StatusUpdate.broadcast`, `VacancyCv::TurboHandler::Index.broadcast` and `.broadcast_row` (called by `Apply::Operation::Ai::GeneratePdfCv`), `VacancyQuestion::TurboHandler::Index.broadcast` (called by the fetch-form operations) and `Grover#to_pdf` in specs that run operations end-to-end:
 

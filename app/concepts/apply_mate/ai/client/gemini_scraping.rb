@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
-# Drives the Gemini web UI via Ferrum (no public API key needed).
-# Connects to the persistent, logged-in Chrome container (see CHROME_HOST/PORT)
-# and returns the rendered markdown answer for a prompt.
+# Drives the Gemini web UI via Ferrum (no public API key needed) and returns the
+# rendered markdown answer for a prompt. Capabilities: :browser_backed only — no
+# native JSON schema, no images (images raise CapabilityMissing), no token usage.
 #
 # Manual smoke test:
 #   client = ApplyMate::Ai::Client::GeminiScraping.new
-#   puts client.ask("Say hello in Ukrainian")
+#   request = ApplyMate::Ai::Request.for(kind: :verify, text: "Say hello in Ukrainian")
+#   puts client.complete(request).text
 
 class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   # Raised when generation never completes. Unlike Ferrum::TimeoutError (whose
@@ -15,14 +16,73 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
 
   CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
   CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
+  # The web UI has no API timeout semantics: Request#timeout is ignored and the answer
+  # gets its own polling deadline.
+  RESPONSE_TIMEOUT = 180
 
+  def self.capabilities
+    %i[browser_backed].freeze
+  end
+
+  def self.validate_api_key!(api_key:)
+    true
+  end
+
+  # Accepts and ignores api_key/host/model so AiHandler can build every client the same way.
   def initialize(**)
+  end
+
+  def complete(request)
+    assert_request!(request)
+    prompt = [ request.system, *request.messages.map { |message| message[:content] } ].compact.join("\n\n")
+    ApplyMate::Ai::Response.new(text: scrape_answer(prompt), usage: ApplyMate::Ai::Usage::UNKNOWN)
+  end
+
+  def list_models
+    [ 'gemini-web-scraping' ]
+  end
+
+  INPUT_SELECTOR = 'div.ql-editor[contenteditable="true"]'
+  RESPONSE_SELECTOR = '.markdown.markdown-main-panel.enable-updated-hr-color'
+  # Send button returns to its disabled "idle" state only after generation ends
+  # (during generation it is replaced by a stop button).
+  IDLE_SEND_SELECTOR = '.disabled button.send-button.submit'
+
+  private
+
+  def scrape_answer(text)
+    browser = launch_browser
+    context = browser.contexts.create
+    page = context.create_page
+    navigate_to(page, 'https://gemini.google.com/app')
+    wait_for_selector(page, INPUT_SELECTOR, timeout: 20)
+    input_field = page.at_css(INPUT_SELECTOR)
+    page.execute('arguments[0].innerText = arguments[1]', input_field, text)
+    input_field.type(:Enter)
+
+    result = wait_for_response(page, timeout: RESPONSE_TIMEOUT)
+    if result.blank?
+      raise '[ApplyMate::Ai::Client::GeminiScraping] No results found'
+    end
+    result
+  rescue StandardError => e
+    Rails.logger.error "[ApplyMate::Ai::Client::GeminiScraping] Error: #{e.message}"
+    raise e
+  ensure
+    page&.close
+    context&.dispose
+    browser&.quit
+  end
+
+  # Launched per call (and quit in scrape_answer's ensure), not in the constructor, so
+  # building the client or rejecting a request never starts Chrome.
+  def launch_browser
     # Connect to the persistent, already-logged-in Chrome container instead of
     # launching a fresh local Chrome per request. Spawning a cold browser on
-    # every `ask` intermittently exceeds Ferrum's startup/command timeout on
+    # every call intermittently exceeds Ferrum's startup/command timeout on
     # constrained hosts (prod runs on a Raspberry Pi), which surfaces as the
     # random "Timed out waiting for response" error.
-    @browser = Ferrum::Browser.new(
+    Ferrum::Browser.new(
       # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
       timeout: 30,
@@ -38,45 +98,6 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
       }
     )
   end
-
-  INPUT_SELECTOR = 'div.ql-editor[contenteditable="true"]'
-  RESPONSE_SELECTOR = '.markdown.markdown-main-panel.enable-updated-hr-color'
-  # Send button returns to its disabled "idle" state only after generation ends
-  # (during generation it is replaced by a stop button).
-  IDLE_SEND_SELECTOR = '.disabled button.send-button.submit'
-
-  def ask(text)
-    context = @browser.contexts.create
-    page = context.create_page
-    navigate_to(page, 'https://gemini.google.com/app')
-    wait_for_selector(page, INPUT_SELECTOR, timeout: 20)
-    input_field = page.at_css(INPUT_SELECTOR)
-    page.execute('arguments[0].innerText = arguments[1]', input_field, text)
-    input_field.type(:Enter)
-
-    result = wait_for_response(page, timeout: 180)
-    if result.blank?
-      raise '[ApplyMate::Ai::Client::GeminiScraping] No results found'
-    end
-    result
-  rescue StandardError => e
-    Rails.logger.error "[ApplyMate::Ai::Client::GeminiScraping] Error: #{e.message}"
-    raise e
-  ensure
-    page&.close
-    context&.dispose
-    @browser&.quit
-  end
-
-  def self.validate_api_key!(api_key:)
-    true
-  end
-
-  def list_models
-    [ 'gemini-web-scraping' ]
-  end
-
-  private
 
   def wait_for_selector(page, selector, timeout: 5)
     deadline = monotonic + timeout

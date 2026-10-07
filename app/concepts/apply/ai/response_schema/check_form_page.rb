@@ -1,6 +1,24 @@
 # frozen_string_literal: true
 
-class Apply::Ai::ResponseSchema::CheckFormPage < ApplyMate::Ai::ResponseSchema::Base
+class Apply::Ai::ResponseSchema::CheckFormPage < ApplyMate::Ai::ResponseSchema::Json
+  def self.kind
+    :navigate
+  end
+
+  def self.json_schema
+    {
+      type:                 'object',
+      required:             %w[has_form trigger_selector form_url form_selector],
+      properties:           {
+        has_form:         { type: 'boolean' },
+        trigger_selector: { type: %w[string null] },
+        form_url:         { type: %w[string null] },
+        form_selector:    { type: %w[string null] }
+      },
+      additionalProperties: false
+    }
+  end
+
   def self.format_instructions
     <<~INSTRUCTIONS
       Return a JSON object with exactly four keys:
@@ -11,18 +29,5 @@ class Apply::Ai::ResponseSchema::CheckFormPage < ApplyMate::Ai::ResponseSchema::
 
       Wrap the JSON in a ```json code block. No extra text outside the code block.
     INSTRUCTIONS
-  end
-
-  def self.extract(raw_response)
-    return { 'has_form' => false, 'trigger_selector' => nil, 'form_url' => nil, 'form_selector' => nil } if raw_response.blank?
-
-    match    = raw_response.match(/```json\s+(.*?)\s+```/m)
-    json_str = match ? match[1] : raw_response
-    json_str = json_str.match(/(\{.*\})/m)&.[](0) || json_str
-
-    JSON.parse(json_str).with_indifferent_access
-  rescue StandardError => e
-    Rails.logger.error("CheckFormPage schema parse error: #{e.message}")
-    raise "Failed to parse AI CheckFormPage response: #{e.message}"
   end
 end

@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class Apply::Ai::ResponseSchema::GenerateCv < ApplyMate::Ai::ResponseSchema::Base
+  def self.kind
+    :cv
+  end
+
   def self.format_instructions
     <<~INSTRUCTIONS
       STRICT RULES FOR OUTPUT:
@@ -47,7 +51,9 @@ class Apply::Ai::ResponseSchema::GenerateCv < ApplyMate::Ai::ResponseSchema::Bas
                     format: 'A4',
                     print_background: true,
                     margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
-                    launch_args: [ '--no-sandbox', '--disable-setuid-sandbox' ]
+                    launch_args: [ '--no-sandbox', '--disable-setuid-sandbox' ],
+                    # ms; bounds the Puppeteer render so a hung Chrome cannot hold the apply slot (design §9.5)
+                    timeout: 60_000
                   })
   rescue StandardError => e
     Rails.logger.error("GenerateCv schema parse error: #{e.message}")

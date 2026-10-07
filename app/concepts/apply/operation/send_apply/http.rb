@@ -21,7 +21,7 @@ class Apply::Operation::SendApply::Http < Apply::Operation::Base
     client     = apply.vacancy.source.http_client(request_timeout: 30)
     session_id = apply.source_profile.session_id
 
-    cookie_header = build_cookie_header(session_id, apply.cookies)
+    cookie_header = build_cookie_header(apply.vacancy.source.session_cookie_name, session_id, apply.cookies)
 
     headers = { 'Referer' => apply.vacancy.url }
     headers['Cookie'] = cookie_header if cookie_header.present?
@@ -43,7 +43,9 @@ class Apply::Operation::SendApply::Http < Apply::Operation::Base
     end
   end
 
-  def build_cookie_header(session_id, captured_cookies)
+  # Captured form-page cookies first, then the profile's session under the platform's
+  # cookie name — so the authenticated session always wins over an anonymous captured one.
+  def build_cookie_header(session_cookie_name, session_id, captured_cookies)
     jar = {}
 
     captured_cookies.to_s.split(/;\s*/).each do |pair|
@@ -51,7 +53,7 @@ class Apply::Operation::SendApply::Http < Apply::Operation::Base
       jar[name.strip] = value if name.present? && value.present?
     end
 
-    jar['sessionid'] = session_id if session_id.present?
+    jar[session_cookie_name] = session_id if session_id.present?
 
     jar.map { |name, value| "#{name}=#{value}" }.join('; ')
   end

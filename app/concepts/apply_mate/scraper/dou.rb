@@ -27,6 +27,11 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     5
   end
 
+  # Dou is a Django site: the logged-in session lives in Django's `sessionid` cookie.
+  def self.session_cookie_name
+    'sessionid'
+  end
+
   def initialize(source, client)
     @source = source
     @client = client
@@ -67,8 +72,7 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   end
 
   def fetch_applyble(url, session_id:)
-    headers = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
-    html    = @client.get(url, headers:)&.body
+    html = @client.get(url, headers: session_headers(session_id))&.body
     return false if html.blank?
 
     doc = Nokogiri::HTML(html)
@@ -76,8 +80,7 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   end
 
   def fetch_apply_type(url, session_id:)
-    headers = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
-    html    = @client.get(url, headers:)&.body
+    html = @client.get(url, headers: session_headers(session_id))&.body
     return nil if html.blank?
 
     doc = Nokogiri::HTML(html)

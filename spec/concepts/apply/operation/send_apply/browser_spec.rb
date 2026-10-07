@@ -69,6 +69,34 @@ RSpec.describe Apply::Operation::SendApply::Browser do
       expect(apply.reload.error).to be_nil
     end
 
+    context 'when the verify call comes back without text (thinking ate the cap)' do
+      before do
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/).to_return(
+          status:  200,
+          body:    { candidates:    [ { finishReason: 'MAX_TOKENS', content: { parts: [] } } ],
+                     usageMetadata: { promptTokenCount: 10, thoughtsTokenCount: 1_024 } }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+      end
+
+      it 'counts the already-submitted apply as completed, like an unusable verdict' do
+        run_operation
+        expect(apply.reload).to have_attributes(status: 'completed', error: nil)
+      end
+    end
+
+    context 'when the verdict says the submission failed' do
+      before do
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
+          .to_return(gemini_json_response('{"success":false,"reason":"Error banner"}'))
+      end
+
+      it 'marks the apply failed with the reason' do
+        expect { run_operation }.to raise_error(RuntimeError, 'Error banner')
+        expect(apply.reload).to have_attributes(status: 'failed_sending_cv', error: a_string_including('Error banner'))
+      end
+    end
+
     context 'when a trigger_selector is set' do
       before { apply.update!(trigger_selector: '#open-modal-btn') }
 

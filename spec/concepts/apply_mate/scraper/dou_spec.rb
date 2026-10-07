@@ -6,8 +6,26 @@ RSpec.describe ApplyMate::Scraper::Dou do
   let(:source)  { create(:source, name: 'Dou', base_url: 'https://jobs.dou.ua', scraper: described_class.name) }
   let(:client)  { instance_double(ApplyMate::Client::ImpersonateHttp) }
   let(:scraper) { described_class.new(source, client) }
+  let(:page_html) { '' }
 
   before { allow(client).to receive(:get).and_return(Struct.new(:status, :body).new(200, page_html)) }
+
+  it_behaves_like 'a scraper with a session cookie', 'sessionid'
+
+  describe '#fetch_apply_type' do
+    let(:url)       { 'https://jobs.dou.ua/companies/acme/vacancies/1/' }
+    let(:page_html) { '<a id="reply-btn-id" href="#">Відгукнутися</a>' }
+
+    it 'fetches the vacancy page with the session cookie' do
+      expect(scraper.fetch_apply_type(url, session_id: 'abc')).to eq(type: 'internal', external_url: nil)
+      expect(client).to have_received(:get).with(url, headers: { 'Cookie' => 'sessionid=abc' })
+    end
+
+    it 'fetches the vacancy page anonymously without a session' do
+      scraper.fetch_apply_type(url, session_id: nil)
+      expect(client).to have_received(:get).with(url, headers: {})
+    end
+  end
 
   describe '#fetch_listing' do
     let(:page_html) { '' }

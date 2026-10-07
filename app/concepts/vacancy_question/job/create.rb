@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
 class VacancyQuestion::Job::Create < ApplicationJob
-  queue_as :default
+  queue_as :apply
+
+  # One AI call. The key prefix follows VacancyQuestion's own id space: reusing `apply:<id>`
+  # would serialise unrelated records that happen to share an integer.
+  limits_concurrency to: 1, key: ->(vacancy_question_id) { "vacancy_question:#{vacancy_question_id}" }, duration: 10.minutes
 
   def perform(vacancy_question_id)
     vacancy_question = VacancyQuestion.includes(:ai_integration, :user_profile, :fill_form_prompt, :vacancy)

@@ -783,6 +783,7 @@ DEPENDENCIES
   image_processing (~> 2.2)
   jbuilder
   jsbundling-rails
+  json-schema
   jsonb_accessor
   kamal
   lefthook

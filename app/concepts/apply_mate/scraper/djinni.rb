@@ -14,6 +14,11 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     3
   end
 
+  # Djinni is a Django site: the logged-in session lives in Django's `sessionid` cookie.
+  def self.session_cookie_name
+    'sessionid'
+  end
+
   def initialize(source, client)
     @source = source
     @client = client
@@ -60,8 +65,7 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   end
 
   def fetch_applyble(url, session_id:)
-    headers  = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
-    response = @client.get(url, headers:)
+    response = @client.get(url, headers: session_headers(session_id))
     return false if response.nil?
 
     doc    = Nokogiri::HTML(response.body)

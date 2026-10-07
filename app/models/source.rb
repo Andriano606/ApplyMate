@@ -25,6 +25,12 @@ class Source < ApplicationRecord
     scraper.constantize.listing_url(self)
   end
 
+  # Cookie that carries a logged-in session on this source (declared by its scraper),
+  # for callers that build a Cookie jar without a scraper (SendApply::Http).
+  def session_cookie_name
+    scraper.constantize.session_cookie_name
+  end
+
   # The HTTP client this source must be talked to with, for callers that need raw
   # requests rather than a scraper (the apply pipeline fetches the form and POSTs it).
   def http_client(**options)
