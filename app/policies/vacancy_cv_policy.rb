@@ -13,6 +13,11 @@ class VacancyCvPolicy < ApplicationPolicy
     user.present?
   end
 
+  # The scope already restricts records to the owner.
+  def show?
+    user.present?
+  end
+
   class Scope < ApplicationPolicy::Scope
     def resolve
       scope.joins(:user_profile).where(user_profiles: { user: })

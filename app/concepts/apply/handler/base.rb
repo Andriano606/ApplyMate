@@ -2,7 +2,19 @@
 
 require 'faraday/multipart'
 
+# A job board's apply pipeline: an ordered list of steps (Apply::Operation::Base subclasses), run by
+# Apply::Operation::Engine::Run. See .ai/docs/apply_handlers.md and .ai/docs/apply_engine.md.
 class Apply::Handler::Base
+  # operation  Apply::Operation::Base subclass (declares `stage`)
+  # condition  nil or a lambda called with the run's Apply::Operation::Engine::Context; falsy skips the step
+  # options    keyword arguments forwarded to the operation's run!
+  # position   index in the handler's step list (apply_steps.position)
+  Step = Data.define(:operation, :condition, :options, :position) do
+    def key
+      operation.stage.to_s
+    end
+  end
+
   class << self
     def for(apply)
       scraper_name = apply.source_profile.source.scraper.demodulize
@@ -11,13 +23,12 @@ class Apply::Handler::Base
       raise "No handler defined for scraper: #{scraper_name}"
     end
 
-    def add_step(operation, execute_condition: nil, **options)
-      @steps ||= []
-      @steps << { operation:, condition: execute_condition, options: }
+    def add_step(operation, if: nil, **options)
+      steps << Step.new(operation:, condition: binding.local_variable_get(:if), options:, position: steps.size)
     end
 
     def steps
-      @steps || []
+      @steps ||= []
     end
   end
 
@@ -26,11 +37,7 @@ class Apply::Handler::Base
   end
 
   def call
-    self.class.steps.each do |step|
-      next if step[:condition] && !step[:condition].call(@apply)
-
-      step[:operation].call(apply: @apply, handler: self, **step[:options])
-    end
+    Apply::Operation::Engine::Run.call(apply: @apply, handler: self)
   end
 
   def cv_filename

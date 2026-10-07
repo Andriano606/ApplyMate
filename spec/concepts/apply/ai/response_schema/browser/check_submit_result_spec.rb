@@ -11,15 +11,12 @@ RSpec.describe Apply::Ai::ResponseSchema::Browser::CheckSubmitResult do
       expect(result[:success]).to be(false)
     end
 
-    # Lenient until phase 1 introduces claim + submit_unverified (design §15 rows 0/1).
+    # Strict: an unusable verdict raises; the Runner records invalid_ai_output and the claim rule keeps it
+    # submit_unverified, never success.
     [ '', 'garbage', '{"success": "maybe", "reason": "?"}', '{"success": false}' ].each do |raw|
-      it "falls back to success for an unusable answer (#{raw.inspect})" do
-        expect(described_class.extract(raw)).to eq('success' => true, 'reason' => 'Could not parse AI response')
+      it "raises InvalidResponse for an unusable answer (#{raw.inspect})" do
+        expect { described_class.extract(raw) }.to raise_error(ApplyMate::Ai::ResponseSchema::Json::InvalidResponse)
       end
-    end
-
-    it 'returns indifferent access on the fallback too' do
-      expect(described_class.extract('garbage')[:success]).to be(true)
     end
   end
 

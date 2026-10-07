@@ -39,8 +39,8 @@ RSpec.describe VacancyQuestion::Operation::Index, type: :operation do
     end
 
     before do
-      create(:apply, user: current_user, vacancy:, inputs:, created_at: 2.days.ago)
-      create(:apply, user: current_user, vacancy:, created_at: 1.day.ago)
+      create(:apply, :failed, user: current_user, vacancy:, inputs:, created_at: 2.days.ago)
+      create(:apply, :completed, user: current_user, vacancy:, created_at: 1.day.ago)
       create(:apply, user: create(:user), vacancy:,
                      inputs: [ { 'tag' => 'textarea', 'label' => 'Someone else question' } ])
     end

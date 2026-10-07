@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# Boot-time guard for config/queue.yml (see .ai/docs/architecture.md, "Queue topology").
+# Boot-time guard for config/queue.yml (see .ai/docs/architecture.md, "Queue topology") and, for the
+# dedicated apply worker, its primary DB pool (config/database.yml, see .ai/docs/apply_engine.md, "Heartbeat").
 # File-only: no DB access, so it is safe during assets:precompile.
 class Apply::Operation::AssertQueueTopology < ApplyMate::Operation::Base
   class Violation < StandardError; end
@@ -30,6 +31,17 @@ class Apply::Operation::AssertQueueTopology < ApplyMate::Operation::Base
     raise Violation, "SQ_ROLE=#{role.inspect} is not one of #{ROLES.join(' | ')}"
   end
 
+  # Every apply-worker thread holds one primary connection for its run and one for that run's heartbeat
+  # ticker (Apply::Operation::Engine::Heartbeat), plus 2 for Rails/Solid Queue internals.
+  def self.required_primary_pool
+    (2 * apply_slots) + 2
+  end
+
+  # max_connections of this env's primary database config (parsed config, no connection).
+  def self.primary_pool_size
+    ActiveRecord::Base.configurations.configs_for(env_name: Rails.env, name: 'primary')&.max_connections
+  end
+
   def perform!(workers: nil, **)
     skip_authorize
     self.class.role
@@ -41,6 +53,7 @@ class Apply::Operation::AssertQueueTopology < ApplyMate::Operation::Base
     assert_single_apply_worker!(apply_workers)
     assert_apply_worker_shape!(apply_workers.first)
     assert_role_matches!(apply_workers)
+    assert_primary_pool_fits!
 
     self.model = workers
   end
@@ -84,6 +97,18 @@ class Apply::Operation::AssertQueueTopology < ApplyMate::Operation::Base
     return if worker[:threads].to_i == self.class.apply_slots
 
     raise Violation, "apply worker #{worker.inspect} threads must equal APPLY_SLOTS (#{self.class.apply_slots})"
+  end
+
+  # Only the dedicated apply worker (SQ_ROLE=apply): with `all` the same boot check runs in puma too, whose pool
+  # is sized for web threads, and dev/Conductor (`all`) pools are far above the minimum.
+  def assert_primary_pool_fits!
+    return unless self.class.role == 'apply'
+
+    pool = self.class.primary_pool_size
+    return if pool.nil? || pool >= self.class.required_primary_pool
+
+    raise Violation, "SQ_ROLE=apply with APPLY_SLOTS=#{self.class.apply_slots} needs a primary pool of at least " \
+                     "#{self.class.required_primary_pool} (2 * APPLY_SLOTS + 2), config has #{pool}"
   end
 
   def assert_role_matches!(apply_workers)

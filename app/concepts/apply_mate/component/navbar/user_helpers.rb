@@ -3,6 +3,9 @@
 module ApplyMate::Component::Navbar::UserHelpers
   extend ActiveSupport::Concern
 
+  ATTENTION_DOT_CLASSES = 'absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 ' \
+                          'px-1 text-xs font-semibold leading-none text-white'
+
   private
 
   def user_display_name
@@ -23,6 +26,11 @@ module ApplyMate::Component::Navbar::UserHelpers
 
   def user_avatar?
     current_user.avatar.attached?
+  end
+
+  # Applies needing attention, read off the menu items' badges (Navbar#build_items already resolved it once).
+  def menu_attention_count
+    @items_by_section.fetch(:user_menu, []).sum { |item| item.badge.to_i }
   end
 
   def user_email

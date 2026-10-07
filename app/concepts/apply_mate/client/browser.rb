@@ -129,30 +129,16 @@ class ApplyMate::Client::Browser
   # Narrows to elements whose text contains text (case-insensitive) when provided.
   # Returns true if clicked, false if nothing matched.
   def click(selector, text: nil)
-    @page.evaluate(<<~JS)
-      (function() {
-        var all  = Array.from(document.querySelectorAll(#{selector.to_json}));
-        var text = #{text.present? ? text.downcase.to_json : 'null'};
-        var els  = text
-          ? all.filter(function(el) { return el.textContent.trim().toLowerCase().indexOf(text) !== -1; })
-          : all;
-        if (els.length === 0) els = all;
-        for (var i = 0; i < els.length; i++) {
-          var el = els[i], node = el, visible = true;
-          while (node && node !== document.documentElement) {
-            var cs = window.getComputedStyle(node);
-            if (cs.display === 'none' || cs.visibility === 'hidden') { visible = false; break; }
-            node = node.parentElement;
-          }
-          if (visible) {
-            el.scrollIntoView({ behavior: 'instant', block: 'center' });
-            el.click();
-            return true;
-          }
-        }
-        return false;
-      })()
+    @page.evaluate(visible_element_js(selector, text, <<~JS))
+      el.scrollIntoView({ behavior: 'instant', block: 'center' });
+      el.click();
     JS
+  end
+
+  # Whether #click(selector, text:) would find an element to click (same matching rules), without clicking.
+  # SendApply::Browser checks the submit button with it before taking the submit claim.
+  def clickable?(selector, text: nil)
+    @page.evaluate(visible_element_js(selector, text, ''))
   end
 
   # Sets a form field value in a way that triggers Vue/React reactivity
@@ -273,6 +259,35 @@ class ApplyMate::Client::Browser
   end
 
   private
+
+  # The single matching rule of #click / #clickable?: the first visible element for selector (narrowed to those
+  # whose text contains text, case-insensitive, when any does); `action` runs on it as `el`. Evaluates to true
+  # when an element was found, false otherwise.
+  def visible_element_js(selector, text, action)
+    <<~JS
+      (function() {
+        var all  = Array.from(document.querySelectorAll(#{selector.to_json}));
+        var text = #{text.present? ? text.downcase.to_json : 'null'};
+        var els  = text
+          ? all.filter(function(el) { return el.textContent.trim().toLowerCase().indexOf(text) !== -1; })
+          : all;
+        if (els.length === 0) els = all;
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i], node = el, visible = true;
+          while (node && node !== document.documentElement) {
+            var cs = window.getComputedStyle(node);
+            if (cs.display === 'none' || cs.visibility === 'hidden') { visible = false; break; }
+            node = node.parentElement;
+          }
+          if (visible) {
+            #{action}
+            return true;
+          }
+        }
+        return false;
+      })()
+    JS
+  end
 
   def proxy_option(proxy)
     return {} if proxy.blank?

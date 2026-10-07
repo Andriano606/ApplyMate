@@ -1,13 +1,7 @@
 # frozen_string_literal: true
 
 class Apply::Operation::FetchDetails < Apply::Operation::Base
-  def start_status
-    :fetching_details
-  end
-
-  def error_status
-    :failed_fetching_details
-  end
+  stage :fetch_details
 
   private
 

@@ -32,3 +32,9 @@
         value_method: :id, \
         include_blank: I18n.t('apply.new.form.select_fill_form_prompt'), \
         label: I18n.t('apply.new.form.fill_form_prompt')
+
+    - if reapply_guarded?
+      div(class=[ 'space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3',
+                  'dark:border-amber-900/50 dark:bg-amber-900/20' ] role='alert')
+        p.text-sm.text-amber-800.dark:text-amber-300 = I18n.t('apply.new.form.reapply_notice')
+        = modal.form.input :confirm_reapply, as: :boolean, label: I18n.t('apply.new.form.confirm_reapply')

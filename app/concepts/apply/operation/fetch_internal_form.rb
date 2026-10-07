@@ -3,13 +3,7 @@
 class Apply::Operation::FetchInternalForm < Apply::Operation::Base
   include Apply::Operation::FormExtractor
 
-  def start_status
-    :fetching_form
-  end
-
-  def error_status
-    :failed_fetching_form
-  end
+  stage :fetch_form
 
   private
 
@@ -22,7 +16,7 @@ class Apply::Operation::FetchInternalForm < Apply::Operation::Base
     # The source's own client — Cloudflare-protected boards (Dou) need the Chrome TLS
     # fingerprint here too; plain AsyncHttp gets a 403 challenge page instead of the form.
     response = apply.vacancy.source.http_client.get(url, headers:, follow_redirects: true)
-    raise 'Failed to fetch vacancy page' if response.nil? || response.body.blank?
+    halt!(:not_a_form, detail: 'empty vacancy page') if response.nil? || response.body.blank?
 
     cookies   = extract_cookies(response.headers)
     doc       = Nokogiri::HTML(response.body)

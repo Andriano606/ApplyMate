@@ -40,6 +40,8 @@ RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   # Canned AI provider payloads (gemini_json_response, ollama_chat_response) — spec/support/ai_responses.rb
   config.include AiResponses
+  # engine_context(apply) / rotate_run_token!(apply) — spec/support/apply_engine.rb
+  config.include ApplyEngineHelpers
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [
     Rails.root.join('spec/fixtures')

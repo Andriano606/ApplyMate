@@ -47,11 +47,9 @@ RSpec.shared_context 'honeytech dou' do
                           model: 'gemini-2.5-flash', api_key: 'test-api-key')
   end
 
+  # queued (the default state), so engine_context / the Runner can start it.
   let(:apply) do
-    Apply.create!(
-      user:, vacancy:, source_profile:, user_profile:, ai_integration:,
-      status: :generating_cv
-    )
+    Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:)
   end
 
   # ── Browser double ────────────────────────────────────────────────────────────
@@ -65,6 +63,7 @@ RSpec.shared_context 'honeytech dou' do
       .and_return([ HoneytechDou::PEOPLEFORCE_URL, honeytech_apply_html, '' ])
 
     allow(browser).to receive(:navigate_to)
+    allow(browser).to receive(:clickable?).and_return(true)
     allow(browser).to receive(:click).and_return(true)
     allow(browser).to receive(:fill_field)
     allow(browser).to receive(:attach_file)

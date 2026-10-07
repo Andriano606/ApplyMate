@@ -1,18 +1,13 @@
 # frozen_string_literal: true
 
 class Apply::Operation::Ai::GeneratePdfCv < Apply::Operation::Base
-  def start_status
-    :generating_cv
-  end
-
-  def error_status
-    :failed_generating_cv
-  end
+  stage :generate_cv # Apply.with_cv_or_generating_cv lists a running apply in this stage as a CV placeholder
 
   private
 
   def run!(apply:, handler:, prompt_class:, schema_class:, **)
-    # Status is already generating_cv: the vacancy page CV list shows a "generating during apply" placeholder.
+    # applies.stage is already generate_cv (Runner): the vacancy page CV list shows a "generating during apply"
+    # placeholder.
     VacancyCv::TurboHandler::Index.broadcast(apply.vacancy, apply.user)
 
     raw_pdf = apply.raw_cv.presence || ApplyMate::Ai::AiHandler.call(
@@ -26,11 +21,11 @@ class Apply::Operation::Ai::GeneratePdfCv < Apply::Operation::Base
       filename:     handler.cv_filename,
       content_type: 'application/pdf'
     )
-    apply.update!(error: nil)
   end
 
-  # Runs after Base has stored the final status (failure included): the placeholder becomes the CV or disappears.
+  # The placeholder becomes the CV, or disappears when the step failed: the Runner records the halt (and clears
+  # applies.stage) only after this cleanup, so the row is removed explicitly instead of re-rendered from the DB.
   def cleanup
-    VacancyCv::TurboHandler::Index.broadcast_row(model)
+    VacancyCv::TurboHandler::Index.broadcast_row(model, leaving: !model.cv.attached?)
   end
 end

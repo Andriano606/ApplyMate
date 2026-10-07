@@ -1,0 +1,18 @@
+div(class='rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20' \
+    role='alert' *data_test_id('apply-failure-notice'))
+  .flex.items-start.gap-2
+    = icon(:exclamation_triangle, size: 5, class: 'shrink-0 text-amber-600 dark:text-amber-400')
+    .min-w-0.flex-1
+      p.text-sm.font-semibold.text-amber-900.dark:text-amber-200 = title
+      - if reason
+        p.mt-1.text-sm.font-medium.text-amber-800.dark:text-amber-300 = reason
+      p.mt-1.text-sm.leading-relaxed.text-amber-800.dark:text-amber-300 = hint
+      - if reminder
+        p.mt-2.text-sm.font-medium.text-amber-900.dark:text-amber-200 *data_test_id('apply-wait-reminder') = reminder
+      - if after_claim?
+        p.mt-2.text-sm.font-medium.text-red-700.dark:text-red-300 = I18n.t('apply.failure_notice.after_claim_warning')
+      - if detail
+        p.mt-3.text-xs.font-medium.uppercase.tracking-wide.text-amber-700.dark:text-amber-400
+          = I18n.t('apply.failure_notice.details_admin')
+        pre(class=[ 'mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs',
+                    'text-amber-900 dark:text-amber-200' ]) = detail

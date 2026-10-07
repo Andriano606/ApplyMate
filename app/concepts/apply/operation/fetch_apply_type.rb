@@ -1,13 +1,7 @@
 # frozen_string_literal: true
 
 class Apply::Operation::FetchApplyType < Apply::Operation::Base
-  def start_status
-    :fetching_apply_type
-  end
-
-  def error_status
-    :failed_fetching_apply_type
-  end
+  stage :fetch_apply_type
 
   private
 
@@ -19,7 +13,7 @@ class Apply::Operation::FetchApplyType < Apply::Operation::Base
 
     unless info
       apply.update!(applyble: false)
-      raise 'Could not determine apply type for this vacancy'
+      halt!(:no_application_path, detail: 'apply type not found')
     end
 
     apply.update!(apply_type: info[:type], applyble: true)

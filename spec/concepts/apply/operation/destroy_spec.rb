@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Apply::Operation::Destroy, type: :operation do
   let(:current_user) { create(:user) }
   let(:vacancy)      { create(:vacancy, source: create(:source)) }
-  let!(:apply)       { create(:apply, user: current_user, vacancy:, status: :completed) }
+  let!(:apply)       { create(:apply, :completed, user: current_user, vacancy:) }
   let(:params)       { { id: apply.hashid } }
 
   context 'with broadcasts stubbed' do
@@ -22,6 +22,17 @@ RSpec.describe Apply::Operation::Destroy, type: :operation do
       expect(Apply::TurboHandler::StatusUpdate).to have_received(:refresh).with(vacancy, current_user)
       expect(VacancyCv::TurboHandler::Index).to have_received(:broadcast).with(vacancy, current_user)
       expect(VacancyQuestion::TurboHandler::Index).to have_received(:broadcast).with(vacancy, current_user)
+    end
+
+    it 'touches the counter key only after the row is gone' do
+      existed_at_touch = nil
+      allow_any_instance_of(Apply).to receive(:touch_user_applies_changed_at!) do # rubocop:disable RSpec/AnyInstance
+        existed_at_touch = Apply.exists?(apply.id)
+      end
+
+      result
+
+      expect(existed_at_touch).to be(false)
     end
 
     it "does not destroy another user's apply" do
@@ -44,13 +55,13 @@ RSpec.describe Apply::Operation::Destroy, type: :operation do
     end
 
     it 'falls the badge, action box and applies panel back to the remaining apply' do
-      older_apply = create(:apply, user: current_user, vacancy:, status: :failed_sending_cv, created_at: 1.day.ago)
+      older_apply = create(:apply, :failed, user: current_user, vacancy:, created_at: 1.day.ago)
 
       result
 
       badge, action_box, panel = messages(stream)
       expect(badge).to include("apply_#{older_apply.hashid}")
-      expect(action_box).to include(I18n.t('apply.action_box.retry'))
+      expect(action_box).to include(I18n.t('apply.actions.retry'))
       expect(panel).to include("apply_#{older_apply.hashid}")
       expect(panel).not_to include("apply_#{apply.hashid}")
     end

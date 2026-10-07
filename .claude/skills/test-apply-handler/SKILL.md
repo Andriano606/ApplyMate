@@ -62,8 +62,7 @@ RSpec.shared_context 'honeytech dou' do
   let(:user_profile)   { UserProfile.create!(user:, name: 'Jane Doe', cv: 'Senior designer…') }
   let(:ai_integration) { AiIntegration.create!(user:, provider: 'gemini', model: 'gemini-2.5-flash', api_key: 'key') }
   let(:apply) do
-    Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:,
-                  status: :generating_cv)
+    Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:)  # queued
   end
 
   # ── Browser double ────────────────────────────────────────────────────────
@@ -150,7 +149,7 @@ RSpec.describe Apply::Handler::Dou do
     it 'populates form fields'               { run_handler; expect(apply.reload.inputs.map { |i| i['name'] }).to include('field[name]') }
     it 'stores AI-filled values'             { run_handler; expect(apply.reload.filled_inputs).to include(hash_including('name' => 'field[name]', 'value' => 'Jane Doe')) }
     it 'attaches a generated CV'             { run_handler; expect(apply.reload.cv).to be_attached }
-    it 'completes without error'             { run_handler; expect(apply.reload.status).to eq('completed'); expect(apply.reload.error).to be_nil }
+    it 'completes without error'             { run_handler; expect(apply.reload).to be_completed; expect(apply.failure).to be_nil }
     it 'navigates to the external URL'       { run_handler; expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT) }
     it 'clicks submit'                       { run_handler; expect(browser).to have_received(:click).with(a_string_starting_with('button[type="submit"]'), text: a_string_including('Apply')) }
   end
@@ -176,7 +175,7 @@ RSpec.describe Apply::Operation::Ai::FetchExternalForm do
   end
 
   describe '#call' do
-    subject(:run_operation) { described_class.call(apply:) }
+    subject(:run_operation) { described_class.call(ctx: engine_context(apply)) }
 
     it 'fetches the page via browser'      { run_operation; expect(browser).to have_received(:fetch_rendered).with(HoneytechDou::DOU_REDIRECT) }
     it 'populates inputs'                  { run_operation; expect(apply.reload.inputs.map { |i| i['name'] }).to include('field[name]') }
@@ -207,7 +206,7 @@ RSpec.describe Apply::Operation::Ai::FillForm do
 
   describe '#call' do
     subject(:run_operation) do
-      described_class.call(apply:,
+      described_class.call(ctx: engine_context(apply),
                            prompt_class: Apply::Ai::Prompt::FillForm,
                            schema_class: Apply::Ai::ResponseSchema::FillForm)
     end
@@ -229,7 +228,7 @@ RSpec.describe Apply::Operation::Ai::FillForm do
       expect(input).to include('selector' => '[name="field[name]"]', 'tag' => 'input', 'form_index' => 0)
     end
 
-    it 'completes without error' { run_operation; expect(apply.reload.error).to be_nil }
+    it 'stores no failure' { run_operation; expect(apply.reload.failure).to be_nil }
   end
 end
 ```
@@ -257,15 +256,14 @@ RSpec.describe Apply::Operation::SendApply::Browser do
   end
 
   describe '#call' do
-    subject(:run_operation) { described_class.call(apply:) }
+    subject(:run_operation) { described_class.call(ctx: engine_context(apply)) }
 
     it 'navigates to external URL'     { run_operation; expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT) }
     it 'fills text inputs'             { run_operation; expect(browser).to have_received(:fill_field).with('[name="field[name]"]', 'Jane Doe', 'input', form_index: 0) }
     it 'skips file inputs in fill'     { run_operation; expect(browser).not_to have_received(:fill_field).with(a_string_including('resume'), anything, anything, any_args) }
     it 'attaches CV to file input'     { run_operation; expect(browser).to have_received(:attach_file).with(hash_including('type' => 'file'), a_string_ending_with('.pdf')) }
     it 'clicks submit button'          { run_operation; expect(browser).to have_received(:click).with('button[type="submit"].btn', text: 'Apply') }
-    it 'marks apply completed'         { run_operation; expect(apply.reload.status).to eq('completed') }
-    it 'stores no error'               { run_operation; expect(apply.reload.error).to be_nil }
+    it 'leaves the lifecycle to the Runner' { run_operation; expect(apply.reload.submit_claimed_at).to be_present }
 
     context 'when trigger_selector is set' do
       before { apply.update!(trigger_selector: '#open-form') }

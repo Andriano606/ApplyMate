@@ -25,6 +25,10 @@ default: &default
       polling_interval: <%= ENV.fetch('SQ_POLLING_INTERVAL', 0.1) %>
     # <% end %>
     # <% if role != 'general' %>
+    # Each apply thread holds one primary DB connection for its run plus one for the run's heartbeat
+    # ticker (Apply::Operation::Engine::Heartbeat): the apply worker's primary pool (database.yml
+    # max_connections / RAILS_MAX_THREADS) must be >= 2 * APPLY_SLOTS + 2. AssertQueueTopology checks it
+    # for SQ_ROLE=apply. See .ai/docs/apply_engine.md, "Heartbeat".
     - queues: [apply]
       threads: <%= Apply::Operation::AssertQueueTopology.apply_slots %>
       processes: 1

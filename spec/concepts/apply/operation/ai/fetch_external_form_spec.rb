@@ -16,7 +16,7 @@ RSpec.describe Apply::Operation::Ai::FetchExternalForm do
 
   # ── Examples ─────────────────────────────────────────────────────────────────
   describe '#call' do
-    subject(:run_operation) { described_class.call(apply:) }
+    subject(:run_operation) { described_class.call(ctx: engine_context(apply)) }
 
     it 'fetches the external page via the browser' do
       run_operation
@@ -61,6 +61,68 @@ RSpec.describe Apply::Operation::Ai::FetchExternalForm do
     it 'stores the DOU redirect URL as external_url' do
       run_operation
       expect(apply.reload.external_url).to eq(HoneytechDou::DOU_REDIRECT)
+    end
+
+    it 'quits the browser' do
+      run_operation
+      expect(browser).to have_received(:quit)
+    end
+  end
+
+  describe 'halts' do
+    def halt_code
+      described_class.call(ctx: engine_context(apply))
+    rescue Apply::Operation::Engine::Halt => e
+      e.code
+    end
+
+    context 'without an external URL on the vacancy' do
+      let(:vacancy_external_url) { nil }
+
+      it 'has no application path' do
+        expect(halt_code).to eq(:no_application_path)
+        expect(browser).not_to have_received(:fetch_rendered)
+      end
+    end
+
+    context 'when the rendered page is empty' do
+      before { allow(browser).to receive(:fetch_rendered).and_return([ HoneytechDou::PEOPLEFORCE_URL, '', '' ]) }
+
+      it 'does not find the target' do
+        expect(halt_code).to eq(:target_not_found)
+      end
+    end
+
+    context 'when the AI finds neither a form, a trigger nor a form URL' do
+      before do
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/).to_return(
+          gemini_json_response('{"has_form":false,"trigger_selector":null,"form_url":null,"form_selector":null}')
+        )
+      end
+
+      it 'is not a form' do
+        expect(halt_code).to eq(:not_a_form)
+      end
+
+      it 'ends the run unsupported' do
+        run_engine_step(apply, described_class)
+
+        expect(apply).to be_unsupported
+        expect(apply.failure).to include('code' => 'not_a_form', 'stage' => 'fetch_form')
+      end
+    end
+
+    context 'when the trigger reveals nothing' do
+      before do
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/).to_return(
+          gemini_json_response('{"has_form":false,"trigger_selector":"#apply","form_url":null,"form_selector":null}')
+        )
+        allow(browser).to receive(:click_and_fetch).and_return([ HoneytechDou::PEOPLEFORCE_URL, '', '', nil ])
+      end
+
+      it 'does not find the target' do
+        expect(halt_code).to eq(:target_not_found)
+      end
     end
   end
 end

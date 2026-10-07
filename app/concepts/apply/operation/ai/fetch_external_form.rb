@@ -5,19 +5,13 @@ class Apply::Operation::Ai::FetchExternalForm < Apply::Operation::Base
 
   STRIP_SELECTORS = %w[script style link noscript header nav aside iframe svg].freeze
 
-  def start_status
-    :fetching_form
-  end
-
-  def error_status
-    :failed_fetching_form
-  end
+  stage :fetch_form
 
   private
 
   def run!(apply:, **)
     external_url = apply.vacancy.external_url
-    raise 'No external apply URL stored for this vacancy' if external_url.blank?
+    halt!(:no_application_path, detail: 'no external url') if external_url.blank?
 
     @browser = ApplyMate::Client::Browser.new
     page_url, doc, cookies = browser_fetch_and_parse(@browser, external_url)
@@ -39,7 +33,7 @@ class Apply::Operation::Ai::FetchExternalForm < Apply::Operation::Base
       elsif check_result['form_url'].present?
         page_url, doc, cookies = http_fetch_and_parse(ApplyMate::Client::AsyncHttp.new, check_result['form_url'])
       else
-        raise 'AI could not locate an application form page'
+        halt!(:not_a_form, detail: 'AI could not locate an application form page')
       end
 
       nav_result    = ApplyMate::Ai::AiHandler.call(
@@ -65,7 +59,7 @@ class Apply::Operation::Ai::FetchExternalForm < Apply::Operation::Base
 
   def browser_fetch_and_parse(browser, url)
     page_url, body, cookies = browser.fetch_rendered(url)
-    raise "Failed to fetch page: #{url}" if body.blank?
+    halt!(:target_not_found, detail: "empty page: #{url}") if body.blank?
 
     doc = Nokogiri::HTML(body)
     [ page_url, doc, cookies ]
@@ -73,7 +67,7 @@ class Apply::Operation::Ai::FetchExternalForm < Apply::Operation::Base
 
   def browser_click_and_parse(browser, url, selector)
     page_url, body, cookies, unique_selector = browser.click_and_fetch(url, selector)
-    raise "Failed to reveal form via trigger: #{selector}" if body.blank?
+    halt!(:target_not_found, detail: "trigger revealed nothing: #{selector}") if body.blank?
 
     doc = Nokogiri::HTML(body)
     [ page_url, doc, cookies, unique_selector.presence || selector ]
@@ -81,7 +75,7 @@ class Apply::Operation::Ai::FetchExternalForm < Apply::Operation::Base
 
   def http_fetch_and_parse(client, url)
     response = client.get(url, follow_redirects: true)
-    raise "Failed to fetch page: #{url}" if response.nil? || response.body.blank?
+    halt!(:target_not_found, detail: "empty page: #{url}") if response.nil? || response.body.blank?
 
     cookies = extract_cookies(response.headers)
     doc     = Nokogiri::HTML(response.body)

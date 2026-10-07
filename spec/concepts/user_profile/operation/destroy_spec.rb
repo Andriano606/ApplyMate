@@ -26,8 +26,7 @@ RSpec.describe UserProfile::Operation::Destroy, type: :operation do
         vacancy:        vacancy,
         source_profile: source_profile,
         user_profile:   user_profile,
-        ai_integration: ai_integration,
-        status:         :generating_cv
+        ai_integration: ai_integration
       )
     end
 

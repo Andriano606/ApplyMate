@@ -88,4 +88,29 @@ RSpec.describe ApplyMate::Client::Browser do
       expect(page).to have_received(:close)
     end
   end
+
+  describe '#click / #clickable?' do
+    subject(:client) { described_class.new }
+
+    let(:scripts) { [] }
+
+    before do
+      allow(page).to receive(:evaluate) do |js|
+        scripts << js
+        true
+      end
+      client.navigate_to('https://x')
+    end
+
+    it 'clicks the first visible match, narrowed by text' do
+      expect(client.click('#submit', text: 'Apply')).to be(true)
+      expect(scripts.sole).to include('querySelectorAll("#submit")', '"apply"', 'el.click();')
+    end
+
+    it 'probes with the same matching rule without clicking' do
+      expect(client.clickable?('#submit', text: 'Apply')).to be(true)
+      expect(scripts.sole).to include('querySelectorAll("#submit")', '"apply"', 'return true;')
+      expect(scripts.sole).not_to include('el.click()')
+    end
+  end
 end

@@ -21,9 +21,12 @@ class VacancyCv::TurboHandler::Index < ApplyMate::TurboHandler::Base
   # placeholder becomes the CV or goes away). Touches only that row's own frame — rows are sorted by the
   # immutable created_at, so a row never moves — and the CV accordions/tabs open on the other rows survive.
   # Falls back to the whole list when the last row is gone (the empty state swaps in).
-  def self.broadcast_row(record)
+  # leaving: true drops the record although the DB still lists it: a failed GeneratePdfCv step runs its cleanup
+  # before the Runner records the halt, so the apply is still running in stage generate_cv at that moment.
+  def self.broadcast_row(record, leaving: false)
     vacancy, user = record.vacancy, record.user
     model  = index_model(vacancy, user)
+    model  = ApplyMate::Operation::Struct.new(vacancy:, cvs: model.cvs - [ record ]) if leaving
     return broadcast_list(model, user) if model.cvs.empty?
 
     stream = [ user, vacancy, :vacancy_cvs ]

@@ -37,11 +37,9 @@ RSpec.shared_context 'art of spin djinni' do
                           model: 'gemini-2.5-flash', api_key: 'test-api-key')
   end
 
+  # queued (the default state), so engine_context / the Runner can start it.
   let(:apply) do
-    Apply.create!(
-      user:, vacancy:, source_profile:, user_profile:, ai_integration:,
-      status: :generating_cv
-    )
+    Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:)
   end
 
   # Canonical Djinni apply form fields (post-FillForm state).

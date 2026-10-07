@@ -1,76 +1,25 @@
 # frozen_string_literal: true
 
-# Non-link status pill of an apply (nil apply = "not applied"), with a spinner while the pipeline runs.
-# The one owner of STATUS_CONFIG: StatusBadge, ActionBox and VacancyApplyCard all render this.
+# Non-link status pill of an apply (nil apply = "not applied"), with a spinner while the pipeline is in progress.
+# The one owner of STATE_CONFIG: StatusBadge, ActionBox, FailureNotice's callers and VacancyApplyCard render this.
 class Apply::Component::StatusPill < ApplyMate::Component::Base
-  STATUS_CONFIG = {
-    not_applied: {
-      icon: :send,
-      color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-    },
-    generating_cv: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :sparkles
-    },
-    sending_cv: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :send
-    },
-    completed: {
-      color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-      icon: :check_circle
-    },
-    failed_generating_cv: {
-      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      icon: :x_circle
-    },
-    failed_sending_cv: {
-      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      icon: :x_circle
-    },
-    fetching_details: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :magnifying_glass
-    },
-    failed_fetching_details: {
-      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      icon: :x_circle
-    },
-    checking_applyble: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :magnifying_glass
-    },
-    failed_checking_applyble: {
-      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      icon: :x_circle
-    },
-    fetching_apply_type: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :magnifying_glass
-    },
-    failed_fetching_apply_type: {
-      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      icon: :x_circle
-    },
-    fetching_form: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :magnifying_glass
-    },
-    failed_fetching_form: {
-      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      icon: :x_circle
-    },
-    filling_form: {
-      color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-      icon: :sparkles
-    },
-    failed_filling_form: {
-      color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      icon: :x_circle
-    }
-  }.freeze
+  YELLOW = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+  AMBER = 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+  GRAY = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
 
-  FALLBACK_CONFIG = { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', icon: :clock }.freeze
+  STATE_CONFIG = {
+    not_applied: { icon: :send, color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+    queued: { icon: :clock, color: YELLOW },
+    running: { icon: :sparkles, color: YELLOW },
+    waiting_capacity: { icon: :clock, color: YELLOW },
+    needs_review: { icon: :eye, color: AMBER },
+    needs_human: { icon: :user, color: AMBER },
+    submit_unverified: { icon: :exclamation_triangle, color: AMBER },
+    completed: { icon: :check_circle, color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+    failed: { icon: :x_circle, color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+    unsupported: { icon: :x_circle, color: GRAY },
+    cancelled: { icon: :x_mark, color: GRAY }
+  }.freeze
 
   def initialize(apply:)
     @apply = apply
@@ -83,9 +32,7 @@ class Apply::Component::StatusPill < ApplyMate::Component::Base
   end
 
   def config
-    return STATUS_CONFIG[:not_applied] if @apply.nil?
-
-    STATUS_CONFIG[@apply.status&.to_sym] || FALLBACK_CONFIG
+    STATE_CONFIG.fetch(@apply.nil? ? :not_applied : @apply.state.to_sym)
   end
 
   def color_class
@@ -96,11 +43,11 @@ class Apply::Component::StatusPill < ApplyMate::Component::Base
     config[:icon]
   end
 
-  # A freshly created apply has no status until Apply::Job::Apply starts its first step.
+  # A running apply shows what it is doing; every other state shows the state itself.
   def label
     return I18n.t('apply.new.button') if @apply.nil?
-    return I18n.t('apply.status.queued') if @apply.status.nil?
+    return I18n.t("apply.stage.#{@apply.stage}") if @apply.running? && @apply.stage.present?
 
-    I18n.t("apply.status.#{@apply.status}")
+    I18n.t("apply.state.#{@apply.state}")
   end
 end

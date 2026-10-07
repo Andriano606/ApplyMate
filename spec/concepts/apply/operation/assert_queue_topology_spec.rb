@@ -106,6 +106,34 @@ RSpec.describe Apply::Operation::AssertQueueTopology, type: :operation do
       end
     end
 
+    context 'when role is apply and the primary pool cannot hold a heartbeat connection per thread' do
+      let(:role) { 'apply' }
+
+      before do
+        stub_env(role:, slots: 3)
+        allow(described_class).to receive(:primary_pool_size).and_return(7)
+      end
+
+      it 'raises with the 2 * APPLY_SLOTS + 2 requirement' do
+        expect { call([ apply_worker.merge(threads: 3) ]) }
+          .to raise_error(described_class::Violation, /pool of at least 8 \(2 \* APPLY_SLOTS \+ 2\), config has 7/)
+      end
+
+      it 'passes once the pool is large enough' do
+        allow(described_class).to receive(:primary_pool_size).and_return(8)
+
+        expect(call([ apply_worker.merge(threads: 3) ])).to be_success
+      end
+    end
+
+    context 'when role is all with a small primary pool (puma runs the same boot check)' do
+      before { allow(described_class).to receive(:primary_pool_size).and_return(3) }
+
+      it 'does not check the pool' do
+        expect(call([ general_worker, apply_worker ])).to be_success
+      end
+    end
+
     context 'when role is general and an apply worker exists' do
       let(:role) { 'general' }
 

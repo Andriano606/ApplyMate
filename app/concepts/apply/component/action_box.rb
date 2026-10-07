@@ -19,11 +19,12 @@ class Apply::Component::ActionBox < ApplyMate::Component::Base
 
   private
 
-  # :none, :in_progress, :completed or :failed
+  # :none, :in_progress, :completed, :attention or :cancelled
   def state
     return :none if @apply.nil?
     return :completed if @apply.completed?
-    return :failed if @apply.failed?
+    return :cancelled if @apply.cancelled?
+    return :attention if @apply.needs_attention?
 
     :in_progress
   end

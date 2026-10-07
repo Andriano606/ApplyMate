@@ -21,6 +21,15 @@ class VacancyCv::Component::CvContent < ApplyMate::Component::Base
     @record.is_a?(Apply)
   end
 
+  # Artifact owner segment: ArtifactsController resolves apply/vacancy_cv records through policy_scope.
+  def artifact_owner
+    from_apply? ? 'apply' : 'vacancy_cv'
+  end
+
+  def cv_path(disposition)
+    helpers.artifact_path(artifact_owner, @record, 'cv', disposition:)
+  end
+
   def apply_anchor
     "##{Apply::Component::VacancyApplyCard.anchor_id(@record)}"
   end

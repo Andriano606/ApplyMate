@@ -16,7 +16,7 @@ RSpec.describe Apply::Operation::Ai::FillForm do
   describe '#call' do
     subject(:run_operation) do
       described_class.call(
-        apply:,
+        ctx:           engine_context(apply),
         prompt_class:  Apply::Ai::Prompt::FillForm,
         schema_class:  Apply::Ai::ResponseSchema::FillForm
       )
@@ -44,9 +44,22 @@ RSpec.describe Apply::Operation::Ai::FillForm do
                                    'tag' => 'input', 'type' => 'text', 'form_index' => 0)
     end
 
-    it 'completes without an error' do
-      run_operation
-      expect(apply.reload.error).to be_nil
+    it 'succeeds as the fill_form stage' do
+      expect(run_operation).to be_success
+      expect(described_class.stage).to eq(:fill_form)
+    end
+
+    context 'when the AI returns an empty object' do
+      before do
+        stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/).to_return(gemini_json_response('{}'))
+      end
+
+      it 'halts with invalid_ai_output' do
+        expect { run_operation }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt.code).to eq(:invalid_ai_output)
+        }
+        expect(apply.reload.filled_inputs).to be_nil
+      end
     end
   end
 end

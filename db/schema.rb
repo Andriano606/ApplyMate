@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -69,25 +69,60 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
     t.integer "apply_type", default: 0, null: false
     t.boolean "applyble"
     t.datetime "created_at", null: false
-    t.text "error"
     t.bigint "fill_form_prompt_id"
     t.jsonb "filled_form_data"
     t.jsonb "form_data"
     t.bigint "generate_cv_prompt_id"
     t.text "raw_cv"
     t.bigint "source_profile_id", null: false
-    t.integer "status"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "user_profile_id", null: false
     t.bigint "vacancy_id", null: false
+    t.integer "state", default: 0, null: false
+    t.string "stage"
+    t.integer "attempt", default: 0, null: false
+    t.uuid "run_token"
+    t.string "job_id"
+    t.jsonb "failure"
+    t.datetime "heartbeat_at"
+    t.datetime "deadline_at"
+    t.datetime "submit_claimed_at"
+    t.datetime "submitted_at"
+    t.string "submitted_via"
+    t.datetime "reminded_at"
+    t.index "COALESCE(heartbeat_at, updated_at)", name: "index_applies_stale_candidates", where: "(state = ANY (ARRAY[0, 1, 2]))"
     t.index ["ai_integration_id"], name: "index_applies_on_ai_integration_id"
     t.index ["fill_form_prompt_id"], name: "index_applies_on_fill_form_prompt_id"
     t.index ["generate_cv_prompt_id"], name: "index_applies_on_generate_cv_prompt_id"
     t.index ["source_profile_id"], name: "index_applies_on_source_profile_id"
+    t.index ["updated_at"], name: "index_applies_remind_candidates", where: "((state = ANY (ARRAY[3, 4])) AND ((reminded_at IS NULL) OR (reminded_at < updated_at)))"
+    t.index ["updated_at"], name: "index_applies_waiting_updated", where: "(state = ANY (ARRAY[3, 4]))"
+    t.index ["user_id", "created_at"], name: "index_applies_on_user_created"
+    t.index ["user_id", "state"], name: "index_applies_on_user_state"
+    t.index ["user_id", "vacancy_id"], name: "index_applies_one_active_per_vacancy", unique: true, where: "(state = ANY (ARRAY[0, 1, 2, 3, 4]))"
+    t.index ["user_id", "vacancy_id"], name: "index_applies_one_open_claim_per_vacancy", unique: true, where: "((submit_claimed_at IS NOT NULL) AND (submitted_at IS NULL) AND (state <> 9))"
     t.index ["user_id"], name: "index_applies_on_user_id"
     t.index ["user_profile_id"], name: "index_applies_on_user_profile_id"
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
+  end
+
+  create_table "apply_steps", force: :cascade do |t|
+    t.bigint "apply_id", null: false
+    t.integer "attempt", null: false
+    t.string "key", null: false
+    t.string "stage", null: false
+    t.integer "position", null: false
+    t.integer "state", default: 0, null: false
+    t.jsonb "result"
+    t.string "error_code"
+    t.text "error_detail"
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["apply_id", "attempt", "key"], name: "index_apply_steps_on_apply_id_and_attempt_and_key", unique: true
+    t.index ["finished_at"], name: "index_apply_steps_on_finished_at"
   end
 
   create_table "hidden_vacancies", force: :cascade do |t|
@@ -341,6 +376,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
     t.string "provider", null: false
     t.string "uid", null: false
     t.datetime "updated_at", null: false
+    t.integer "daily_apply_limit", default: 30, null: false
+    t.datetime "applies_changed_at"
     t.index ["default_fill_form_prompt_id"], name: "index_users_on_default_fill_form_prompt_id"
     t.index ["default_generate_cv_prompt_id"], name: "index_users_on_default_generate_cv_prompt_id"
     t.index ["default_saved_filter_id"], name: "index_users_on_default_saved_filter_id"
@@ -405,6 +442,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_000002) do
   add_foreign_key "applies", "user_profiles"
   add_foreign_key "applies", "users"
   add_foreign_key "applies", "vacancies"
+  add_foreign_key "apply_steps", "applies"
   add_foreign_key "hidden_vacancies", "users"
   add_foreign_key "hidden_vacancies", "vacancies"
   add_foreign_key "prompts", "users"

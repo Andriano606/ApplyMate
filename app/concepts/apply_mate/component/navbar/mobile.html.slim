@@ -15,7 +15,11 @@ div data-controller="mobile-menu"
 
     / Right: avatar or sign-in
     - if signed_in?
-      = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
+      span.relative.inline-flex
+        = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
+        - if menu_attention_count.positive?
+          span(class=ATTENTION_DOT_CLASSES aria-hidden='true') = menu_attention_count
+          span.sr-only = I18n.t('navbar.attention_count', count: menu_attention_count)
     - else
       - sign_in = guest_items.find(&:form_item?)
       - if sign_in
@@ -52,3 +56,5 @@ div data-controller="mobile-menu"
             - if item.icon?
               = icon(item.icon_name, size: 5, class: 'text-gray-400 dark:text-gray-500 shrink-0')
             = item.label
+            - if item.badge?
+              span.ml-auto = badge(label: item.badge, color: :red)

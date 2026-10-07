@@ -82,7 +82,7 @@ RSpec.describe Apply::Job::Apply, type: :job do
 
   it "runs inline" do
     perform_enqueued_jobs { described_class.perform_now(apply.id) }
-    expect(apply.reload.status).to eq("completed")
+    expect(apply.reload).to be_completed
   end
 end
 ```
@@ -112,7 +112,7 @@ end
 
 **Stale factory attributes cause `NoMethodError: undefined method 'x=' for an instance of Model`** — the column was dropped but the factory still sets it. Fix: remove the attribute from the factory.
 
-**Check enum values before using them in specs** — `Apply` has no `:pending` status. Use an actual value from the model's enum declaration (e.g. `:generating_cv`). Passing an invalid symbol raises `ArgumentError: 'x' is not a valid status`.
+**Check enum values before using them in specs** — read `Apply.states` / `ApplyStep.states` (or the model's `enum` declaration) instead of guessing; an invalid symbol raises `ArgumentError: 'x' is not a valid state`. For `Apply` prefer the factory traits `:running`, `:completed`, `:failed`, `:claimed`, `:needs_human`. A user has at most one active apply (`queued running waiting_capacity needs_review needs_human`) per vacancy (`index_applies_one_active_per_vacancy`): a second apply for the same user + vacancy in a spec must be in a finished state (e.g. `:completed`, `:failed`).
 
 Use `sequence` for columns that must be unique:
 
@@ -125,26 +125,50 @@ end
 
 ## Testing Apply Pipeline Operations
 
-`Apply::Operation::*` classes inherit `Apply::Operation::Base` and call `skip_authorize` internally, so invoke them without `current_user:`:
+`Apply::Operation::*` steps run inside a run of the engine (see `.ai/docs/apply_handlers.md`), so a spec gives them a
+real run context. `engine_context(apply)` (`spec/support/apply_engine.rb`) is a real `StartContext`: the apply must be
+startable (`queued`, the default state — the shared contexts create it that way) and becomes `running`, attempt 1:
 
 ```ruby
-described_class.call(apply:)
-```
+described_class.call(ctx: engine_context(apply), handler:, **options)
 
-`perform!` sets `start_status` at the top, calls `run!`, then sets `success_status` (if non-nil). After calling:
-
-- `apply.reload.status` reflects the last status set by the operation
-- `apply.reload.error` is `nil` on success
-
-Some operations receive extra keyword args via `add_step` options (e.g. `prompt_class:`, `schema_class:`). Pass them explicitly when calling directly:
-
-```ruby
 described_class.call(
-  apply:,
-  prompt_class:  Apply::Ai::Prompt::FillForm,
+  ctx:           engine_context(apply),
+  prompt_class:  Apply::Ai::Prompt::FillForm,      # add_step options are passed explicitly
   schema_class:  Apply::Ai::ResponseSchema::FillForm
 )
 ```
+
+Called directly, a step only does its own work: success is `be_success` plus the data it stored
+(`apply.reload.inputs`, `cv`, …); an outcome is the `Apply::Operation::Engine::Halt` it raises:
+
+```ruby
+expect { run_operation }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+  expect(halt).to have_attributes(code: :outcome_unknown, detail: 'HTTP 500')
+}
+```
+
+Lifecycle state, `failure`, the claim and `apply_steps` rows are written by the Runner. To assert them, run the step as
+the only step of a real run with `run_engine_step(apply, described_class, **options)`, which returns the reloaded
+apply (a block receives the handler instance, e.g. to stub `build_payload`), or run the whole handler
+(`Apply::Handler::Dou.new(apply:).call`):
+
+```ruby
+run_engine_step(apply, described_class) { |handler| allow(handler).to receive(:build_payload).and_return(payload) }
+
+expect(apply).to be_submit_unverified
+expect(apply.submit_claimed_at).to be_present
+expect(apply.failure).to include('code' => 'outcome_unknown', 'stage' => 'submit', 'after_claim' => true)
+expect(apply.apply_steps.sole).to have_attributes(stage: 'submit', state: 'failed', error_code: 'outcome_unknown')
+```
+
+`failure` is a jsonb hash with string keys; `apply.apply_steps.chronological` lists the step rows in run order.
+To prove the claim is taken before the irreversible action, read `Apply.find(apply.id).submit_claimed_at` inside the
+stubbed `post_multipart` / submit `click`.
+
+Runner and lifecycle specs (`spec/concepts/apply/operation/engine/`) use the fake two-step pipeline in
+`spec/support/apply_engine_fakes.rb` (see `.ai/docs/apply_engine.md`, "Specs"). A `FakeSession` for browser steps
+arrives with the browser layer (phase 2); until then browser steps use the `ApplyMate::Client::Browser` double below.
 
 Pre-populate `apply` with jsonb_accessor attributes using `update!`:
 
@@ -175,7 +199,8 @@ before do
 
   allow(browser).to receive(:fetch_rendered).with(url).and_return([final_url, html, ''])
   allow(browser).to receive(:navigate_to)
-  allow(browser).to receive(:click).and_return(true)   # must return truthy — falsy raises in operation
+  allow(browser).to receive(:clickable?).and_return(true) # SendApply::Browser checks the submit button before the claim
+  allow(browser).to receive(:click).and_return(true)   # must return truthy — falsy halts with target_not_found
   allow(browser).to receive(:fill_field)
   allow(browser).to receive(:attach_file)
   allow(browser).to receive(:attempt_recaptcha_refresh)
@@ -202,6 +227,7 @@ Spec files must be named after the **class under test**, not after the company/f
 | `Apply::Operation::FetchInternalForm` | `spec/concepts/apply/operation/fetch_internal_form_spec.rb` |
 | `Apply::Operation::SendApply::Http`   | `spec/concepts/apply/operation/send_apply/http_spec.rb`     |
 | `Apply::Handler::Dou`                 | `spec/concepts/apply/handler/dou_spec.rb`                   |
+| `Apply::Handler::Djinni`              | `spec/concepts/apply/handler/djinni_spec.rb`                |
 
 When multiple company fixtures test the **same class**, wrap each in a `context` block inside one file — do not create `honeytech_spec.rb`, `coidea_spec.rb`, etc. If the file already has `include_context` at the top-level `RSpec.describe`, move the existing content into a context block and keep shared helpers (e.g. `http_response`) at the describe level:
 

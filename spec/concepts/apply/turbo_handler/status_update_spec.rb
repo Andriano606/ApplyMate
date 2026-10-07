@@ -16,12 +16,12 @@ RSpec.describe Apply::TurboHandler::StatusUpdate do
     messages.map { |message| message[/target="([^"]+)"/, 1] }
   end
 
-  describe '.broadcast (a pipeline step changed one apply)' do
+  describe '.broadcast (the Runner changed one apply)' do
     let(:filled_inputs) { [ { 'tag' => 'textarea', 'label' => 'Why us?', 'value' => 'Because' } ] }
 
     it 'replaces the badge, the action box and only that apply card, never the whole panel' do
-      create(:apply, user:, vacancy:, status: :completed, created_at: 1.day.ago)
-      apply = create(:apply, user:, vacancy:, status: :filling_form, filled_inputs:)
+      create(:apply, :completed, user:, vacancy:, created_at: 1.day.ago)
+      apply = create(:apply, :running, user:, vacancy:, filled_inputs:)
 
       described_class.broadcast(apply)
 
@@ -35,8 +35,8 @@ RSpec.describe Apply::TurboHandler::StatusUpdate do
     end
 
     it 'renders an older apply card collapsed, as the panel does' do
-      older = create(:apply, user:, vacancy:, status: :failed_filling_form, filled_inputs:, created_at: 1.day.ago)
-      create(:apply, user:, vacancy:, status: :completed)
+      older = create(:apply, :completed, user:, vacancy:, filled_inputs:, created_at: 1.day.ago)
+      create(:apply, :completed, user:, vacancy:, created_at: 1.hour.ago)
 
       described_class.broadcast(older)
 
@@ -48,7 +48,7 @@ RSpec.describe Apply::TurboHandler::StatusUpdate do
 
   describe '.refresh (applies added or removed)' do
     it 'replaces the badge, the action box and the whole applies panel' do
-      apply = create(:apply, user:, vacancy:, status: :fetching_form)
+      apply = create(:apply, :running, user:, vacancy:, stage: 'fetch_form')
 
       described_class.refresh(vacancy, user)
 

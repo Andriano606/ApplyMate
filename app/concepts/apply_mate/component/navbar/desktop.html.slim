@@ -21,7 +21,11 @@
       = render ApplyMate::Component::Dropdown.new do |dropdown|
         - dropdown.with_trigger do
           = button(variant: :icon, class: 'gap-2') do
-            = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
+            span.relative.inline-flex
+              = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
+              - if menu_attention_count.positive?
+                span(class=ATTENTION_DOT_CLASSES aria-hidden='true') = menu_attention_count
+                span.sr-only = I18n.t('navbar.attention_count', count: menu_attention_count)
             = icon(:chevron_down, size: 4, class: 'text-gray-500 dark:text-gray-400')
 
         - dropdown.with_menu do
@@ -52,6 +56,8 @@
                   - if item.icon?
                     = icon(item.icon_name, size: 4, class: 'text-gray-400 dark:text-gray-500 shrink-0')
                   = item.label
+                  - if item.badge?
+                    span.ml-auto = badge(label: item.badge, color: :red)
 
     - guest_items.each do |item|
       - if item.form_item?

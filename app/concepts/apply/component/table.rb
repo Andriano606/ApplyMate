@@ -31,6 +31,10 @@ class Apply::Component::Table < ApplyMate::Component::Base
       ])
     end
 
+    table.add_column(header: I18n.t('apply.index.table.failure')) do |apply|
+      I18n.t("apply.failure.#{apply.failure_code}") if apply.needs_attention? && apply.failure_code.present?
+    end
+
     table.add_column(header: I18n.t('apply.index.table.created_at')) do |apply|
       I18n.l(apply.created_at, format: :short)
     end

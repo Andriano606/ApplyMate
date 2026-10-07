@@ -25,14 +25,4 @@ class Apply::Ai::ResponseSchema::Browser::CheckSubmitResult < ApplyMate::Ai::Res
       Wrap the JSON in a ```json code block. No extra text outside the code block.
     INSTRUCTIONS
   end
-
-  # Deliberately lenient until phase 1 (design §15 rows 0/1): an unusable verdict still counts as
-  # success. A client EmptyResponse (no text at all) gets the same treatment in
-  # Apply::Operation::SendApply::Browser#verify_submit. Phase 1 replaces both with
-  # claim + submit_unverified, and this override goes away.
-  def self.extract(raw_response)
-    super
-  rescue InvalidResponse
-    { 'success' => true, 'reason' => 'Could not parse AI response' }.with_indifferent_access
-  end
 end

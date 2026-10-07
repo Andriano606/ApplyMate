@@ -69,25 +69,23 @@ Operations that use the multi-step API: `Apply::Operation::Ai::FetchExternalForm
 
 ## Apply::Operation::Base pipeline API
 
-Every apply pipeline step inherits `Apply::Operation::Base` and defines:
+Every apply pipeline step inherits `Apply::Operation::Base`, declares its stage and implements `run!`:
 
 ```ruby
-def start_status = :my_status          # set on apply before run!
-def error_status = :failed_my_status   # set on apply if run! raises
-def success_status                     # optional — set on apply after run! returns; nil skips
-  :completed
+class Apply::Operation::FetchDetails < Apply::Operation::Base
+  stage :fetch_details   # applies.stage while the step runs; apply_steps key
+
+  private
+
+  def run!(apply:, handler:, **)
+    # ...
+  end
 end
 ```
 
-`perform!` flow:
+`perform!(ctx:, handler: nil, **options)` calls `skip_authorize`, sets `model = ctx.apply`, calls `run!(apply: ctx.apply, handler:, ctx:, **options)` and always runs `cleanup`. The step is called by the Runner (`Apply::Operation::Engine::Run`), which owns everything around it: `applies.stage`, the `apply_steps` row, lifecycle `state`/`failure` and the `StatusUpdate` broadcasts (see `.ai/docs/apply_engine.md`).
 
-1. Skip if `apply.error.present?` (pipeline already failed upstream)
-2. `apply.update!(status: start_status)` + broadcast
-3. `run!(apply:, handler:, **options)`
-4. If `success_status` is non-nil: `apply.update!(status: success_status)` + broadcast
-5. On any raise: `apply.update!(status: error_status, error: e.message)` + broadcast + re-raise
-
-`run!` may persist step data with `apply.update!(form_data: …)` etc. — `CheckApplyable`, `FetchApplyType`, `FetchInternalForm`, `FetchExternalForm`, `FillForm` and `GeneratePdfCv` do — but it must never write `status` or broadcast `StatusUpdate` itself: `Base` owns status transitions. A step with a `success_status` must only raise on failure.
+`run!` may persist step data with `apply.update!(form_data: …)` etc., but it must never write `state`/`stage`/`failure` or broadcast `StatusUpdate` itself. To stop the run with a specific outcome it calls `halt!(code, detail:)` (raises `Apply::Operation::Engine::Halt`; the codes of the current steps are listed in `.ai/docs/apply_handlers.md`); any other exception is recorded as `unexpected_error` (or `invalid_ai_output` / `invalid_record`). A step that submits takes the claim with `Apply::Operation::Engine::ClaimSubmit.call(ctx:)` right before the POST / click.
 
 ## Queue topology
 
