@@ -53,6 +53,7 @@ gem 'solid_queue'
 gem 'solid_cable'
 gem 'mission_control-jobs'
 gem 'ferrum'
+gem 'playwright-ruby-client', '1.63.0', require: 'playwright' # pinned to browserd's playwright-core; AcquireLease asserts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION == lease.playwright_version
 
 # Reduces boot times through caching; required in config/boot.rb
 gem 'bootsnap', require: false

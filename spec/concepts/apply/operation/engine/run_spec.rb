@@ -153,6 +153,80 @@ RSpec.describe Apply::Operation::Engine::Run, type: :job do
     end
   end
 
+  describe 'browser errors' do
+    def raise_in_prepare(error)
+      allow(ApplyEngineFakes::PrepareStep).to receive(:observe).and_raise(error)
+      allow(Rails.error).to receive(:report)
+    end
+
+    context 'when no browser slot is free (PoolBusy)' do
+      before { raise_in_prepare(ApplyMate::Client::Browser::PoolBusy.new('3 busy answers')) }
+
+      it 're-raises for the job retry and parks the row in waiting_capacity' do
+        Apply.where(id: apply.id).update_all(failure: { 'code' => 'worker_lost' })
+
+        expect { described_class.call(apply:, handler:) }.to raise_error(ApplyMate::Client::Browser::PoolBusy)
+        apply.reload
+
+        expect(apply).to be_waiting_capacity
+        expect(apply.stage).to be_nil
+        expect(apply.failure).to eq('code' => 'worker_lost')
+        expect(steps.sole).to have_attributes(state: 'failed', error_code: 'capacity')
+        expect(steps.sole.finished_at).to be_present
+        expect(Apply::TurboHandler::StatusUpdate).to have_received(:broadcast).at_least(:twice)
+      end
+
+      it 'shuts the heartbeat ticker down' do
+        ticker = Concurrent::TimerTask.new(execution_interval: 30) { nil }
+        allow(Apply::Operation::Engine::Heartbeat).to receive(:call)
+          .and_return(instance_double(ApplyMate::Operation::Result, model: ticker))
+        allow(ticker).to receive(:shutdown)
+
+        expect { described_class.call(apply:, handler:) }.to raise_error(ApplyMate::Client::Browser::PoolBusy)
+
+        expect(ticker).to have_received(:shutdown)
+      end
+    end
+
+    it 'auto-resumes a Crashed browser once as browser_crashed' do
+      raise_in_prepare(ApplyMate::Client::Browser::Crashed.new('gone'))
+
+      expect { run }.to have_enqueued_job(Apply::Job::Apply).with(apply.id)
+      expect(apply).to be_queued
+      expect(apply.failure).to include('code' => 'browser_crashed', 'auto_resumed' => true)
+      expect(steps.sole.error_code).to eq('browser_crashed')
+    end
+
+    it 'maps DeadlineExceeded to deadline' do
+      raise_in_prepare(ApplyMate::Client::Browser::DeadlineExceeded.new('late'))
+
+      expect { run }.to have_enqueued_job(Apply::Job::Apply)
+      expect(apply.failure).to include('code' => 'deadline')
+    end
+
+    it 'maps TargetNotFound to a failed target_not_found without auto-resume' do
+      raise_in_prepare(ApplyMate::Client::Browser::TargetNotFound.new(nil, 'no element for #send'))
+
+      expect { run }.not_to have_enqueued_job(Apply::Job::Apply)
+      expect(apply).to be_failed
+      expect(apply.failure).to include('code' => 'target_not_found')
+    end
+
+    it 'maps VersionMismatch to a permanent unexpected_error' do
+      raise_in_prepare(ApplyMate::Client::Browser::VersionMismatch.new('1.0 vs 1.63'))
+
+      expect(run).to be_failed
+      expect(apply.failure).to include('code' => 'unexpected_error', 'kind' => 'permanent')
+    end
+
+    it 'maps UnsafeUrlError to private_address and unsupported' do
+      raise_in_prepare(ApplyMate::Net::UnsafeUrlError.new(:private, url: 'http://10.0.0.1/', host: '10.0.0.1'))
+
+      expect(run).to be_unsupported
+      expect(apply.failure).to include('code' => 'private_address')
+    end
+  end
+
   it 'halts with deadline before the next step once the run is out of time' do
     allow(ApplyEngineFakes::PrepareStep).to receive(:observe) { travel(Apply::RUN_DEADLINE + 1.minute) }
 

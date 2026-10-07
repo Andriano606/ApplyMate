@@ -22,6 +22,7 @@ Every piece of procedural engine logic is an internal operation (`ApplyMate::Ope
 | `lifecycle/decide.rb` | `Decide`: the ONLY claim rule + auto-resume-once + failure hash; returns `Decide::Decision` |
 | `lifecycle/record_halt.rb` | `RecordHalt`: writes `Decide`'s decision for the owning run (fenced) |
 | `lifecycle/finish.rb` | `Finish`: `completed`, `submitted_via: 'engine'` |
+| `lifecycle/wait_capacity.rb` | `WaitCapacity`: the owning run found no browser slot (`PoolBusy`): `waiting_capacity`, stage nil, steps closed `capacity` |
 | `lifecycle/halt_unowned.rb` | `HaltUnowned`: halt for a row no run owns (queued / waiting_capacity only) |
 | `claim_submit.rb` | `ClaimSubmit`: the submit claim |
 | `close_steps.rb` | `CloseSteps`: fails `apply_steps` rows a lost / fenced run left `running` |
@@ -65,7 +66,7 @@ Every piece of procedural engine logic is an internal operation (`ApplyMate::Ope
 | State | Entered by | Exit |
 |---|---|---|
 | queued / running | Create, Resume, auto-resume, Approve, ProvideInput | steps finish; reaper |
-| waiting_capacity | `PoolBusy`, `Throttled` (phases 2 / 3a) | job retry; after exhaustion `failed(:capacity)` → Resume |
+| waiting_capacity | `PoolBusy` (phase 2), `Throttled` (3a) | `Run` rescues `PoolBusy`, `Lifecycle::WaitCapacity` (fenced, `failure` untouched) and re-raises; `Apply::Job::Apply` `retry_on` 8× `polynomially_longer` (7 retries: ≈ 78 min, up to ≈ 90 min with jitter); `StartContext` restarts the row from state 2; `ReapStale` sees the scheduled retry as alive (it reads the **newest** `solid_queue_jobs` row of the `active_job_id`: each retry inserts a new row, the finished ones stay until `clear_finished_in_batches`); after exhaustion `HaltUnowned(:capacity)` → `failed(:capacity)` (no auto-resume) → Resume |
 | needs_review | ReviewGate, FillFields, `already_applied` (phase 3a) | Approve, Edit, Cancel; `failed(:review_expired)` after `Apply::REVIEW_TIMEOUT` |
 | needs_human | `needs_human` halts before the claim (incl. `manual_apply_required`) | "Fixed, retry" (Resume), "I applied manually" (MarkOutcome → `completed`, `submitted_via: manual`), "Open link", Cancel; reminder after `Apply::REMIND_AFTER`, `failed(:human_timeout)` after `Apply::HUMAN_TIMEOUT` |
 | failed | transient / permanent halts before the claim | Resume (attempt + 1) unless a sibling apply already claimed / submitted; `ai_lifetime_cap`: only Cancel or "apply again" |
@@ -107,7 +108,22 @@ nil for `HaltUnowned` / `ExpireWaiting`.
 | `Halt` | its own code |
 | `ApplyMate::Ai::Client::Base::EmptyResponse`, `ApplyMate::Ai::ResponseSchema::Json::InvalidResponse` | `invalid_ai_output` |
 | `ActiveRecord::RecordInvalid` outside an operation, or a step result with `failure?` | `invalid_record` (detail = error messages) |
+| `ApplyMate::Client::Browser::PoolBusy` | `capacity` (the step row; the apply goes to `waiting_capacity`, see exit table) |
+| `ApplyMate::Client::Browser::Crashed` | `browser_crashed` (transient) |
+| `ApplyMate::Client::Browser::DeadlineExceeded` | `deadline` (transient) |
+| `ApplyMate::Client::Browser::TargetNotFound` | `target_not_found` |
+| `ApplyMate::Client::Browser::VersionMismatch` | `unexpected_error` (deliberate: permanent until the deploy is fixed) |
+| `ApplyMate::Net::UnsafeUrlError` | `private_address` (unsupported) |
 | any other `StandardError` | `unexpected_error` (detail = `"Class: message"`, redacted; also `Rails.error.report`) |
+
+**Browser errors.** `Crashed` is transient: `Decide` auto-resumes once (before the claim), the second one stays
+`failed` for the user. `DeadlineExceeded` (a Session ran past its `deadline:`) is the transient `deadline`.
+`TargetNotFound` is permanent `target_not_found`. `UnsafeUrlError` is `private_address`, which lands in
+`unsupported`. A step must never rescue `PoolBusy` (see apply_handlers.md): only the Runner and the job handle it.
+
+**Shutdown.** `config.solid_queue.shutdown_timeout = 30.seconds` (`config/initializers/solid_queue_shutdown.rb`)
+lets an apply step's `ensure` reach `Session#close` (the lease DELETE) on SIGTERM; the Kamal stop timeout of
+`apply_worker` must be >= 40 s.
 
 ## Claim rule
 
@@ -168,6 +184,7 @@ this statement in phase 3a.
 |---|---|---|
 | `RUN_DEADLINE` | 30 min | `StartContext` (`deadline_at`); the Runner raises `Halt(:deadline)` before a step once `ctx.remaining <= 0` |
 | `STALE_AFTER` | 3 min | `StartContext` takeover of a `running` row; `ReapStale` candidates |
+| `SCOPE_DEADLINE` (`Context::`) | 8 min | `Context#scope_deadline` = `min(now + 8 min, deadline_at)`, passed to `Session.open(deadline:)`; shorter than browserd `LEASE_TTL_S = 600` |
 | `HEARTBEAT_GRACE` | 5 min | `Heartbeat::Tick` stops beating after `deadline_at + HEARTBEAT_GRACE` |
 | `REAPER_GRACE` | 15 min | `ReapStale`: a live process is trusted until `deadline_at + REAPER_GRACE` |
 | `HUMAN_TIMEOUT` | 7 days | `ExpireWaiting` (`WAIT_TIMEOUTS['needs_human']`), `Apply#wait_expires_at` |
@@ -239,15 +256,15 @@ The Runner wraps the pre-engine steps unchanged in their HTTP / AI behaviour; on
 | `check_applyable` | `CheckApplyable` | `no_application_path` |
 | `fetch_apply_type` | `FetchApplyType` | `no_application_path` |
 | `fetch_details` | `FetchDetails` (Djinni) | — |
-| `fetch_form` | `FetchInternalForm`, `Ai::FetchExternalForm` | `not_a_form`, `no_application_path`, `target_not_found` |
+| `fetch_form` | `FetchInternalForm`, `Ai::FetchExternalForm` | `not_a_form`, `no_application_path`, `target_not_found`, `private_address` (AI `form_url`) |
 | `fill_form` | `Ai::FillForm` | `invalid_ai_output` |
 | `generate_cv` | `Ai::GeneratePdfCv` | — (`Apply.with_cv_or_generating_cv` keys on this string) |
-| `submit` | `SendApply::Http`, `SendApply::Browser` | `outcome_unknown` (Http), `session_expired` (definitive), `validation_rejected` (not definitive), `target_not_found`; Browser's unusable verdict leaks `EmptyResponse` / `InvalidResponse` → `invalid_ai_output` |
+| `submit` | `SendApply::Http`, `SendApply::Browser` | `outcome_unknown` (Http), `session_expired` (definitive), `validation_rejected` (not definitive), `target_not_found`, `required_field_unfillable` (Browser read-back, before the claim); Browser's unusable verdict leaks `EmptyResponse` / `InvalidResponse` → `invalid_ai_output` |
 
 - Steps raise through `Apply::Operation::Base#halt!(code, detail:, definitive:)`.
 - Claim placement: `SendApply::Http` claims after building the payload, right before `post_multipart`;
-  `SendApply::Browser` claims after `attempt_recaptcha_refresh` and the `clickable?` check of the submit button,
-  right before the submit click. A missing trigger / submit button halts before the claim (`failed`).
+  `SendApply::Browser` claims after the fill read-back and the `present?(…, visibility: :required)` check of the
+  submit button, right before the submit click. A missing trigger / submit button halts before the claim (`failed`).
 - Only `SendApply::Http`'s login redirect is definitive (releases the claim → `needs_human`). The browser verdict
   (`CheckSubmitResult`, now strict) never is: `success: false` (`validation_rejected`) and an empty / unparseable
   verdict (not rescued in the step; `Run::ERROR_CODES` → `invalid_ai_output`) keep the claim (`submit_unverified`).
@@ -271,8 +288,11 @@ retries.
 
 `Engine::ReapStale.call(batch_size: 100, max_batches: 10)` -> `{ reaped:, resumed:, alive: }`.
 Candidates: state in `IN_PROGRESS_STATES` with `COALESCE(heartbeat_at, updated_at) < STALE_AFTER.ago`, oldest
-first (`index_applies_stale_candidates`). The job behind a candidate is looked up by `applies.job_id` =
-`SolidQueue::Job.active_job_id`.
+first (`index_applies_stale_candidates`). The job behind a candidate is the **newest** `SolidQueue::Job` row with
+`active_job_id = applies.job_id` (`where(...).order(:id).last`, `index_solid_queue_jobs_on_active_job_id`): every
+`retry_job` inserts a new row under the same `active_job_id` and the finished ones stay until
+`clear_finished_in_batches`, so an arbitrary row could be a finished earlier execution of a job whose retry is
+still scheduled.
 
 | Job state | Verdict |
 |---|---|

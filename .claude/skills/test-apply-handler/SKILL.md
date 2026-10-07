@@ -65,24 +65,12 @@ RSpec.shared_context 'honeytech dou' do
     Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:)  # queued
   end
 
-  # ── Browser double ────────────────────────────────────────────────────────
-  let(:browser) { instance_double(ApplyMate::Client::Browser) }
+  # ── Browser session (spec/support/fake_session.rb, see .ai/docs/rspec.md "FakeSession") ──
+  # One scripted page for both browser steps; Session.open yields it and records its kwargs.
+  # Override `let(:session)` per context: FakeSession.new(..., missing: [css], read_values: { css => value }).
+  let(:session) { FakeSession.new(html: honeytech_apply_html, final_url: HoneytechDou::PEOPLEFORCE_URL) }
 
-  before do
-    allow(ApplyMate::Client::Browser).to receive(:new).and_return(browser)
-    allow(browser).to receive(:fetch_rendered)
-      .with(HoneytechDou::DOU_REDIRECT)
-      .and_return([HoneytechDou::PEOPLEFORCE_URL, honeytech_apply_html, ''])
-    allow(browser).to receive(:navigate_to)
-    allow(browser).to receive(:click).and_return(true)  # falsy → operation raises
-    allow(browser).to receive(:fill_field)
-    allow(browser).to receive(:attach_file)
-    allow(browser).to receive(:attempt_recaptcha_refresh)
-    allow(browser).to receive(:wait_for_idle)
-    allow(browser).to receive(:body).and_return('<p>Дякуємо!</p>')
-    allow(browser).to receive(:screenshot).and_return('')
-    allow(browser).to receive(:quit)
-  end
+  before { stub_browser_session(session) }
 
   # ── Misc stubs ────────────────────────────────────────────────────────────
   before do
@@ -150,8 +138,9 @@ RSpec.describe Apply::Handler::Dou do
     it 'stores AI-filled values'             { run_handler; expect(apply.reload.filled_inputs).to include(hash_including('name' => 'field[name]', 'value' => 'Jane Doe')) }
     it 'attaches a generated CV'             { run_handler; expect(apply.reload.cv).to be_attached }
     it 'completes without error'             { run_handler; expect(apply.reload).to be_completed; expect(apply.failure).to be_nil }
-    it 'navigates to the external URL'       { run_handler; expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT) }
-    it 'clicks submit'                       { run_handler; expect(browser).to have_received(:click).with(a_string_starting_with('button[type="submit"]'), text: a_string_including('Apply')) }
+    it 'navigates to the external URL'       { run_handler; expect(session.calls).to include([ :goto, HoneytechDou::DOU_REDIRECT ]) }
+    it 'submits in a humanized session'      { run_handler; expect(session.open_options.last).to include(humanize: true) }
+    it 'clicks submit once'                  { run_handler; expect(session.calls_of(:click).sole.first.strategies.first).to include('has_text' => a_string_including('Apply')) }
   end
 end
 ```
@@ -177,7 +166,8 @@ RSpec.describe Apply::Operation::Ai::FetchExternalForm do
   describe '#call' do
     subject(:run_operation) { described_class.call(ctx: engine_context(apply)) }
 
-    it 'fetches the page via browser'      { run_operation; expect(browser).to have_received(:fetch_rendered).with(HoneytechDou::DOU_REDIRECT) }
+    it 'renders the page in a session'     { run_operation; expect(session.calls).to include([ :goto, HoneytechDou::DOU_REDIRECT ]) }
+    it 'opens it without humanize'         { run_operation; expect(session.open_options.sole).to include(humanize: false) }
     it 'populates inputs'                  { run_operation; expect(apply.reload.inputs.map { |i| i['name'] }).to include('field[name]') }
     it 'resolves the form action URL'      { run_operation; expect(apply.reload.action).to start_with('https://') }
     it 'stores the http method'            { run_operation; expect(apply.reload.http_method).to eq('post') }
@@ -258,20 +248,43 @@ RSpec.describe Apply::Operation::SendApply::Browser do
   describe '#call' do
     subject(:run_operation) { described_class.call(ctx: engine_context(apply)) }
 
-    it 'navigates to external URL'     { run_operation; expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT) }
-    it 'fills text inputs'             { run_operation; expect(browser).to have_received(:fill_field).with('[name="field[name]"]', 'Jane Doe', 'input', form_index: 0) }
-    it 'skips file inputs in fill'     { run_operation; expect(browser).not_to have_received(:fill_field).with(a_string_including('resume'), anything, anything, any_args) }
-    it 'attaches CV to file input'     { run_operation; expect(browser).to have_received(:attach_file).with(hash_including('type' => 'file'), a_string_ending_with('.pdf')) }
-    it 'clicks submit button'          { run_operation; expect(browser).to have_received(:click).with('button[type="submit"].btn', text: 'Apply') }
+    let(:submit_target) do
+      ApplyMate::Client::Browser::Target.new(
+        frame_path: [], root: nil, readonly: false,
+        strategies: [ { 'css' => 'button[type="submit"].btn', 'has_text' => 'Apply' }, { 'css' => 'button[type="submit"].btn' } ]
+      )
+    end
+
+    it 'navigates to external URL'     { run_operation; expect(session.calls).to include([ :goto, HoneytechDou::DOU_REDIRECT ]) }
+    it 'fills text inputs'             { run_operation; expect(session.calls_of(:fill).map(&:last)).to include('Jane Doe') }
+    it 'never fills file inputs'       { run_operation; expect(session.calls_of(:fill).map { |t, _| t.strategies.first['css'] }).not_to include(a_string_including('resume')) }
+    it 'uploads the CV'                { run_operation; expect(session.calls_of(:upload).sole.last).to end_with('.pdf') }
+    it 'clicks submit button'          { run_operation; expect(session.calls_of(:click).map(&:first)).to eq([ submit_target ]) }
     it 'leaves the lifecycle to the Runner' { run_operation; expect(apply.reload.submit_claimed_at).to be_present }
+
+    it 'claims before the click' do
+      claimed = nil
+      session.on(:click) { claimed = Apply.find(apply.id).submit_claimed_at }
+      run_operation
+      expect(claimed).to be_present
+    end
+
+    context 'when the submit button is missing' do
+      let(:session) { FakeSession.new(html: honeytech_apply_html, final_url: HoneytechDou::PEOPLEFORCE_URL, missing: [ 'button[type="submit"].btn' ]) }
+
+      it 'fails before the claim' do
+        expect(run_engine_step(apply, described_class)).to be_failed
+        expect(apply.submit_claimed_at).to be_nil
+      end
+    end
 
     context 'when trigger_selector is set' do
       before { apply.update!(trigger_selector: '#open-form') }
 
       it 'clicks trigger before submit' do
         run_operation
-        expect(browser).to have_received(:click).with('#open-form').ordered
-        expect(browser).to have_received(:click).with('button[type="submit"].btn', text: 'Apply').ordered
+        expect(session.calls_of(:click).map(&:first))
+          .to eq([ ApplyMate::Client::Browser::Target.css('#open-form'), submit_target ])
       end
     end
   end

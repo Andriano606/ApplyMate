@@ -93,17 +93,17 @@ RSpec.describe Apply::Handler::Dou do
         expect(apply.apply_steps.map(&:position)).to eq([ 0, 1, 2, 4, 5, 6 ])
       end
 
-      it 'navigates the browser to the DOU redirect URL for submission' do
+      it 'renders the form, then submits in a separate humanized session at the DOU redirect URL' do
         run_handler
-        expect(browser).to have_received(:navigate_to).with(HoneytechDou::DOU_REDIRECT)
+        expect(session.open_options.map { |options| options[:humanize] }).to eq([ false, true ])
+        expect(session.calls_of(:goto)).to eq([ [ HoneytechDou::DOU_REDIRECT ], [ HoneytechDou::DOU_REDIRECT ] ])
       end
 
       it 'clicks the submit button with the Ukrainian label, once' do
         run_handler
-        expect(browser).to have_received(:click).once
-        expect(browser).to have_received(:click)
-          .with(a_string_starting_with('button[type="submit"]'),
-                text: a_string_including('Застосувати'))
+        target = session.calls_of(:click).sole.first
+        expect(target.strategies.first).to match('css' => a_string_starting_with('button[type="submit"]'),
+                                                 'has_text' => a_string_including('Застосувати'))
       end
 
       context 'when the vacancy page has no reply button' do
@@ -118,7 +118,7 @@ RSpec.describe Apply::Handler::Dou do
           expect(apply.applyble).to be(false)
           expect(apply.failure).to include('code' => 'no_application_path', 'stage' => 'check_applyable')
           expect(apply.apply_steps.map(&:key)).to eq([ 'check_applyable' ])
-          expect(browser).not_to have_received(:fetch_rendered)
+          expect(session.open_options).to be_empty
         end
       end
     end

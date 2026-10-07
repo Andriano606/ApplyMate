@@ -33,7 +33,7 @@ RSpec.describe Apply::Job::Apply, type: :job do
 
       expect { perform_enqueued_jobs { described_class.perform_now(apply.id) } }
         .not_to(change { [ ApplyStep.where(apply_id: apply.id).count, apply.reload.attributes ] })
-      expect(browser).to have_received(:click).once
+      expect(session.calls.count { |call| call.first == :click }).to eq(1)
     end
 
     it 'writes nothing from a zombie run whose run_token was rotated' do

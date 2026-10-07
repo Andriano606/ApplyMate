@@ -14,8 +14,6 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   # #message is hardcoded), this preserves the diagnostic context we attach.
   class ResponseTimeoutError < StandardError; end
 
-  CHROME_HOST = ENV.fetch('CHROME_HOST', 'chrome-vnc')
-  CHROME_PORT = ENV.fetch('CHROME_PORT', 9222)
   # The web UI has no API timeout semantics: Request#timeout is ignored and the answer
   # gets its own polling deadline.
   RESPONSE_TIMEOUT = 180
@@ -77,13 +75,9 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   # Launched per call (and quit in scrape_answer's ensure), not in the constructor, so
   # building the client or rejecting a request never starts Chrome.
   def launch_browser
-    # Connect to the persistent, already-logged-in Chrome container instead of
-    # launching a fresh local Chrome per request. Spawning a cold browser on
-    # every call intermittently exceeds Ferrum's startup/command timeout on
-    # constrained hosts (prod runs on a Raspberry Pi), which surfaces as the
-    # random "Timed out waiting for response" error.
+    # A local Chrome inside the worker container (there is no shared Chrome container;
+    # apply-time browsing goes through browserd, see .ai/docs/browser.md).
     Ferrum::Browser.new(
-      # url: "http://#{CHROME_HOST}:#{CHROME_PORT}",
       window_size: [ 1920, 1080 ],
       timeout: 30,
       browser_options: {

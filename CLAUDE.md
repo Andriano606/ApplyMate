@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # ApplyMate
 
-Rails 8 + Hotwire (Stimulus + Turbo) job-application automation app. Users find vacancies via Elasticsearch, then the app automates fetching vacancy details, generating a tailored CV, and submitting the application via browser automation (Ferrum + Chrome).
+Rails 8 + Hotwire (Stimulus + Turbo) job-application automation app. Users find vacancies via Elasticsearch, then the app automates fetching vacancy details, generating a tailored CV, and submitting the application via browser automation (Camoufox via browserd + Playwright; Ferrum only for GeminiScraping).
 
 ## Essential Commands
 
@@ -99,7 +99,8 @@ Apply these to ALL new and modified code. They are distilled from real review fi
 | `view_component` | Component rendering |
 | `simple_form` + `slim-rails` | Forms in `.html.slim` templates |
 | `dry-matcher` | `Matcher::MatcherWithDefaults` used by Endpoint for success/invalid dispatch |
-| `ferrum` | Headless Chrome via CDP for scraping/form-filling |
+| `ferrum` | Headless Chrome via CDP — GeminiScraping only |
+| `playwright-ruby-client` | Playwright wire protocol to Camoufox in browserd (apply browser driver) |
 | `solid_queue` + `solid_cable` + `solid_cache` | Background jobs, ActionCable, caching |
 | `grover` + `redcarpet` | Markdown CV → PDF pipeline |
 | `will_paginate` | Pagination; operations return `WillPaginate::Collection` |
@@ -114,7 +115,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 
 ## Reference Docs
 
-- `.ai/docs/rspec.md` — shared operation context, Elasticsearch test setup, job specs, factory patterns. **Read before modifying any spec file.**
+- `.ai/docs/rspec.md` — shared operation context, Elasticsearch test setup, job specs, factory patterns, `FakeSession` for browser steps, `:browser` specs (FixtureSite, browserd). **Read before modifying any spec file.**
 - `.ai/docs/cucumber.md` — all available Given/When/Then steps, page navigation syntax, Turbo waiting, ES/job support. **Read before writing feature tests.**
 - `.ai/docs/operations.md` — Operation::Base API, authorization methods, error handling, sub-operations, skeleton templates.
 - `.ai/docs/form_objects.md` — FormObject DSL (`property`, `has_many`, `has_one`), sync lifecycle, attachment validation, skeletons.
@@ -134,6 +135,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/proxy.md` — proxy model fail tracking (`increment_fail!` / `reset_fail!`), `https`→`http` normalization gotcha, 2xx/3xx reachability rule.
 - `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: single-threaded fetch→persist (no validation, no shards), fiber count in FetchCandidates, stop conditions, catalog URL recursion, protocol inference, persist upsert semantics. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
 - `.ai/docs/sync_vacancies.md` — `Vacancy::Operation::SyncVacancies` internals: fiber count per source, stop conditions, empty-page confirmation logic (LAST_PAGE_CONFIRMATIONS), boundary narrowing, shared data structures. **Read before modifying the vacancy sync pipeline.**
+- `.ai/docs/browser.md` — browserd leases, Camoufox image, network isolation, `ApplyMate::Client::Browser::Session` API (Target/Locate rules, settle profiles, NetTracker, probes, deadlines & errors), Ruby lease client, PublicAddressGuard (`ApplyMate::Net::Operation::ResolvePublicAddress`), `:browser` specs, dev/CI/staging wiring (compose, Conductor env, CI `browser_specs` job, Kamal accessory sizing, image tag triple, token rotation). **Read before touching browserd, the browser Session/Driver/NetTracker, PublicAddressGuard or the browserd deploy config.**
 
 ## Delegation to Subagents
 
@@ -145,7 +147,7 @@ Agent definitions live in `.claude/agents/`. Each one pins its own model and eff
 | Design for a multi-layer, pipeline, schema or state-machine change | `planner` | fable / high |
 | Operations, form objects, components, turbo handlers, jobs, policies, migrations | `concept-builder` | sonnet / medium |
 | Slim, Tailwind, simple_form, Stimulus/TS, Turbo frames | `frontend-builder` | sonnet / medium |
-| Scrapers, Client::Http/AsyncHttp/Browser, apply handlers, vacancy sync, proxies, fibers, AI prompts | `pipeline-engineer` | opus / high |
+| Scrapers, Client::Http/AsyncHttp/Browser::Session, apply handlers, vacancy sync, proxies, fibers, AI prompts | `pipeline-engineer` | opus / high |
 | RSpec, Cucumber, factories | `spec-writer` | sonnet / medium |
 | Just run the checks and report what is red | `checks-runner` | haiku / low |
 | Locale keys, i18n-tasks failures | `i18n-keeper` | haiku / low |

@@ -1,60 +1,141 @@
 # frozen_string_literal: true
 
+# Legacy browser submit (deleted in phase 3b): replays apply.filled_inputs on the external form in a browserd
+# Session (Camoufox, trusted input, humanized cursor) and clicks submit once, after the claim.
+#
+# Everything that can fail without side effects (trigger, fill + read-back, CV upload, the submit button's
+# presence) happens before Apply::Operation::Engine::ClaimSubmit; from the claim on, every halt lands in
+# submit_unverified (claim rule). The AI verdict on the page after the click runs once the lease is released.
 class Apply::Operation::SendApply::Browser < Apply::Operation::Base
+  # The positional fallback of a field: the n-th form control of the page, counted like FormExtractor's
+  # form_index (submit/button/image/reset inputs excluded).
+  FORM_CONTROLS_CSS = 'form input:not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]), ' \
+                      'form textarea, form select'
+  # Controls the replay leaves alone: hidden inputs belong to the page (their value came from it, and Playwright
+  # cannot fill an invisible control); checkboxes/radios were never ticked by the legacy replay (it only rewrote
+  # their value attribute) - option widgets arrive with phase 3.
+  SKIPPED_TYPES = %w[file hidden checkbox radio].freeze
+  # Seconds to wait for the form to render after the trigger click; a timeout is ignored (filling then fails
+  # loudly on the first missing field).
+  FORM_READY_TIMEOUT_S = 10
+
   stage :submit
 
   private
 
   def run!(apply:, ctx:, **)
-    @browser     = ApplyMate::Client::Browser.new
     @cv_tempfile = write_cv_tempfile(apply)
+    inputs = (apply.filled_inputs || []).map(&:with_indifferent_access)
 
-    inputs = apply.filled_inputs || []
+    screenshot, body = submit_in_browser(apply, ctx, inputs)
 
-    @browser.navigate_to(apply.external_url)
-    open_form(apply.trigger_selector)
-    fill(inputs)
-    @browser.attempt_recaptcha_refresh
-
-    submit(ctx, apply.submit_selector.presence || 'button[type="submit"]', apply.submit_text)
-
-    attach_screenshot(apply, @browser.screenshot)
-    verify_submit(apply, @browser.body)
+    attach_screenshot(apply, screenshot)
+    verify_submit(apply, body)
   end
 
-  def open_form(trigger_selector)
+  # model: [full-page PNG after the submit, page HTML after the submit]. humanize: true only here (the submit
+  # lease, design §19); the form discovery lease runs without it.
+  def submit_in_browser(apply, ctx, inputs)
+    session_class = ApplyMate::Client::Browser::Session
+    session_class.open(deadline: ctx.scope_deadline, owner: session_class.owner_for(apply), humanize: true,
+                       identity: apply.hashid) do |session|
+      session.goto(apply.external_url)
+      open_form(session, apply.trigger_selector)
+      fill(session, inputs)
+      submit(session, ctx, apply.submit_selector.presence || 'button[type="submit"]', apply.submit_text)
+
+      [ session.screenshot(full_page: true), session.html ]
+    end
+  end
+
+  def open_form(session, trigger_selector)
     return if trigger_selector.blank?
 
-    halt!(:target_not_found, detail: trigger_selector) unless @browser.click(trigger_selector)
-    @browser.wait_for_idle
+    begin
+      session.click(target_class.css(trigger_selector))
+    rescue ApplyMate::Client::Browser::TargetNotFound
+      halt!(:target_not_found, detail: trigger_selector)
+    end
+    session.settle(:click)
+    session.ready?(target_class.css('form'), timeout: FORM_READY_TIMEOUT_S)
   end
 
-  def fill(inputs)
+  def fill(session, inputs)
     inputs.each do |input|
-      input = input.with_indifferent_access
-      next if input['type'] == 'file'
-      next if input['value'].blank?
-      @browser.fill_field(input['selector'], input['value'].to_s, input['tag'].to_s, form_index: input['form_index'])
+      next if SKIPPED_TYPES.include?(input['type']) || input['value'].blank?
+
+      fill_field(session, input)
     end
 
-    return unless @cv_tempfile
+    upload_cv(session, inputs.find { |input| input['type'] == 'file' })
+  end
 
-    file_input = inputs.map { |i| i.with_indifferent_access }.find { |i| i['type'] == 'file' }
-    @browser.attach_file(file_input, @cv_tempfile.path) if file_input
+  # Writes the value, then reads it back: a field that does not hold the value afterwards halts the run before
+  # the claim (no silent skips). Selects are chosen by option value; everything else is typed by Playwright.
+  def fill_field(session, input)
+    target = field_target(input)
+    value  = input['value'].to_s
+    if input['tag'] == 'select'
+      session.select(target, value:)
+    else
+      session.fill(target, value)
+    end
+    session.settle(:key)
+
+    actual = session.probe(:read_value, target)&.fetch('value', nil)
+    halt!(:required_field_unfillable, detail: input['name']) unless same_value?(actual, value)
+  end
+
+  # Line breaks and surrounding whitespace are ignored: a single-line input drops line breaks (as the legacy replay
+  # always did) and a textarea normalises \r\n. Anything else that differs (maxlength, an input mask, a framework
+  # resetting the field) is a mismatch.
+  def same_value?(actual, expected)
+    normalize_value(actual) == normalize_value(expected)
+  end
+
+  def normalize_value(value)
+    value.to_s.delete("\r\n").strip
+  end
+
+  def upload_cv(session, file_input)
+    return if @cv_tempfile.nil? || file_input.nil?
+
+    session.upload(field_target(file_input, fallback_css: 'input[type="file"]'), @cv_tempfile.path)
+    session.settle(:file)
+  end
+
+  # Strategies in order: the stored selector, an optional generic selector, the field's position on the page.
+  def field_target(input, fallback_css: nil)
+    strategies = [
+      ({ 'css' => input['selector'] } if input['selector'].present?),
+      ({ 'css' => fallback_css } if fallback_css),
+      ({ 'css' => FORM_CONTROLS_CSS, 'nth' => input['form_index'].to_i } unless input['form_index'].nil?)
+    ].compact
+    target_class.new(frame_path: [], strategies:, root: nil, readonly: false)
   end
 
   # A missing submit button is found before the claim (nothing was sent: failed, no claim). The claim is taken
   # right before the click; from then on every halt lands in submit_unverified (claim rule).
-  def submit(ctx, selector, text)
-    halt!(:target_not_found, detail: selector) unless @browser.clickable?(selector, text:)
+  def submit(session, ctx, selector, text)
+    target = target_class.new(frame_path: [], strategies: [ { 'css' => selector, 'has_text' => text }.compact,
+                                                            { 'css' => selector } ].uniq,
+                              root: nil, readonly: false)
+    halt!(:target_not_found, detail: selector) unless session.present?(target, visibility: :required)
 
     Apply::Operation::Engine::ClaimSubmit.call(ctx:)
-    halt!(:target_not_found, detail: selector) unless @browser.click(selector, text:)
-    @browser.wait_for_idle(timeout: 15)
+    begin
+      session.click(target)
+    rescue ApplyMate::Client::Browser::TargetNotFound
+      halt!(:target_not_found, detail: selector)
+    end
+    session.settle(:submit)
+  end
+
+  def target_class
+    ApplyMate::Client::Browser::Target
   end
 
   def cleanup
-    @browser&.quit
     @cv_tempfile&.close!
   end
 

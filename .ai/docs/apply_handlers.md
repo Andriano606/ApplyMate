@@ -26,6 +26,8 @@ class Apply::Job::Apply < ApplicationJob
     Apply::Handler::Base.for(apply).call
   rescue ActiveRecord::RecordNotFound
     nil
+  rescue ApplyMate::Client::Browser::PoolBusy
+    raise
   rescue StandardError => e
     Apply::Operation::Engine::Lifecycle::HaltUnowned.call(apply_id:, code: :unexpected_error, detail: e.class.name)
     raise
@@ -34,6 +36,8 @@ end
 ```
 
 `limits_concurrency` guards against a duplicate run of the same Apply; the number of concurrent browsers is capped by the apply worker's threads (`APPLY_SLOTS`). Run ownership, states and failure recording are described in `.ai/docs/apply_engine.md`.
+
+A step must never rescue `ApplyMate::Client::Browser::PoolBusy` (nor `StandardError` around a `Session.open`): the Runner turns it into `waiting_capacity` and the job's `retry_on` retries it (`apply_engine.md`, exit table). Swallowing it would turn "no free browser" into a failed step.
 
 ## Pipeline DSL
 
@@ -75,7 +79,7 @@ class Apply::Operation::FetchDetails < Apply::Operation::Base
     halt!(:no_application_path, detail: 'why, for admins') if something_missing
   end
 
-  def cleanup; end # always runs (browser quit, tempfiles); its own errors are logged, never raised
+  def cleanup; end # always runs (tempfiles; browser sessions close in their own block); its own errors are logged, never raised
 end
 ```
 
@@ -98,7 +102,7 @@ end
 | `FetchApplyType` | `fetch_apply_type` | scraper returns `nil` → `applyble: false`, `no_application_path` |
 | `FetchDetails` | `fetch_details` | — |
 | `FetchInternalForm` | `fetch_form` | blank vacancy page → `not_a_form` (detail `empty vacancy page`) |
-| `Ai::FetchExternalForm` | `fetch_form` | no `vacancy.external_url` → `no_application_path`; AI finds no form / trigger / form URL → `not_a_form`; empty rendered page, trigger revealing nothing, empty form URL page → `target_not_found` |
+| `Ai::FetchExternalForm` | `fetch_form` | no `vacancy.external_url` → `no_application_path`; AI finds no form / trigger / form URL → `not_a_form`; empty rendered page, trigger not on the page (`TargetNotFound`) or revealing nothing, empty form URL page → `target_not_found`; an AI `form_url` (resolved against the page URL) on a non-public address → `ApplyMate::Net::UnsafeUrlError` from `ResolvePublicAddress` → `private_address` (`unsupported`, Runner mapping). Renders in a `Session` (`humanize: false`); the trigger click is `click(Target.css(ai_selector))` → `settle(:click)` → `ready?(form, timeout: 10)` (a `false` is ignored: the AI re-check decides); the AI selector is stored as `trigger_selector` as-is |
 | `Ai::FillForm` | `fill_form` | AI returned an empty payload → `invalid_ai_output` |
 | `Ai::GeneratePdfCv` | `generate_cv` | — (must equal the stage `Apply.with_cv_or_generating_cv` lists as a CV placeholder) |
 | `SendApply::Http` | `submit` | see "Submit and the claim" |
@@ -129,10 +133,23 @@ fail without side effects and immediately before the irreversible action. After 
 | redirect to the vacancy page without `applied` in the query | `outcome_unknown` (detail: location) → `submit_unverified` |
 | any other status | `outcome_unknown` (`HTTP <status>`) → `submit_unverified` |
 
-**`SendApply::Browser`** — navigate, click the trigger (missing → `target_not_found`, no claim), fill, attach the CV,
-`attempt_recaptcha_refresh`, check the submit button with `browser.clickable?` (missing → `target_not_found`, no
-claim, `failed`), claim, click (a `false` click now → `target_not_found` after the claim → `submit_unverified`),
-screenshot, then `CheckSubmitResult`:
+**`SendApply::Browser`** — one `Session.open(..., humanize: true)` (the only humanized lease, design §19): `goto`, the
+trigger (`click(Target.css(trigger))`, `TargetNotFound` → `target_not_found`, no claim; then `settle(:click)` and
+`ready?(Target.css('form'), timeout: 10)`), fill, CV upload, the submit-button check
+`present?(submit_target, visibility: :required)` (missing → `target_not_found`, no claim, `failed`), claim, `click`
+(a `TargetNotFound` now → `target_not_found` after the claim → `submit_unverified`), `settle(:submit)`, full-page
+screenshot and HTML; the lease is released before the verdict call (`CheckSubmitResult`).
+
+- **Fill:** every `filled_inputs` entry with a value except `file` / `hidden` / `checkbox` / `radio` (hidden inputs
+  belong to the page; option widgets come with phase 3). Target strategies: the stored selector, then
+  `FORM_CONTROLS_CSS` with `nth: form_index` (position). `select` tags → `session.select(value:)`, the rest
+  `session.fill`; then `settle(:key)` and a read-back through `probe(:read_value)`: a value that does not read back
+  (whitespace-squished compare) → `required_field_unfillable` before the claim. A field that is not on the page →
+  `target_not_found` (Runner mapping), also before the claim.
+- **CV:** `upload` to the file input (stored selector, `input[type="file"]`, position) + `settle(:file)`.
+- **Submit target:** strategies `{css: submit_selector, has_text: submit_text}` then `{css: submit_selector}`; each
+  must match exactly one visible element (`Locate`).
+- No reCAPTCHA token refresh: input is trusted (Camoufox) and nothing injects tokens.
 
 | Verdict | Outcome |
 |---|---|

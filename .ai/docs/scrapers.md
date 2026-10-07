@@ -92,7 +92,7 @@ them (see `.ai/docs/sync_vacancies.md`).
 
 `Source#build_scraper` instantiates the configured scraper with the client its class declares
 (`Scraper.http_client_class` — `AsyncHttp` by default, `ImpersonateHttp` for Dou), with the
-client's default timeouts and no proxy. Scrapers never receive `Client::Browser`:
+client's default timeouts and no proxy. Scrapers never receive a browser (`Client::Browser::Session`):
 
 ```ruby
 def build_scraper
@@ -135,8 +135,9 @@ Measured (datacenter proxies that raw HTTP can't use): **~43%** become usable vi
 fingerprint, and a usable proxy sustains **12–15/15** sequential requests (no quick ban). The
 remaining proxies split into a true JS-challenge minority and hard IP-blocks (1020) — see
 `.ai/docs/proxy.md`. Compare a real headless browser: it also passes CF but yields only **~2
-pages per proxy before a ban** and carries full Chrome overhead — so ImpersonateHttp is the
-primary path; `ApplyMate::Client::Browser` is reserved for the rare interactive JS challenge.
+pages per proxy before a ban** and carries full browser overhead — so ImpersonateHttp is the
+primary path; the browser (`ApplyMate::Client::Browser::Session`, Camoufox via browserd) is reserved for apply
+steps that need real interaction (`.ai/docs/browser.md`).
 
 **Install:** the curl-impersonate binary is arch-specific and NOT committed. Run
 `bin/install-curl-impersonate` once per host (downloads into `vendor/curl-impersonate/`, which is

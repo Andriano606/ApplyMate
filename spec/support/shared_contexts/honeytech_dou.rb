@@ -52,29 +52,13 @@ RSpec.shared_context 'honeytech dou' do
     Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:)
   end
 
-  # ── Browser double ────────────────────────────────────────────────────────────
-  let(:browser) { instance_double(ApplyMate::Client::Browser) }
+  # ── Browser session (spec/support/fake_session.rb) ────────────────────────────
+  # One scripted page for both browser steps: FetchExternalForm renders it, SendApply::Browser fills and submits it
+  # (the submit verdict is the stubbed Gemini answer, so the page after the click needs no script).
+  let(:session) { FakeSession.new(html: honeytech_apply_html, final_url: HoneytechDou::PEOPLEFORCE_URL) }
 
-  before do
-    allow(ApplyMate::Client::Browser).to receive(:new).and_return(browser)
+  before { stub_browser_session(session) }
 
-    allow(browser).to receive(:fetch_rendered)
-      .with(HoneytechDou::DOU_REDIRECT)
-      .and_return([ HoneytechDou::PEOPLEFORCE_URL, honeytech_apply_html, '' ])
-
-    allow(browser).to receive(:navigate_to)
-    allow(browser).to receive(:clickable?).and_return(true)
-    allow(browser).to receive(:click).and_return(true)
-    allow(browser).to receive(:fill_field)
-    allow(browser).to receive(:attach_file)
-    allow(browser).to receive(:attempt_recaptcha_refresh)
-    allow(browser).to receive(:wait_for_idle)
-    allow(browser).to receive(:body).and_return('<p>Дякуємо за заявку!</p>')
-    allow(browser).to receive(:screenshot).and_return('')
-    allow(browser).to receive(:quit)
-  end
-
-  # ── Misc stubs ────────────────────────────────────────────────────────────────
   before do
     allow(Apply::TurboHandler::StatusUpdate).to receive(:broadcast)
     allow(VacancyCv::TurboHandler::Index).to receive(:broadcast)

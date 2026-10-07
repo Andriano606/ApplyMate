@@ -20,7 +20,14 @@ class Apply::Operation::Engine::Run < ApplyMate::Operation::Base
   ERROR_CODES = {
     ApplyMate::Ai::Client::Base::EmptyResponse => :invalid_ai_output,
     ApplyMate::Ai::ResponseSchema::Json::InvalidResponse => :invalid_ai_output,
-    ActiveRecord::RecordInvalid => :invalid_record
+    ActiveRecord::RecordInvalid => :invalid_record,
+    ApplyMate::Client::Browser::PoolBusy => :capacity,
+    ApplyMate::Client::Browser::Crashed => :browser_crashed,
+    ApplyMate::Client::Browser::DeadlineExceeded => :deadline,
+    ApplyMate::Client::Browser::TargetNotFound => :target_not_found,
+    # Deliberately unexpected_error: a gem/browserd version mismatch is permanent until the deploy is fixed.
+    ApplyMate::Client::Browser::VersionMismatch => :unexpected_error,
+    ApplyMate::Net::UnsafeUrlError => :private_address
   }.freeze
 
   def perform!(apply:, handler:, **)
@@ -43,6 +50,10 @@ class Apply::Operation::Engine::Run < ApplyMate::Operation::Base
   def execute(ctx, handler)
     run_plan(ctx, handler)
   rescue Apply::Operation::Engine::Fenced
+    raise
+  rescue ApplyMate::Client::Browser::PoolBusy
+    # No free browser slot: park the row and let the job retry (Apply::Job::Apply retry_on) instead of failing.
+    Apply::Operation::Engine::Lifecycle::WaitCapacity.call(ctx:)
     raise
   rescue Apply::Operation::Engine::Halt => e
     Apply::Operation::Engine::Lifecycle::RecordHalt.call(ctx:, halt: e)

@@ -56,8 +56,13 @@ class Apply::Operation::Engine::ReapStale < ApplyMate::Operation::Base
   # Alive: the job waits to run (ready / scheduled / blocked by limits_concurrency), or a live Solid Queue process
   # executes it and the run is within deadline + REAPER_GRACE. Anything else (no job, finished, failed_execution,
   # dead process, past the deadline) is lost.
+  #
+  # Only the NEWEST row of the active_job_id counts: every retry_job (e.g. the PoolBusy retry_on that parks the
+  # apply in waiting_capacity) inserts a new solid_queue_jobs row with the same active_job_id, and the finished
+  # rows of earlier executions are kept until clear_finished_in_batches. Rides
+  # index_solid_queue_jobs_on_active_job_id; the rows per id are bounded by the retry attempts.
   def alive?(apply)
-    job = SolidQueue::Job.find_by(active_job_id: apply.job_id) if apply.job_id.present?
+    job = SolidQueue::Job.where(active_job_id: apply.job_id).order(:id).last if apply.job_id.present?
     return false if job.nil?
     return true if job.ready_execution || job.scheduled_execution || job.blocked_execution
 

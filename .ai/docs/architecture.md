@@ -7,10 +7,11 @@ These are enforced boundaries, not guidelines. Violating them causes cross-layer
 | Module                                                                                               | Responsibility                                                                                                                                         | Uses                                      |
 | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
 | `ApplyMate::Client::AsyncHttp` (default) / `ApplyMate::Client::ImpersonateHttp` (Cloudflare sources) | Low-level HTTP transport: GET/POST/multipart, headers, timeouts, redirects, proxy. Selected per source by `Scraper.http_client_class`                  | async sockets / curl-impersonate          |
-| `ApplyMate::Client::Browser`                                                                         | Low-level browser transport: navigate, click, fill field, screenshot, stealth, reCAPTCHA                                                               | Ferrum                                    |
-| `ApplyMate::Scraper::*`                                                                              | Source-specific parsing and declarations: listing, details, applyble, apply_type, form_selector, session_cookie_name. **Never uses `Client::Browser`** | the client its class declares             |
+| `ApplyMate::Client::Browser::Session`                                                                | Browser transport for apply steps: a block-scoped lease on browserd (Camoufox) driven over Playwright; goto, click/fill/select/upload by `Target`, settle, read-back probes, screenshot. See `.ai/docs/browser.md` | `Driver::Playwright` → browserd |
+| `ApplyMate::Net::Operation::ResolvePublicAddress`                                                    | PublicAddressGuard: every fetch of a URL that came from a page, an AI or a redirect goes through it; raises `ApplyMate::Net::UnsafeUrlError` unless http(s) and every resolved address is public | `Resolv` (`/etc/hosts` + DNS) |
+| `ApplyMate::Scraper::*`                                                                              | Source-specific parsing and declarations: listing, details, applyble, apply_type, form_selector, session_cookie_name. **Never uses `Client::Browser::Session`** | the client its class declares             |
 | `Apply::Handler::*`                                                                                  | Declares the pipeline via `add_step`. Owns source-specific prompt/schema class knowledge                                                               | —                                         |
-| `Apply::Operation::*`                                                                                | Orchestrates one pipeline step: uses scraper + client, persists result to `apply`                                                                      | `Source#http_client` or `Client::Browser` |
+| `Apply::Operation::*`                                                                                | Orchestrates one pipeline step: uses scraper + client, persists result to `apply`                                                                      | `Source#http_client` or `Client::Browser::Session` |
 
 ## Rules
 
@@ -28,7 +29,12 @@ end
 Apply operations that need raw requests call `Source#http_client(**options)`, which builds the same `http_client_class` with the given options: `source.http_client(request_timeout: 30)` in `SendApply::Http`, `source.http_client` in `FetchInternalForm`. `SyncVacancies` builds `scraper_class.http_client_class.new(proxy:, request_timeout:, connect_timeout:)` for each leased proxy. The client class is not sourced from the database. The session cookie is sent through `scraper.session_headers(session_id)`, and its name comes from `Scraper.session_cookie_name` (`Source#session_cookie_name` for callers without a scraper).
 
 **Browser is for operations, not scrapers.**
-`Client::Browser` is used only in `Apply::Operation::*` (e.g. `FetchExternalForm`, `SendApply::Browser`) to automate a headless Chrome session for submitting or scraping content that requires real interaction.
+`ApplyMate::Client::Browser::Session` is used only in `Apply::Operation::*` (today `Ai::FetchExternalForm` and
+`SendApply::Browser`) for pages that need real interaction. Every use is a block:
+`Session.open(deadline: ctx.scope_deadline, owner: Session.owner_for(apply), humanize:, identity: apply.hashid) { |session| … }`;
+the lease is released in `ensure`, so hold the block only while the page is needed (run AI calls and DB writes after
+it when they do not need the page). `humanize: true` only for the submit lease. The API, leases and isolation are in
+`.ai/docs/browser.md`; Ferrum remains only inside `ApplyMate::Ai::Client::GeminiScraping` (its own local Chrome).
 
 **Handler resolution is name-based.**
 The handler class is derived from the source's scraper class name:
@@ -39,33 +45,6 @@ scraper_name = apply.source_profile.source.scraper.demodulize  # "Djinni" or "Do
 ```
 
 Adding a new job board requires: a new `Scraper::MySite`, a new `Handler::MySite` with `add_step` pipeline, and adding the scraper class to `Source::SCRAPERS`.
-
-## Client::Browser public API
-
-Two modes of use:
-
-**Self-contained (open page, do work, close page):**
-
-```ruby
-page_url, body, cookies         = browser.fetch_rendered(url)
-page_url, body, cookies, unique = browser.click_and_fetch(url, selector)
-```
-
-**Multi-step session (caller drives, `quit` closes everything):**
-
-```ruby
-browser.navigate_to(url)              # opens fresh page, navigates
-browser.click(selector, text: nil)    # clicks first visible match; returns true/false
-browser.fill_field(selector, value, tag, form_index: nil)  # Vue/React-compatible fill
-browser.attach_file(file_input, cv_path)   # injects file via DataTransfer (cross-container safe)
-browser.attempt_recaptcha_refresh     # best-effort reCAPTCHA v3 token refresh; never raises
-browser.wait_for_idle(timeout: 10)
-browser.body
-browser.screenshot                    # returns binary PNG
-browser.quit                          # called in operation cleanup
-```
-
-Operations that use the multi-step API: `Apply::Operation::Ai::FetchExternalForm` (uses self-contained), `Apply::Operation::SendApply::Browser` (uses multi-step).
 
 ## Apply::Operation::Base pipeline API
 
@@ -106,7 +85,7 @@ Two Solid Queue queues exist:
 | `apply`         | `[apply]` only          | Kamal role `apply_worker`                                                                  |
 | `all` (default) | both, in one supervisor | dev / Conductor (`bin/rails solid_queue:start` in `Procfile.dev` and `Procfile.conductor`) |
 
-`APPLY_SLOTS` is the number of apply-worker threads, i.e. how many applies run at once on the host: 1 in dev, 3 in staging, and later the browserd `MAX_BROWSERS`. `Apply::Operation::AssertQueueTopology.apply_slots` is the single reader of the variable: `config/queue.yml` calls it for the apply worker's `threads`, and the assertion compares against it. It raises `Violation` unless the value is a positive integer (default `1`).
+`APPLY_SLOTS` is the number of apply-worker threads, i.e. how many applies run at once on the host: 1 in dev, 3 in staging. It equals browserd `MAX_BROWSERS` (one Camoufox lease per running apply): staging sets both from the same ERB variable `apply_slots` in `config/deploy.staging.yml` (asserted by `spec/config/browserd_image_tag_spec.rb`), dev compose uses `MAX_BROWSERS=${APPLY_SLOTS:-1}`. `Apply::Operation::AssertQueueTopology.apply_slots` is the single reader of the variable: `config/queue.yml` calls it for the apply worker's `threads`, and the assertion compares against it. It raises `Violation` unless the value is a positive integer (default `1`).
 
 The general worker never lists `'*'`: Solid Queue has no exclusion syntax, so `'*'` would also drain `apply` beyond `APPLY_SLOTS`. The old per-process queue-list variable is gone.
 

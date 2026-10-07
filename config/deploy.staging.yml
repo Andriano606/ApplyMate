@@ -1,6 +1,11 @@
 # Staging environment configuration.
 # Usage: bin/kamal deploy -d staging
 
+<%# apply_slots: single source for the apply worker's Solid Queue threads (APPLY_SLOTS) and browserd MAX_BROWSERS
+    (one Camoufox per running apply). 3 = Raspberry Pi 5 16 GB, CPU-bound (4 cores); browserd caps it at 1..3.
+    spec/config/browserd_image_tag_spec.rb asserts both values stay equal. -%>
+<% apply_slots = 3 -%>
+
 # Different service name prevents container conflicts with production on the same host.
 service: apply_mate_staging
 
@@ -47,12 +52,16 @@ servers:
         SQ_THREADS: '2'
         SQ_POLLING_INTERVAL: '1'
 
-  # Browser/AI jobs (queue :apply). APPLY_SLOTS is the single source for the apply
-  # worker's thread count (and, from phase 2, browserd MAX_BROWSERS).
+  # Browser/AI jobs (queue :apply). APPLY_SLOTS (= apply_slots above) is the apply worker's
+  # thread count and browserd's MAX_BROWSERS.
   apply_worker:
     hosts:
       - 192.168.50.155
     cmd: bin/jobs
+    # docker stop -t: SIGTERM -> SIGKILL window. Must cover SolidQueue.shutdown_timeout (30 s,
+    # config/initializers/solid_queue_shutdown.rb) + 10 s for releasing browserd leases. Kamal's
+    # default for a role without proxy is drain_timeout (30 s), which would SIGKILL mid-shutdown.
+    stop_timeout: 45
     options:
       memory: 3g
       memory-swap: 3g
@@ -62,8 +71,13 @@ servers:
     env:
       clear:
         SQ_ROLE: apply
-        APPLY_SLOTS: '3'
+        APPLY_SLOTS: '<%= apply_slots %>'
         SQ_POLLING_INTERVAL: '1'
+        # Kamal network alias of the browserd accessory below (control API; the lease ws ports
+        # 9301..9303 are on the same alias).
+        BROWSERD_URL: http://browserd:9300
+      secret:
+        - BROWSERD_TOKEN
 
 registry:
   username: andriano606
@@ -144,25 +158,41 @@ accessories:
     directories:
       - data:/usr/share/elasticsearch/data
 
-  chrome_vnc:
-    image: andriano606/apply_mate_chrome_vnc:latest
+  # Camoufox lease daemon (.ai/docs/browser.md). Only apply_worker talks to it, over the Kamal
+  # network alias `browserd`; no `publish`, so the control API and ws ports never leave the host's
+  # Docker network. Tag = pinned triple <camoufox version>-<release>-pw<playwright-core>; keep it in
+  # sync with docker/browserd (spec/config/browserd_image_tag_spec.rb). The owner pushes the
+  # multi-arch image by hand (README "browserd"); Kamal only pulls it.
+  # Sizing (design §18, Pi 5 16 GB): 6g RAM without swap and 3 of the 4 cores for apply_slots
+  # browsers; the cores, not RAM, are the limit. pids-limit counts THREADS: 3 leases on
+  # iframe-heavy pages (reCAPTCHA demo, YouTube, Ashby) peaked at 564 tasks in the container
+  # (measured 2026-10-07, ~40 idle + ~175 per Camoufox); 2048 leaves ~3.5x headroom and still
+  # stops a runaway fork loop.
+  browserd:
+    image: andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0
     host: 192.168.50.155
     options:
-      shm-size: '2gb'
-      security-opt: seccomp:unconfined
-      # network-alias gives the container a valid RFC hostname (no underscores)
-      # so Ruby's URI.join can parse it. Default CHROME_HOST='chrome-vnc' works as-is.
-      network-alias: chrome-vnc
-      publish:
-        - '6081:6080' # noVNC web UI
-        - '5901:5900' # VNC (RealVNC / TigerVNC)
-        - '9222:9222' # Chrome DevTools Protocol
+      network-alias: browserd
+      init: true
+      memory: 6g
+      memory-swap: 6g
+      cpus: '3'
+      pids-limit: 2048
+      shm-size: 1g
+      tmpfs: '/tmp:rw,size=1g'
+      cap-add: NET_ADMIN
+      restart: unless-stopped
     env:
       clear:
-        SCREEN_WIDTH: '1920'
-        SCREEN_HEIGHT: '1080'
-        SCREEN_DEPTH: '24'
-        VNC_PASSWORD: ''
+        MAX_BROWSERS: '<%= apply_slots %>'
+        LEASE_TTL_S: '600'
+        PORT: '9300'
+        HEADLESS: 'true'
+        BROWSERD_OS: 'windows'
+        BROWSERD_ADVERTISE_HOST: browserd
+        # EGRESS_ALLOW_RANGES deliberately unset: Firefox reaches public addresses only.
+      secret:
+        - BROWSERD_TOKEN
 
   # ---- Observability stack: Loki + Promtail + Grafana ----
   # Other Kamal-managed containers reach Loki via the internal Docker network

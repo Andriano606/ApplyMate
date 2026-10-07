@@ -72,7 +72,7 @@ RSpec.describe Apply::Operation::Engine::ReapStale, type: :job do
 
   it 'leaves a run that finished between the candidate SELECT and the UPDATE alone' do
     apply = stale_apply
-    allow(SolidQueue::Job).to receive(:find_by).and_wrap_original do |original, *args, **kwargs|
+    allow(SolidQueue::Job).to receive(:where).and_wrap_original do |original, *args, **kwargs|
       # The run completes (Finish keeps run_token) right after the reaper read the row.
       Apply.where(id: apply.id).update_all(state: Apply.states[:completed], submitted_at: Time.current)
       original.call(*args, **kwargs)
@@ -111,6 +111,18 @@ RSpec.describe Apply::Operation::Engine::ReapStale, type: :job do
 
     expect(reap[:alive]).to eq(1)
     expect(apply.reload).to be_running
+  end
+
+  it 'judges a retried job by its newest row, not the finished row of the earlier execution' do
+    apply = stale_apply(state: :waiting_capacity, stage: nil)
+    finished = solid_job(apply)
+    finished.ready_execution.destroy!
+    finished.update!(finished_at: 5.minutes.ago)
+    SolidQueue::Job.create!(queue_name: 'apply', class_name: 'Apply::Job::Apply', active_job_id: apply.job_id,
+                            arguments: {}, scheduled_at: 10.minutes.from_now)
+
+    expect(reap).to eq(reaped: 0, resumed: 0, alive: 1)
+    expect(apply.reload).to be_waiting_capacity
   end
 
   it 'leaves an apply untouched while a live process executes it within the deadline' do

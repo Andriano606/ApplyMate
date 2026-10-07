@@ -13,9 +13,18 @@ Apply::Operation::Engine::Context = Data.define(:apply, :attempt, :run_token, :d
 
 # Reopened (not `Data.define do … end`) so methods and docs read like a normal class.
 class Apply::Operation::Engine::Context
+  # Longest a single browser session may live; shorter than browserd's LEASE_TTL_S = 600, so the client
+  # gives up (DeadlineExceeded) before browserd reaps the lease under it.
+  SCOPE_DEADLINE = 8.minutes
+
   # Seconds left until deadline_at (negative once passed).
   def remaining
     deadline_at - Time.current
+  end
+
+  # The deadline a browser Session gets: its own budget, never past the run's deadline.
+  def scope_deadline
+    [ Time.current + SCOPE_DEADLINE, deadline_at ].min
   end
 
   def fenced?

@@ -64,4 +64,43 @@ RSpec.describe Apply::Job::Apply, type: :job do
       expect(running.failure).to be_nil
     end
   end
+
+  describe 'capacity retries' do
+    let(:apply) { create(:apply) }
+    let(:handler) { ApplyEngineFakes::Handler.new(apply:) }
+
+    before do
+      allow(Apply::TurboHandler::StatusUpdate).to receive(:broadcast)
+      allow(Apply::Handler::Base).to receive(:for).and_return(handler)
+      allow(ApplyEngineFakes::PrepareStep).to receive(:observe).and_raise(ApplyMate::Client::Browser::PoolBusy, 'busy')
+    end
+
+    it 're-enqueues the job with a wait and leaves the row waiting_capacity' do
+      expect { described_class.perform_now(apply.id) }.to have_enqueued_job(described_class).with(apply.id)
+
+      expect(apply.reload).to be_waiting_capacity
+      expect(apply.failure).to be_nil
+    end
+
+    it 'starts the waiting_capacity row again on the retry' do
+      described_class.perform_now(apply.id)
+      allow(ApplyEngineFakes::PrepareStep).to receive(:observe)
+
+      described_class.perform_now(apply.id)
+
+      expect(apply.reload).to be_completed
+      expect(apply.attempt).to eq(2)
+    end
+
+    it 'records failed(:capacity) through HaltUnowned once the retries are exhausted' do
+      job = described_class.new(apply.id)
+      (described_class::MAX_CAPACITY_RETRIES - 1).times { job.perform_now }
+      expect(apply.reload).to be_waiting_capacity
+
+      expect { job.perform_now }.not_to have_enqueued_job(described_class)
+      expect(apply.reload).to be_failed
+      expect(apply.failure).to include('code' => 'capacity', 'kind' => 'transient')
+      expect(apply.failure['code']).not_to eq('unexpected_error')
+    end
+  end
 end

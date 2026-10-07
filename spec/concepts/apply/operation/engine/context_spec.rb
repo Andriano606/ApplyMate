@@ -22,6 +22,26 @@ RSpec.describe Apply::Operation::Engine::Context do
     end
   end
 
+  describe '#scope_deadline' do
+    it 'is SCOPE_DEADLINE from now while the run has more time' do
+      freeze_time do
+        expect(ctx.with(deadline_at: 30.minutes.from_now).scope_deadline).to eq(described_class::SCOPE_DEADLINE.from_now)
+      end
+    end
+
+    it 'never passes the run deadline' do
+      freeze_time do
+        deadline = 3.minutes.from_now
+
+        expect(ctx.with(deadline_at: deadline).scope_deadline).to eq(deadline)
+      end
+    end
+
+    it 'is shorter than the browserd lease TTL' do
+      expect(described_class::SCOPE_DEADLINE).to be < 600.seconds
+    end
+  end
+
   it 'reads the current stage from the apply' do
     expect(ctx.current_stage).to eq('fake_prepare')
   end

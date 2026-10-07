@@ -167,8 +167,8 @@ To prove the claim is taken before the irreversible action, read `Apply.find(app
 stubbed `post_multipart` / submit `click`.
 
 Runner and lifecycle specs (`spec/concepts/apply/operation/engine/`) use the fake two-step pipeline in
-`spec/support/apply_engine_fakes.rb` (see `.ai/docs/apply_engine.md`, "Specs"). A `FakeSession` for browser steps
-arrives with the browser layer (phase 2); until then browser steps use the `ApplyMate::Client::Browser` double below.
+`spec/support/apply_engine_fakes.rb` (see `.ai/docs/apply_engine.md`, "Specs"). Browser steps run against a
+`FakeSession` (below); the real browser layer has its own `:browser` specs.
 
 Pre-populate `apply` with jsonb_accessor attributes using `update!`:
 
@@ -187,36 +187,107 @@ before do
 end
 ```
 
-## Browser Double
+## FakeSession (browser steps)
 
-Stub `ApplyMate::Client::Browser` for any spec that exercises browser-based operations:
+Steps that open an `ApplyMate::Client::Browser::Session` (`Ai::FetchExternalForm`, `SendApply::Browser`) are specced
+against `FakeSession` (`spec/support/fake_session.rb`): same public methods and parameters as `Session` (enforced by
+`spec/concepts/apply_mate/client/browser/session_contract_spec.rb`), no browserd.
 
 ```ruby
-let(:browser) { instance_double(ApplyMate::Client::Browser) }
+let(:session) { FakeSession.new(html: page_html, final_url: url) } # cookies: '', read_values: {}, missing: []
+before { stub_browser_session(session) } # Session.open yields it, returns the block value, records the kwargs
+```
 
-before do
-  allow(ApplyMate::Client::Browser).to receive(:new).and_return(browser)
+| Knob / reader | Effect |
+|---|---|
+| `html:` / `final_url:` / `cookies:` | what `html`, `current_url`, `cookies` (and `goto`'s `NavResult`) return |
+| `missing: [css, …]` | a target whose **first** strategy's css is listed is not on the page: `click` / `fill` / `select` / `upload` / `probe` / … raise `TargetNotFound`, `present?` / `ready?` return `false` |
+| `read_values: { css => value }` | `probe(:read_value, target)['value']` for that target; otherwise it echoes the last `fill` / `select` into the same target |
+| `on(:click) { \|target\| … }` | hook run before a call is handled: read the DB mid-step or `raise` (e.g. a button that vanishes after the claim) |
+| `calls` / `calls_of(:click)` | every call as `[method, *args, kwargs]` (kwargs hash only when the method has any), e.g. `[:goto, url]`, `[:settle, :click]`, `[:present?, target, { visibility: :required }]` |
+| `open_options` | one kwargs hash per `Session.open` (assert `humanize:` and `deadline <= ctx.deadline_at`) |
 
-  allow(browser).to receive(:fetch_rendered).with(url).and_return([final_url, html, ''])
-  allow(browser).to receive(:navigate_to)
-  allow(browser).to receive(:clickable?).and_return(true) # SendApply::Browser checks the submit button before the claim
-  allow(browser).to receive(:click).and_return(true)   # must return truthy — falsy halts with target_not_found
-  allow(browser).to receive(:fill_field)
-  allow(browser).to receive(:attach_file)
-  allow(browser).to receive(:attempt_recaptcha_refresh)
-  allow(browser).to receive(:wait_for_idle)
-  allow(browser).to receive(:body).and_return('<p>Thank you</p>')
-  allow(browser).to receive(:screenshot).and_return('')
-  allow(browser).to receive(:quit)
+```ruby
+expect(session.calls).to include([ :goto, HoneytechDou::DOU_REDIRECT ])
+expect(session.calls_of(:click).map(&:first)).to eq([ ApplyMate::Client::Browser::Target.css('#trigger'), submit_target ])
+expect(session.open_options.sole).to include(humanize: true)
+
+claimed_at_click = nil
+session.on(:click) { claimed_at_click = Apply.find(apply.id).submit_claimed_at } # claim taken before the click
+```
+
+`spec/support/shared_contexts/honeytech_dou.rb` wires one `FakeSession` (`let(:session)`) for both browser steps of
+the DOU external flow; override `let(:session)` in a context to script `missing:` / `read_values:`.
+
+The production path of the same steps is covered by `spec/concepts/apply/operation/send_apply/browser_browserd_spec.rb`
+(`:browser`): FetchExternalForm + SendApply::Browser on the real Session against `FixtureSite` (form page, trigger
+page, a `maxlength` read-back mismatch), with only Gemini stubbed (`allow(Session).to receive(:open).and_call_original`
+undoes the shared context's FakeSession).
+
+## Browser specs (`:browser`)
+
+Examples tagged `:browser` drive the **real** `ApplyMate::Client::Browser::Driver::Playwright` (Camoufox via
+browserd) against static fixture pages. Use them for anything the browser layer does (Session, Locate, settle, probes,
+widgets); unit specs with fakes cover the pure loops (`WaitQuiet`, `WaitPastCloudflare`, `NetTracker`).
+
+- **Tag semantics** (`spec/support/browser_tag.rb`): `:browser` examples are excluded unless `BROWSERD_URL` is set, so
+  the production driver is tested wherever a browserd is available (dev compose, the CI `browser_specs` job). Nothing in
+  `app/` reads this switch. `BROWSERD_TOKEN` must equal the container's token.
+- **Where they run:** against the test-only compose service `browserd-test` (`http://localhost:9310`, 3 slots, may
+  reach the docker host), never the dev `browserd` on `:9300`. Conductor workspaces have
+  `BROWSERD_URL=http://localhost:9310`/`BROWSERD_TOKEN` in `.env.test.local` (`bin/conductor/setup.rb`), so a plain
+  `bundle exec rspec` includes them and fails loudly if `browserd-test` is down; `BROWSERD_URL= bundle exec rspec` excludes them. In CI the `test` job excludes them and the `browser_specs`
+  job builds `docker/browserd`, starts it with `docker run` and runs `bundle exec rspec --tag browser`
+  (`.ai/docs/browser.md` "Dev / CI / staging wiring").
+- **`FixtureSite`** (`spec/support/fixture_site.rb`, pages in `spec/support/fixture_site/pages/`): an in-process Puma
+  bound to `0.0.0.0` on a free port, started in `before(:suite)` only when a `:browser` example is selected.
+  `FixtureSite.url('/form.html')` = `http://#{FIXTURE_SITE_HOST}:<port>/form.html` (`FIXTURE_SITE_HOST` defaults to
+  `host.docker.internal`, which the browserd container resolves to the docker host; `browserd-test`'s and CI's
+  `EGRESS_ALLOW_RANGES=host.docker.internal` lets smokescreen reach exactly that one address). Routes: `GET /<page>.html` and `/slow-reveal.js` (form.html sets `fixture_session=abc123`),
+  `POST /submit` → 200 "Thank you for applying".
+
+  | Page | Contents |
+  |---|---|
+  | `form.html` | `form#apply`: text (`#full_name`, `maxlength=40`), email (`data-qa`), textarea, native select, checkbox, radio pair, styled toggle (`#remote` hidden, `#remote-root` visible), visually hidden (clip 1px) `#cv` file input with a `label.dropzone`, "Submit application"; plus a newsletter form, so `button[type=submit]` matches twice |
+  | `trigger.html` + `slow-reveal.js` | "Apply now" button that injects `form#late-form` 1.5 s after the click |
+  | `iframe.html` | `form.html` in `iframe#embed` (`name="embedded-form"`) |
+  | `challenge.html` | "Just a moment..." title + `cf-chl-` marker, replaced by real content after 2 s |
+  | `multi.html` | two identical `button.apply` |
+  | `responsive.html` | two `input[name=email]`: `#email_mobile` hidden (`display: none`), `#email_desktop` visible (hidden-duplicate ambiguity) |
+
+- **PublicAddressGuard seam:** the fixture host is a private address, so `browser_tag.rb` wraps
+  `ApplyMate::Net::Operation::ResolvePublicAddress.call` (`and_wrap_original`, in a `before(:each, browser: true)`)
+  to return a `Resolution` for URLs on `FixtureSite.host`; every other URL runs the real operation (so
+  `goto('http://127.0.0.1:1/')` still raises `UnsafeUrlError`). There is no production flag for this. Navigate in a
+  `before` block (or the example), not in an `around` hook: `around` runs before the seam is installed.
+- **Leases:** every `Session.open` launches a fresh Camoufox (~2–5 s). Use an owner under
+  `Browserd.owner_prefix` (hostname + workspace dir + env, so parallel workspaces never sweep each other) and release
+  what you acquire (`Session.open` does it in `ensure`). `browserd-test` is shared by every workspace: assert on your
+  own owner's leases (`ReleaseOrphanLeases.call(owner_prefix: owner).model == 0`), never on the global `/health`
+  `leases` count. To make `PoolBusy` fast, stub `ApplyMate::Client::Browser::Clock.sleep_ms` (the Retry-After waits).
+
+```ruby
+RSpec.describe ApplyMate::Client::Browser::Session, :browser do
+  it 'fills and reads back' do
+    described_class.open(deadline: 2.minutes.from_now, owner: "#{ApplyMate::Client::Browser::Browserd.owner_prefix}spec") do |session|
+      session.goto(FixtureSite.url('/form.html'))
+      session.fill(ApplyMate::Client::Browser::Target.css('#email'), 'jane@example.com')
+
+      expect(session.probe(:read_value, ApplyMate::Client::Browser::Target.css('#email'))['value']).to eq('jane@example.com')
+    end
+  end
 end
 ```
 
-Assert call order with `.ordered`:
+Run locally (first build downloads ~1.3 GB):
 
-```ruby
-expect(browser).to have_received(:click).with('#trigger').ordered
-expect(browser).to have_received(:click).with('button[type="submit"]', text: 'Apply').ordered
+```bash
+docker compose up -d browserd-test
+BROWSERD_URL=http://localhost:9310 BROWSERD_TOKEN=dev-browserd-token bundle exec rspec --tag browser
 ```
+
+`spec/config/browserd_image_tag_spec.rb` (no browserd needed) keeps the image tag triple in `docker/browserd`,
+`docker-compose.yml`, `config/deploy.staging.yml` and `Gemfile.lock` consistent.
 
 ## Spec File Naming Convention
 
