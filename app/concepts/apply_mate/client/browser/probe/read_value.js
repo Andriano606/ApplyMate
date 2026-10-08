@@ -1,17 +1,91 @@
-// read_value: the current state of one form control (input, textarea, select, contenteditable).
-// Run by Driver::Playwright#probe as `locator.evaluate(fn)`; must stay a single function expression.
+// Read-back of one control after a write (widgets verify every write with it). `displayed` is what the person sees:
+// the selected option text, the contenteditable text, a combobox chip (react-select singleValue / multiValue, chip
+// classes) inside the field root, the file names, or the input value. `invalid` = aria-invalid or :invalid;
+// `error_text` = alert / live-region / aria-describedby text inside the field root; `pressed` = aria-pressed or
+// aria-checked as written.
 (el) => {
   const tag = el.tagName.toLowerCase();
+  const type = (el.getAttribute('type') || '').toLowerCase();
+  const CHIP =
+    '[class*=chip], [class*=singleValue], [class*=multiValue], [class*=single-value], [class*=multi-value__label]';
   const text = (node) =>
-    node ? (node.innerText || node.textContent || '').trim().slice(0, 500) : '';
+    node
+      ? (node.innerText || node.textContent || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 500)
+      : '';
+  const fieldRoot =
+    el.closest('[data-field-path]') ||
+    el.closest('fieldset') ||
+    el.closest('[role=group]');
+  const scopes = [];
+  for (
+    let node = el.parentElement, depth = 0;
+    node && depth < 4;
+    node = node.parentElement, depth += 1
+  ) {
+    scopes.push(node);
+    if (node === fieldRoot) break;
+  }
+  if (fieldRoot && !scopes.includes(fieldRoot)) scopes.push(fieldRoot);
+
   let value = null;
   if (el.isContentEditable) value = el.innerText;
   else if ('value' in el) value = el.value;
+  const files = el.files ? Array.from(el.files, (file) => file.name) : [];
+  const combobox =
+    el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-haspopup');
+  let chips = [];
+  if (combobox) {
+    for (const scope of scopes) {
+      chips = Array.from(scope.querySelectorAll(CHIP))
+        .filter((chip) => !chip.contains(el) && !chip.querySelector(CHIP))
+        .map(text)
+        .filter(Boolean);
+      if (chips.length) break;
+    }
+  }
+  let displayed;
+  if (tag === 'select') displayed = text(el.selectedOptions[0]);
+  else if (el.isContentEditable) displayed = text(el);
+  else if (chips.length) displayed = chips.join(', ');
+  else if (type === 'file') displayed = files.join(', ');
+  else displayed = value;
+
+  let invalid = el.getAttribute('aria-invalid') === 'true';
+  try {
+    invalid = invalid || el.matches(':invalid');
+  } catch (error) {
+    // not a form control: aria-invalid only
+  }
+  const errorNodes = [];
+  if (fieldRoot)
+    errorNodes.push(...fieldRoot.querySelectorAll('[role=alert], [aria-live]'));
+  const tree = el.getRootNode();
+  for (const id of (el.getAttribute('aria-describedby') || '')
+    .split(/\s+/)
+    .filter(Boolean)) {
+    const node = tree.getElementById ? tree.getElementById(id) : null;
+    if (node) errorNodes.push(node);
+  }
+  const errorText = Array.from(new Set(errorNodes))
+    .map(text)
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 300);
+  const pressed =
+    el.getAttribute('aria-pressed') || el.getAttribute('aria-checked');
+
   return {
     tag,
     value,
     checked: tag === 'input' && 'checked' in el ? el.checked : null,
-    files: el.files ? Array.from(el.files, (file) => file.name) : [],
+    files,
     text: tag === 'select' ? text(el.selectedOptions[0]) : text(el),
+    displayed,
+    invalid,
+    error_text: errorText || null,
+    pressed,
   };
 };

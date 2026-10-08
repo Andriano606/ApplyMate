@@ -6,7 +6,7 @@ RSpec.describe ApplyPolicy do
   let(:user)  { create(:user) }
   let(:apply) { create(:apply, user:) }
 
-  %i[resume? cancel? mark_outcome?].each do |query|
+  %i[resume? cancel? mark_outcome? approve_review?].each do |query|
     describe "##{query}" do
       it 'is allowed for the owner' do
         expect(described_class.new(user, apply).public_send(query)).to be(true)

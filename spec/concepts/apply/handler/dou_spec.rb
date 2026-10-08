@@ -16,6 +16,7 @@ RSpec.describe Apply::Handler::Dou do
         .and_return(
           ApplyMate::Client::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
         )
+      stub_honeytech_redirect_walk
 
       # Gemini API — stubbed in call order:
       #   1. CheckFormPage  (FetchExternalForm — does the PeopleForce page have a form?)
@@ -67,7 +68,7 @@ RSpec.describe Apply::Handler::Dou do
           hash_including('name' => 'career_application_form[full_name]',
                          'value' => 'Jane Doe'),
           hash_including('name' => 'career_application_form[email]',
-                         'value' => 'dev@example.com')
+                         'value' => user_email)
         )
       end
 
@@ -84,13 +85,28 @@ RSpec.describe Apply::Handler::Dou do
         expect(reloaded.submit_claimed_at).to be_present
         expect(reloaded.submit_claimed_at).to be <= reloaded.submitted_at
         expect(reloaded.apply_steps.chronological.map { |step| [ step.key, step.state, step.attempt ] }).to eq(
-          %w[check_applyable fetch_apply_type fetch_form fill_form generate_cv submit].map { |key| [ key, 'succeeded', 1 ] }
+          %w[check_applyable fetch_apply_type detect fetch_form fill_form generate_cv submit].map { |key| [ key, 'succeeded', 1 ] }
         )
       end
 
-      it 'skips the internal-flow steps of an external apply' do
+      it 'detects PeopleForce as an unknown platform first, then keeps the legacy external path' do
         run_handler
-        expect(apply.apply_steps.map(&:position)).to eq([ 0, 1, 2, 4, 5, 6 ])
+        reloaded = apply.reload
+
+        expect(reloaded).to have_attributes(platform: 'generic', entry_url: HoneytechDou::DOU_REDIRECT, apply_key: nil)
+        expect(reloaded.platform_match).to include('key' => 'generic', 'probable' => nil)
+        detect = reloaded.apply_steps.find_by!(key: 'detect')
+        expect(detect.result.dig('evidence', 'hops')).to eq([ HoneytechDou::DOU_REDIRECT, HoneytechDou::PEOPLEFORCE_URL ])
+        expect(detect.position).to be < reloaded.apply_steps.find_by!(key: 'fetch_form').position
+      end
+
+      it 'runs no engine stage after detection for an unknown platform (no schema read, no survey lease)' do
+        run_handler
+
+        engine_keys = %w[schema navigate:survey discover:survey answer review throttle navigate:replay:submit
+                         discover:submit fill:submit submit:submit verify:submit]
+        expect(apply.apply_steps.where(key: engine_keys)).to be_empty
+        expect(session.open_options.size).to eq(2) # FetchExternalForm + SendApply::Browser
       end
 
       it 'renders the form, then submits in a separate humanized session at the DOU redirect URL' do
@@ -121,6 +137,80 @@ RSpec.describe Apply::Handler::Dou do
           expect(session.open_options).to be_empty
         end
       end
+    end
+  end
+
+  context 'DOU external apply to a platform the registry knows (Ashby at the HTTP level)' do
+    include_context 'honeytech dou'
+
+    let(:jid) { '20587adf-cf02-473e-8a80-7b009711a2cf' }
+    let(:ashby_job) { "https://jobs.ashbyhq.com/preply/#{jid}" }
+    let(:posting) { ApplyMate::Client::Response.new(file_fixture('apply_engine/ashby/api_job_posting.json').read, {}, 200, nil) }
+
+    before do
+      allow(ApplyMate::Net::Operation::ResolvePublicAddress).to receive(:call) { |url:| FixtureSite.resolution(url) }
+      pages = {
+        HoneytechDou::VACANCY_URL => ApplyMate::Client::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL),
+        HoneytechDou::DOU_REDIRECT => ApplyMate::Client::Response.new('', { 'location' => ashby_job }, 302, nil),
+        ashby_job => ApplyMate::Client::Response.new('<html><body><div id="root"></div></body></html>', {}, 200, nil)
+      }
+      allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get) { |_http, url, **| pages.fetch(url) }
+      allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:post).and_return(posting)
+      # Gemini in call order: AnswerFields, GenerateCv.
+      stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/).to_return(
+        gemini_json_response(fixture_ashby_answers_json(email: user_email, phone: user_phone)),
+        gemini_json_response("```html\n<html><body><h1>Jane Doe</h1></body></html>\n```")
+      )
+      # The review stops the run before the submit scope: the routing is visible without a browser.
+      user.update!(review_policy: :always)
+    end
+
+    it 'runs the engine stages (no survey: canonical URL + schema) and never the legacy external steps' do
+      described_class.new(apply:).call
+      reloaded = apply.reload
+
+      expect(reloaded).to have_attributes(state: 'needs_review', platform: 'ashby', apply_key: "ashby:preply:#{jid}",
+                                          form_url: "#{ashby_job}/application")
+      expect(reloaded.apply_steps.chronological.map(&:key))
+        .to eq(%w[check_applyable fetch_apply_type detect schema answer generate_cv review])
+      expect(reloaded.field_list.size).to eq(15)
+      expect(reloaded.answers.keys).to include('ashby:_systemfield_email', 'ashby:6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01')
+      expect(session.open_options).to be_empty
+      expect(reloaded.inputs).to be_nil # Ai::FetchExternalForm never ran
+    end
+  end
+
+  describe 'step conditions' do
+    # apply_steps is unique on (apply_id, attempt, key): for every apply type and detection outcome the steps that
+    # may run share no key, and the CV is generated by exactly one generate_cv step (the engine's or the legacy one).
+    def active_keys(external:, known:, probable:)
+      ctx = instance_double(Apply::Operation::Engine::Context,
+                            apply: instance_double(Apply, external?: external, internal?: !external),
+                            platform_known?: known, platform_reachable?: known || probable, survey_needed?: true)
+      described_class.steps.select do |step|
+        scope_condition = step.scope && described_class.scope_conditions[step.scope]
+        [ step.condition, scope_condition ].compact.all? { |condition| condition.call(ctx) }
+      end.map(&:key)
+    end
+
+    [ true, false ].product([ true, false ], [ true, false ]).each do |external, known, probable|
+      it "never runs two steps with one key (external: #{external}, known: #{known}, probable: #{probable})" do
+        keys = active_keys(external:, known:, probable:)
+
+        expect(keys).to eq(keys.uniq)
+        expect(keys.count('generate_cv')).to eq(1)
+      end
+    end
+
+    it 'routes a known external platform through the engine only and an unknown one through the legacy steps' do
+      legacy = %w[fetch_form fill_form submit]
+
+      expect(active_keys(external: true, known: true, probable: false)).to include('detect', 'answer', 'verify:submit')
+      expect(active_keys(external: true, known: true, probable: false) & legacy).to be_empty
+      expect(active_keys(external: true, known: false, probable: false))
+        .to eq(%w[check_applyable fetch_apply_type detect fetch_form fill_form generate_cv submit])
+      expect(active_keys(external: false, known: false, probable: false))
+        .to eq(%w[check_applyable fetch_apply_type fetch_form fill_form generate_cv submit])
     end
   end
 

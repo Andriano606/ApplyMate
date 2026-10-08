@@ -161,6 +161,7 @@ en:
       ready_hint: AI tailors a CV to this vacancy, fills in the application form and
         sends it. Progress shows up on this page.
       ready_title: Ready to apply?
+      review: Review
       view_progress: View progress
     actions:
       applied_manually: I applied manually
@@ -177,6 +178,12 @@ en:
       external: External
       internal: Internal
       unknown: Unknown
+    approve_review:
+      duplicate_confirmation_required: You have already applied to this vacancy. Confirm
+        that you want to apply again.
+      invalid_answer: Invalid answer in the field "%{label}".
+      not_allowed: This application is no longer waiting for review.
+      success: Answers approved, the application is queued
     cancel:
       not_allowed: Only a waiting, attention-needed or failed application can be cancelled.
       success: Application cancelled
@@ -355,14 +362,52 @@ en:
         so retrying would send a second one.
       not_allowed: This application cannot be resumed in its current state.
       success: Application queued again
+    review:
+      ai_confidence: "%{percent}%"
+      answers_hint: Check the answers and fix them if needed. The application is sent
+        after you approve.
+      approve: Approve and send
+      confirm_duplicate: I confirm I want to apply again.
+      consent_notice: By approving you give this consent on your own behalf.
+      cv_default: CV (attached automatically)
+      duplicate_warning: You have already applied to this vacancy.
+      origin: 'Form site:'
+      reason:
+        approximate: Some answers were chosen as the closest matching option.
+        consent_pending: Your confirmation of a consent is needed.
+        duplicate: You have already applied to this vacancy with another application.
+        foreign_origin: The form is hosted on a site unrelated to the vacancy.
+        low_confidence: The AI is not sure about some answers.
+        policy_always: You chose to review every application before it is sent.
+        unknown_platform: The form is on an unknown platform.
+      source:
+        ai: AI
+        approximate: Closest option
+        fact: From profile
+        override: Your setting
+        policy: By consent setting
+        policy_pending: Needs confirmation
+        user: You
+      title: Check the answers before sending
+    run_timeline:
+      artifacts: Artifacts
     stage:
+      answer: Preparing answers
       check_applyable: Checking availability
+      detect: Detecting platform
+      discover: Discovering form fields
       fetch_apply_type: Detecting apply type
       fetch_details: Fetching details
       fetch_form: Fetching form
+      fill: Filling fields
       fill_form: Filling form
       generate_cv: Generating CV
+      navigate: Opening the form
+      review: Review before submit
+      schema: Fetching form fields
       submit: Submitting
+      throttle: Waiting for the platform slot
+      verify: Verifying the result
     state:
       cancelled: Cancelled
       completed: Completed

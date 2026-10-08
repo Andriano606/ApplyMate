@@ -14,6 +14,7 @@ RSpec.describe Apply::Job::Apply, type: :job do
       allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
         .with(HoneytechDou::VACANCY_URL, any_args)
         .and_return(ApplyMate::Client::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL))
+      stub_honeytech_redirect_walk
       stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
         .to_return(
           gemini_check_form_page,
@@ -29,7 +30,10 @@ RSpec.describe Apply::Job::Apply, type: :job do
       reloaded = apply.reload
       expect(reloaded).to have_attributes(state: 'completed', submitted_via: 'engine')
       expect(reloaded.submit_claimed_at).to be_present
-      expect(reloaded.apply_steps).not_to be_empty
+      # PeopleForce is unknown in phase 3a: DetectPlatform persists generic, then the legacy external path runs.
+      expect(reloaded.platform).to eq('generic')
+      expect(reloaded.apply_steps.chronological.map(&:key))
+        .to eq(%w[check_applyable fetch_apply_type detect fetch_form fill_form generate_cv submit])
 
       expect { perform_enqueued_jobs { described_class.perform_now(apply.id) } }
         .not_to(change { [ ApplyStep.where(apply_id: apply.id).count, apply.reload.attributes ] })

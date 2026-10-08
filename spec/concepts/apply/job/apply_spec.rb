@@ -103,4 +103,49 @@ RSpec.describe Apply::Job::Apply, type: :job do
       expect(apply.failure['code']).not_to eq('unexpected_error')
     end
   end
+
+  describe 'host slot throttling' do
+    let(:apply) { create(:apply) }
+    let(:handler) { ApplyEngineFakes::Handler.new(apply:) }
+    let(:until_time) { 15.minutes.from_now.change(usec: 0) }
+
+    before do
+      allow(Apply::TurboHandler::StatusUpdate).to receive(:broadcast)
+      allow(Apply::Handler::Base).to receive(:for).and_return(handler)
+      allow(ApplyEngineFakes::PrepareStep).to receive(:observe)
+        .and_raise(Apply::Operation::Engine::Throttled.new(until: until_time))
+    end
+
+    it 'retries the job at the slot time and leaves the row waiting_capacity' do
+      expect { described_class.perform_now(apply.id) }.to have_enqueued_job(described_class).with(apply.id).at(until_time)
+
+      expect(apply.reload).to be_waiting_capacity
+      expect(apply.failure).to be_nil
+    end
+
+    it 'records failed(:capacity) through HaltUnowned after MAX_THROTTLE_WAITS runs' do
+      job = described_class.new(apply.id)
+      (described_class::MAX_THROTTLE_WAITS - 1).times { job.perform_now }
+      expect(apply.reload).to be_waiting_capacity
+
+      expect { job.perform_now }.not_to have_enqueued_job(described_class)
+      expect(apply.reload).to be_failed
+      expect(apply.failure).to include('code' => 'capacity', 'kind' => 'transient')
+    end
+
+    it 'counts throttle waits apart from the PoolBusy retries of the same job' do
+      job = described_class.new(apply.id)
+      job.executions = described_class::MAX_CAPACITY_RETRIES + described_class::MAX_THROTTLE_WAITS
+
+      expect { job.perform_now }.to have_enqueued_job(described_class).with(apply.id).at(until_time)
+      expect(apply.reload).to be_waiting_capacity
+      expect(job.exception_executions).to eq(described_class::THROTTLE_WAITS_KEY => 1)
+    end
+
+    it 'never turns a throttle into unexpected_error' do
+      described_class.perform_now(apply.id)
+
+      expect(apply.reload.failure).to be_nil
+    end
+  end
 end

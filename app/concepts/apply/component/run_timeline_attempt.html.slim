@@ -16,3 +16,10 @@ ol.space-y-2
       - if error_detail(step)
         pre(class=[ 'col-start-2 max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-xs',
                     'text-gray-600 dark:text-gray-400' ]) = error_detail(step)
+      - if step.artifacts_attachments.any?
+        ul.col-start-2.flex.flex-wrap.items-center.gap-x-3.gap-y-1.text-xs
+          li.text-gray-500.dark:text-gray-400 = I18n.t('apply.run_timeline.artifacts')
+          - artifact_links(step).each do |name, path|
+            li
+              = link_to name, path, target: '_blank', rel: 'noopener',
+                  class: 'text-blue-600 hover:underline dark:text-blue-400'

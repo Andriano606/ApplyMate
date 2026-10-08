@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_08_000006) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -54,31 +54,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
   end
 
   create_table "api_tokens", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "last_used_at"
-    t.string "name"
-    t.string "token", null: false
-    t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.string "token", null: false
+    t.string "name"
+    t.datetime "last_used_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["token"], name: "index_api_tokens_on_token", unique: true
     t.index ["user_id"], name: "index_api_tokens_on_user_id"
   end
 
   create_table "applies", force: :cascade do |t|
     t.bigint "ai_integration_id", null: false
-    t.integer "apply_type", default: 0, null: false
     t.boolean "applyble"
     t.datetime "created_at", null: false
-    t.bigint "fill_form_prompt_id"
+    t.text "raw_cv"
     t.jsonb "filled_form_data"
     t.jsonb "form_data"
-    t.bigint "generate_cv_prompt_id"
-    t.text "raw_cv"
     t.bigint "source_profile_id", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "user_profile_id", null: false
     t.bigint "vacancy_id", null: false
+    t.bigint "fill_form_prompt_id"
+    t.bigint "generate_cv_prompt_id"
+    t.integer "apply_type", default: 0, null: false
     t.integer "state", default: 0, null: false
     t.string "stage"
     t.integer "attempt", default: 0, null: false
@@ -91,6 +91,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.datetime "submitted_at"
     t.string "submitted_via"
     t.datetime "reminded_at"
+    t.string "platform"
+    t.jsonb "platform_match"
+    t.string "apply_key"
+    t.string "entry_url"
+    t.string "form_url"
+    t.jsonb "navigation"
+    t.jsonb "fields"
+    t.jsonb "answers"
+    t.string "answers_approved_digest"
+    t.datetime "reviewed_at"
+    t.datetime "duplicate_confirmed_at"
+    t.string "landing_url"
     t.index "COALESCE(heartbeat_at, updated_at)", name: "index_applies_stale_candidates", where: "(state = ANY (ARRAY[0, 1, 2]))"
     t.index ["ai_integration_id"], name: "index_applies_on_ai_integration_id"
     t.index ["fill_form_prompt_id"], name: "index_applies_on_fill_form_prompt_id"
@@ -98,6 +110,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.index ["source_profile_id"], name: "index_applies_on_source_profile_id"
     t.index ["updated_at"], name: "index_applies_remind_candidates", where: "((state = ANY (ARRAY[3, 4])) AND ((reminded_at IS NULL) OR (reminded_at < updated_at)))"
     t.index ["updated_at"], name: "index_applies_waiting_updated", where: "(state = ANY (ARRAY[3, 4]))"
+    t.index ["user_id", "apply_key"], name: "index_applies_on_user_apply_key", where: "(apply_key IS NOT NULL)"
     t.index ["user_id", "created_at"], name: "index_applies_on_user_created"
     t.index ["user_id", "state"], name: "index_applies_on_user_state"
     t.index ["user_id", "vacancy_id"], name: "index_applies_one_active_per_vacancy", unique: true, where: "(state = ANY (ARRAY[0, 1, 2, 3, 4]))"
@@ -105,6 +118,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.index ["user_id"], name: "index_applies_on_user_id"
     t.index ["user_profile_id"], name: "index_applies_on_user_profile_id"
     t.index ["vacancy_id"], name: "index_applies_on_vacancy_id"
+  end
+
+  create_table "apply_host_slots", primary_key: "host_key", id: :string, force: :cascade do |t|
+    t.datetime "next_allowed_at", null: false
+    t.bigint "holder_apply_id", null: false
   end
 
   create_table "apply_steps", force: :cascade do |t|
@@ -121,40 +139,45 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "scope"
+    t.string "input_digest"
+    t.jsonb "trace"
     t.index ["apply_id", "attempt", "key"], name: "index_apply_steps_on_apply_id_and_attempt_and_key", unique: true
+    t.index ["apply_id", "key", "input_digest"], name: "index_apply_steps_resume_lookup", where: "(state = 1)"
     t.index ["finished_at"], name: "index_apply_steps_on_finished_at"
+    t.index ["finished_at"], name: "index_apply_steps_prunable_trace", where: "(trace IS NOT NULL)"
   end
 
   create_table "hidden_vacancies", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "vacancy_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["user_id", "vacancy_id"], name: "index_hidden_vacancies_on_user_id_and_vacancy_id", unique: true
     t.index ["vacancy_id"], name: "index_hidden_vacancies_on_vacancy_id"
   end
 
   create_table "prompts", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "prompt_type", null: false
     t.text "content", null: false
     t.datetime "created_at", null: false
-    t.string "name", default: "", null: false
-    t.integer "prompt_type", null: false
     t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
+    t.string "name", default: "", null: false
     t.index ["user_id"], name: "index_prompts_on_user_id"
   end
 
   create_table "proxies", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.integer "fail_count", default: 0, null: false
-    t.datetime "failed_at"
     t.string "host", null: false
-    t.datetime "last_used_at"
     t.integer "port", null: false
     t.string "protocol", default: "http", null: false
-    t.float "reliability", default: 1.0, null: false
-    t.integer "success_count", default: 0, null: false
+    t.datetime "failed_at"
+    t.datetime "last_used_at"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "fail_count", default: 0, null: false
+    t.integer "success_count", default: 0, null: false
+    t.float "reliability", default: 1.0, null: false
     t.index ["failed_at"], name: "index_proxies_on_failed_at"
     t.index ["host", "port", "protocol"], name: "index_proxies_on_host_and_port_and_protocol", unique: true
     t.index ["last_used_at"], name: "index_proxies_on_last_used_at"
@@ -162,13 +185,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
   end
 
   create_table "proxy_source_stats", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.integer "fail_count", default: 0, null: false
-    t.datetime "failed_at"
     t.bigint "proxy_id", null: false
-    t.float "reliability", default: 1.0, null: false
     t.bigint "source_id", null: false
     t.integer "success_count", default: 0, null: false
+    t.integer "fail_count", default: 0, null: false
+    t.datetime "failed_at"
+    t.float "reliability", default: 1.0, null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["proxy_id", "source_id"], name: "index_proxy_source_stats_on_proxy_id_and_source_id", unique: true
     t.index ["proxy_id"], name: "index_proxy_source_stats_on_proxy_id"
@@ -178,13 +201,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
   end
 
   create_table "saved_filters", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "name", null: false
+    t.jsonb "vacancy_search", default: {}, null: false
     t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.integer "last_seen_count"
     t.bigint "last_seen_max_vacancy_id"
-    t.string "name", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
-    t.jsonb "vacancy_search", default: {}, null: false
     t.index ["user_id", "name"], name: "index_saved_filters_on_user_id_and_name", unique: true
   end
 
@@ -199,11 +222,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
   end
 
   create_table "solid_cache_entries", force: :cascade do |t|
-    t.integer "byte_size", null: false
-    t.datetime "created_at", null: false
     t.binary "key", null: false
-    t.bigint "key_hash", null: false
     t.binary "value", null: false
+    t.datetime "created_at", null: false
+    t.bigint "key_hash", null: false
+    t.integer "byte_size", null: false
     t.index ["byte_size"], name: "index_solid_cache_entries_on_byte_size"
     t.index ["key_hash", "byte_size"], name: "index_solid_cache_entries_on_key_hash_and_byte_size"
     t.index ["key_hash"], name: "index_solid_cache_entries_on_key_hash", unique: true
@@ -333,12 +356,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
   create_table "source_profiles", force: :cascade do |t|
     t.integer "auth_method", default: 0, null: false
     t.datetime "created_at", null: false
-    t.boolean "is_default", default: false, null: false
     t.string "name", null: false
     t.string "session_id"
     t.bigint "source_id", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.boolean "is_default", default: false, null: false
     t.index ["source_id"], name: "index_source_profiles_on_source_id"
     t.index ["user_id", "source_id"], name: "index_source_profiles_on_user_source_default", unique: true, where: "(is_default = true)"
     t.index ["user_id"], name: "index_source_profiles_on_user_id"
@@ -348,8 +371,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.string "base_url", null: false
     t.datetime "created_at", null: false
     t.string "name", null: false
-    t.string "scraper"
     t.datetime "updated_at", null: false
+    t.string "scraper"
   end
 
   create_table "user_profiles", force: :cascade do |t|
@@ -358,6 +381,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.string "name", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.jsonb "facts"
+    t.string "facts_cv_digest"
     t.index ["user_id"], name: "index_user_profiles_on_user_id"
   end
 
@@ -366,18 +391,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.string "avatar_url"
     t.datetime "created_at", null: false
     t.bigint "default_ai_integration_id"
-    t.bigint "default_fill_form_prompt_id"
-    t.bigint "default_generate_cv_prompt_id"
     t.bigint "default_profile_id"
-    t.bigint "default_saved_filter_id"
     t.string "email", null: false
     t.string "middle_name"
     t.string "name", null: false
     t.string "provider", null: false
     t.string "uid", null: false
     t.datetime "updated_at", null: false
+    t.bigint "default_fill_form_prompt_id"
+    t.bigint "default_generate_cv_prompt_id"
+    t.bigint "default_saved_filter_id"
     t.integer "daily_apply_limit", default: 30, null: false
     t.datetime "applies_changed_at"
+    t.integer "review_policy", default: 2, null: false
+    t.boolean "auto_consent", default: true, null: false
     t.index ["default_fill_form_prompt_id"], name: "index_users_on_default_fill_form_prompt_id"
     t.index ["default_generate_cv_prompt_id"], name: "index_users_on_default_generate_cv_prompt_id"
     t.index ["default_saved_filter_id"], name: "index_users_on_default_saved_filter_id"
@@ -390,26 +417,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
     t.string "company_name"
     t.datetime "created_at", null: false
     t.text "description"
-    t.text "description_html"
     t.text "details"
     t.string "external_id"
-    t.string "external_url"
     t.bigint "source_id", null: false
     t.string "title"
     t.datetime "updated_at", null: false
     t.string "url"
+    t.string "external_url"
+    t.text "description_html"
     t.index ["source_id", "external_id"], name: "index_vacancies_on_source_id_and_external_id", unique: true
     t.index ["source_id", "id"], name: "index_vacancies_pending_description_html", where: "((description_html IS NULL) OR (description_html = ''::text))"
     t.index ["source_id"], name: "index_vacancies_on_source_id"
   end
 
   create_table "vacancy_cvs", force: :cascade do |t|
-    t.bigint "ai_integration_id"
-    t.datetime "created_at", null: false
-    t.bigint "generate_cv_prompt_id"
-    t.datetime "updated_at", null: false
-    t.bigint "user_profile_id"
     t.bigint "vacancy_id", null: false
+    t.bigint "ai_integration_id", null: false
+    t.bigint "user_profile_id", null: false
+    t.bigint "generate_cv_prompt_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["ai_integration_id"], name: "index_vacancy_cvs_on_ai_integration_id"
     t.index ["generate_cv_prompt_id"], name: "index_vacancy_cvs_on_generate_cv_prompt_id"
     t.index ["user_profile_id"], name: "index_vacancy_cvs_on_user_profile_id"
@@ -417,14 +444,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000005) do
   end
 
   create_table "vacancy_questions", force: :cascade do |t|
+    t.bigint "vacancy_id", null: false
     t.bigint "ai_integration_id", null: false
-    t.text "answer"
-    t.datetime "created_at", null: false
+    t.bigint "user_profile_id", null: false
     t.bigint "fill_form_prompt_id", null: false
     t.text "question", null: false
+    t.text "answer"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.bigint "user_profile_id", null: false
-    t.bigint "vacancy_id", null: false
     t.index ["ai_integration_id"], name: "index_vacancy_questions_on_ai_integration_id"
     t.index ["fill_form_prompt_id"], name: "index_vacancy_questions_on_fill_form_prompt_id"
     t.index ["user_profile_id"], name: "index_vacancy_questions_on_user_profile_id"

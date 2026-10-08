@@ -50,4 +50,28 @@ RSpec.describe "applies partial indexes" do
     expect(indexdef("index_applies_on_user_state")).to include("(user_id, state)")
     expect(indexdef("index_applies_on_user_created")).to include("(user_id, created_at)")
   end
+
+  it "has the user apply_key partial index" do
+    definition = indexdef("index_applies_on_user_apply_key")
+    expect(definition).to include("(user_id, apply_key)", "apply_key IS NOT NULL")
+  end
+
+  describe "apply_steps partial indexes" do
+    def step_indexdef(name)
+      ActiveRecord::Base.connection.select_value(
+        "SELECT indexdef FROM pg_indexes WHERE tablename = 'apply_steps' AND indexname = #{ActiveRecord::Base.connection.quote(name)}"
+      )
+    end
+
+    it "resume_lookup covers succeeded steps" do
+      definition = step_indexdef("index_apply_steps_resume_lookup")
+      expect(definition).to include("(apply_id, key, input_digest)")
+      expect(definition).to match(/state = #{ApplyStep.states.fetch('succeeded')}\b/)
+    end
+
+    it "prunable_trace covers steps with a trace" do
+      definition = step_indexdef("index_apply_steps_prunable_trace")
+      expect(definition).to include("(finished_at)", "trace IS NOT NULL")
+    end
+  end
 end

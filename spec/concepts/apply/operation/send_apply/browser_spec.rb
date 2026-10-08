@@ -66,7 +66,7 @@ RSpec.describe Apply::Operation::SendApply::Browser do
         [ full_name_target, 'Jane Doe' ],
         [ have_attributes(strategies: [ { 'css' => '[name="career_application_form[email]"]' },
                                         { 'css' => described_class::FORM_CONTROLS_CSS, 'nth' => 1 } ]),
-          'dev@example.com' ]
+          user_email ]
       )
       expect(session.calls.count([ :settle, :key ])).to eq(2)
     end

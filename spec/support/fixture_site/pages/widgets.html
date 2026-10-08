@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Widgets</title>
+    <!-- Custom controls the widget drivers meet outside Ashby: a react-select-like combobox whose menu is portaled to
+         <body>, a readonly Element UI select (el-select) with a pre-rendered hidden dropdown, yes/no aria-pressed
+         buttons, and a cookie overlay that appears after 3 s and intercepts every click until accepted. -->
+    <style>
+      body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; }
+      .field { margin: 1rem 0; }
+      .select__control { display: flex; border: 1px solid #888; width: 16rem; padding: 0.25rem; }
+      .select__value-container { flex: 1; }
+      .select__input { border: 0; outline: 0; width: 100%; }
+      .select__menu-portal { position: absolute; z-index: 20; background: #fff; border: 1px solid #888; width: 16rem; }
+      .select__option { padding: 0.25rem; cursor: pointer; }
+      .el-select-dropdown { position: absolute; z-index: 20; background: #fff; border: 1px solid #888; }
+      .el-select-dropdown__list { list-style: none; margin: 0; padding: 0; }
+      .el-select-dropdown__item { padding: 0.25rem 0.5rem; cursor: pointer; }
+      button[aria-pressed=true] { background: #335; color: #fff; }
+      #cookie-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.4); }
+      #cookie-overlay .box { background: #fff; margin: 30vh auto; padding: 1rem; width: 20rem; }
+      .spacer { height: 1600px; }
+    </style>
+  </head>
+  <body>
+    <h1>Widgets</h1>
+
+    <div class="field" id="country-field">
+      <label id="country-label" for="country-input">Country</label>
+      <div class="select-shell">
+        <div class="select__control">
+          <div class="select__value-container">
+            <div class="select__placeholder">Select...</div>
+            <input class="select__input" id="country-input" role="combobox" aria-expanded="false" aria-haspopup="true" aria-autocomplete="list" autocomplete="off" />
+          </div>
+          <div class="select__indicators"><span class="select__dropdown-indicator">&#9662;</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="field" id="city-field">
+      <label for="city-input">City</label>
+      <div class="el-select">
+        <div class="el-input el-input--suffix">
+          <input id="city-input" type="text" readonly class="el-input__inner" placeholder="Select" autocomplete="off" />
+          <span class="el-input__suffix"><i class="el-select__caret el-icon-arrow-up"></i></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="permit-question" id="permit-field">
+      <span id="permit-question">Do you have a work permit?</span>
+      <button type="button" aria-pressed="false">Yes</button>
+      <button type="button" aria-pressed="false">No</button>
+    </div>
+
+    <button type="button" id="continue">Continue</button>
+    <div class="spacer"></div>
+    <p id="far-below">The end of the page.</p>
+    <input id="far-input" type="text" aria-label="Far input" />
+
+    <div class="el-select-dropdown el-popper" style="display: none">
+      <ul class="el-select-dropdown__list">
+        <li class="el-select-dropdown__item">Kyiv</li>
+        <li class="el-select-dropdown__item">Lviv</li>
+        <li class="el-select-dropdown__item">Odesa</li>
+      </ul>
+    </div>
+
+    <div id="cookie-overlay">
+      <div class="box">We use cookies. <button type="button" id="cookie-accept">Accept</button></div>
+    </div>
+
+    <script>
+      const COUNTRIES = ['Ukraine', 'Poland', 'Germany', 'Portugal'];
+      const countryInput = document.getElementById('country-input');
+      const control = countryInput.closest('.select__control');
+      let menu = null;
+      const closeMenu = () => {
+        if (menu) menu.remove();
+        menu = null;
+        countryInput.setAttribute('aria-expanded', 'false');
+      };
+      const openMenu = () => {
+        if (menu) return;
+        const rect = control.getBoundingClientRect();
+        menu = document.createElement('div');
+        menu.className = 'select__menu-portal';
+        menu.style.top = `${rect.bottom + window.scrollY}px`;
+        menu.style.left = `${rect.left + window.scrollX}px`;
+        const list = document.createElement('div');
+        list.className = 'select__menu';
+        list.setAttribute('role', 'listbox');
+        list.id = 'react-select-3-listbox';
+        COUNTRIES.forEach((label, index) => {
+          const option = document.createElement('div');
+          option.className = 'select__option';
+          option.setAttribute('role', 'option');
+          option.id = `react-select-3-option-${index}`;
+          option.textContent = label;
+          option.addEventListener('mousedown', (event) => event.preventDefault());
+          option.addEventListener('click', () => {
+            const container = control.querySelector('.select__value-container');
+            container.querySelector('.select__placeholder, .select__single-value')?.remove();
+            const value = document.createElement('div');
+            value.className = 'select__single-value';
+            value.textContent = label;
+            container.prepend(value);
+            closeMenu();
+          });
+          list.appendChild(option);
+        });
+        menu.appendChild(list);
+        document.body.appendChild(menu);
+        countryInput.setAttribute('aria-expanded', 'true');
+      };
+      control.addEventListener('mousedown', openMenu);
+      countryInput.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') openMenu();
+        if (event.key === 'Escape') closeMenu();
+      });
+
+      const cityInput = document.getElementById('city-input');
+      const dropdown = document.querySelector('.el-select-dropdown');
+      cityInput.addEventListener('click', () => {
+        const rect = cityInput.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+        dropdown.style.left = `${rect.left + window.scrollX}px`;
+        dropdown.style.display = 'block';
+      });
+      dropdown.querySelectorAll('.el-select-dropdown__item').forEach((item) =>
+        item.addEventListener('click', () => {
+          cityInput.value = item.textContent;
+          dropdown.style.display = 'none';
+        }),
+      );
+
+      document.querySelectorAll('#permit-field button').forEach((button) =>
+        button.addEventListener('click', () => {
+          document.querySelectorAll('#permit-field button').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+        }),
+      );
+
+      const overlay = document.getElementById('cookie-overlay');
+      setTimeout(() => (overlay.style.display = 'block'), 3000);
+      document.getElementById('cookie-accept').addEventListener('click', () => overlay.remove());
+    </script>
+  </body>
+</html>

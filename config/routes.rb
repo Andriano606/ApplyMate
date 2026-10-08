@@ -43,11 +43,12 @@ Rails.application.routes.draw do
     member do
       post :resume
       post :cancel
+      post :approve_review
       post :mark_outcome
     end
   end
   get 'artifacts/:owner/:id/:name', to: 'artifacts#show', as: :artifact,
-                                    constraints: { owner: /apply|vacancy_cv/, name: /cv|screenshot/ }
+                                    constraints: { owner: /apply|vacancy_cv|apply_step/, name: /cv|screenshot|[1-9]\d?/ }
   resources :source_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :prompts, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]

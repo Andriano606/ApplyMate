@@ -17,6 +17,7 @@ RSpec.configure do |config|
   # The one PublicAddressGuard seam: the fixture host is a private address (the docker host), so in :browser
   # examples URLs on it resolve to a Resolution; every other URL runs the real ResolvePublicAddress.
   config.before(:each, browser: true) do
+    FixtureSite.reset!
     allow(ApplyMate::Net::Operation::ResolvePublicAddress).to receive(:call).and_wrap_original do |original, **args|
       URI.parse(args.fetch(:url).to_s).host == FixtureSite.host ? FixtureSite.resolution(args[:url]) : original.call(**args)
     end

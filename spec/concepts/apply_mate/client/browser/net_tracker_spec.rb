@@ -28,9 +28,21 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
     end
   end
   let(:request_class) do
-    Struct.new(:url, :http_method, :status, :frame_url) do
+    Struct.new(:url, :http_method, :status, :frame_url, :body, :reads) do
       def method(*)
         http_method
+      end
+
+      # Request#response: a Playwright call (blocks until the response exists). Counts reads; `body` may be a
+      # lambda (to block or raise).
+      def response
+        self.reads = reads.to_i + 1
+        response_class = Struct.new(:source) do
+          def body
+            source.respond_to?(:call) ? source.call : source
+          end
+        end
+        response_class.new(body)
       end
 
       def existing_response
@@ -67,7 +79,7 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
     finish(post)
 
     expect(tracker.since(0)).to eq([ { url: post.url, method: 'POST', status: 201, at: 1_010.0,
-                                       frame_url: 'https://jobs.example.com/embed' } ])
+                                       frame_url: 'https://jobs.example.com/embed', body: nil } ])
   end
 
   it 'records a failed request with a nil status' do
@@ -107,9 +119,27 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
     expect(tracker.since(mark).pluck(:url)).to eq([ 'https://example.com/after' ])
   end
 
+  describe '#in_flight_since' do
+    it 'counts non-GET requests started at or after the mark that have not ended, however old' do
+      page.emit('request', request_class.new('https://example.com/before', 'POST', nil, nil))
+      advance(1) # a request started in the mark's own millisecond counts (`>=`), as #since does
+      mark = tracker.mark
+      submit = request_class.new('https://jobs.example.com/graphql', 'POST', nil, nil)
+      page.emit('request', submit)
+      page.emit('request', request_class.new('https://example.com/app.js', 'GET', nil, nil))
+      page.emit('request', request_class.new('https://www.google-analytics.com/g/collect', 'POST', nil, nil))
+      advance(30_000)
+
+      expect(tracker.in_flight_since(mark)).to eq(1)
+
+      page.emit('requestfinished', submit)
+      expect(tracker.in_flight_since(mark)).to eq(0)
+    end
+  end
+
   describe '#pending' do
     it 'counts young in-flight requests of any method, ignores old ones and evicts stale ones' do
-        long_poll = request_class.new('https://example.com/poll', 'GET', nil, nil)
+      long_poll = request_class.new('https://example.com/poll', 'GET', nil, nil)
       page.emit('request', long_poll)
       advance(4_000)
       page.emit('request', request_class.new('https://example.com/api', 'GET', nil, nil))
@@ -141,6 +171,78 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
 
     expect { finish(broken) }.not_to raise_error
     expect(tracker.since(0).sole).to include(url: 'not a url at all', frame_url: nil)
+  end
+
+  describe '#watch (response bodies)' do
+    let(:graphql) { 'https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiSubmit' }
+
+    before { tracker.watch(%r{jobs\.ashbyhq\.com/api/non-user-graphql}) }
+
+    after { tracker.dispose }
+
+    it 'captures the body of a watched request, capped at BODY_CAP, only when asked for' do
+      request = request_class.new(graphql, 'POST', 200, nil, "{\"data\":#{'x' * 70.kilobytes}")
+      finish(request)
+
+      expect(tracker.since(0, bodies: true).sole[:body].bytesize).to eq(described_class::BODY_CAP)
+      expect(tracker.since(0, bodies: true).sole[:body]).to start_with('{"data":')
+      expect(tracker.since(0).sole[:body]).to be_nil
+    end
+
+    it 'never reads the body of unwatched, GET or failed requests' do
+      other = request_class.new('https://jobs.ashbyhq.com/api/other', 'POST', 200, nil, 'secret')
+      get = request_class.new(graphql, 'GET', 200, nil, 'page')
+      failed = request_class.new(graphql, 'POST', nil, nil, 'never')
+      finish(other)
+      finish(get)
+      finish(failed, event: 'requestfailed')
+
+      expect(tracker.since(0, bodies: true).pluck(:body)).to eq([ nil, nil ])
+      expect([ other, get, failed ].map(&:reads)).to eq([ nil, nil, nil ])
+    end
+
+    it 'reads off the reader thread: a slow body read never blocks the event callback' do
+      gate = Queue.new
+      request = request_class.new(graphql, 'POST', 200, nil, -> { gate.pop })
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      finish(request)
+
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 0.5
+      gate << '{"data":{"ok":true}}'
+      expect(tracker.since(0, bodies: true).sole[:body]).to eq('{"data":{"ok":true}}')
+    end
+
+    it 'drops bodies (nil, no raise) once BODY_QUEUE reads are waiting' do
+      gate = Queue.new
+      blocked = Array.new(described_class::BODY_QUEUE + 2) do |index|
+        request_class.new("#{graphql}&n=#{index}", 'POST', 200, nil, -> { gate.pop })
+      end
+      expect { blocked.each { |request| finish(request) } }.not_to raise_error
+
+      (described_class::BODY_QUEUE + 1).times { gate << 'ok' }
+      bodies = tracker.since(0, bodies: true).pluck(:body)
+      expect(bodies.first(described_class::BODY_QUEUE + 1)).to all(eq('ok')) # 1 running + BODY_QUEUE waiting
+      expect(bodies.last).to be_nil # dropped: the queue was full
+    end
+
+    it 'records a failed body read as nil' do
+      finish(request_class.new(graphql, 'POST', 200, nil, -> { raise Playwright::Error.new(message: 'gone') }))
+
+      expect(tracker.since(0, bodies: true).sole).to include(status: 200, body: nil)
+    end
+
+    it 'gives up waiting for a body after BODY_WAIT_MS' do
+      stub_const("#{described_class}::BODY_WAIT_MS", 50)
+      gate = Queue.new
+      finish(request_class.new(graphql, 'POST', 200, nil, -> { gate.pop }))
+
+      expect(tracker.since(0, bodies: true).sole[:body]).to be_nil
+      gate << 'late'
+    end
+
+    it 'accepts only a Regexp' do
+      expect { tracker.watch('non-user-graphql') }.to raise_error(ArgumentError, /Regexp/)
+    end
   end
 
   it 'unsubscribes on dispose' do

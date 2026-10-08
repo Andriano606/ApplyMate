@@ -40,4 +40,12 @@ RSpec.describe Apply::Component::ActionBox, type: :component do
 
     expect(html.text).to include(I18n.t('apply.state.cancelled'), I18n.t('apply.actions.reapply'))
   end
+
+  it 'points a needs_review apply at its card instead of repeating the form' do
+    apply = create(:apply, user:, vacancy:, state: :needs_review, failure: { code: 'review', kind: 'human' })
+    html = box(apply)
+
+    expect(html.text).to include(I18n.t('apply.state.needs_review'), I18n.t('apply.action_box.review'))
+    expect(html.at_css("a[href='#apply_#{apply.hashid}']")).to be_present
+  end
 end

@@ -1,8 +1,8 @@
 # Browser layer: browserd and Camoufox
 
 How the apply engine gets a real browser: the `browserd` container hands out short-lived Camoufox (Firefox) browsers
-("leases") over the Playwright protocol. Read before touching `docker/browserd/`, the browser Session/Driver/NetTracker/Locate or
-`ApplyMate::Net::Operation::ResolvePublicAddress` (PublicAddressGuard).
+("leases") over the Playwright protocol. Read before touching `docker/browserd/`, the browser Session/Driver/NetTracker/Locate,
+the probes, or `ApplyMate::Net::Operation::ResolvePublicAddress` / `GuardedFetch` (PublicAddressGuard).
 
 Code: `docker/browserd/` (`server.mjs` HTTP API + reaper, `leases.mjs` slot bookkeeping, `lease_proxy.mjs` the per-lease
 ws proxy, `camoufox.mjs` the one launch options builder, `entrypoint.sh` firewall + proxy + privilege drop, `Dockerfile`, `smokescreen.yaml.tmpl`).
@@ -206,7 +206,8 @@ from sweeping another workspace's leases or its own `:browser` spec run.
 
 `ApplyMate::Net::Operation::ResolvePublicAddress.call(url:)` (`app/concepts/apply_mate/net/operation/`) is the one
 implementation. Every fetch of a URL that came from a page, an AI or a redirect goes through it before the request.
-model = `Resolution` (`Data.define(:url, :host, :port, :ip)`, `ip` = first address).
+model = `Resolution` (`Data.define(:url, :host, :port, :ip)`, `ip` = the first IPv4 answer, else the first answer:
+the pin forbids curl a family fallback, and Resolv may list AAAA first, which fails on an IPv4-only host).
 
 1. `URI.parse`; the scheme must be `http`/`https` and the host present, else `UnsafeUrlError` reason `:scheme`
    (also for unparsable URLs).
@@ -218,19 +219,41 @@ model = `Resolution` (`Data.define(:url, :host, :port, :ip)`, `ip` = first addre
 
 `BLOCKED_RANGES`: `0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24
 192.168.0.0/16 198.18.0.0/15 224.0.0.0/4 240.0.0.0/4 ::/128 ::1/128 fc00::/7 fe80::/10`. IPv4-mapped IPv6
-(`::ffff:0:0/96`) is unwrapped and its IPv4 checked.
+(`::ffff:0:0/96`) is unwrapped and its IPv4 checked. That rule is `ResolvePublicAddress.public_ip?(ipaddr)`, the
+one implementation; `ResolvePublicAddress.literal_private?(host)` applies it **without DNS** (true for `localhost`,
+`*.localhost` and literal non-public IPs, bracketed or not, also in the fully-qualified trailing-dot form Firefox keeps
+in frame URLs (`localhost.`, `app.localhost.`); false for any hostname) for URLs the guard never saw,
+such as frames the browser already loaded (`Apply::Gate::PrivateAddress`).
 
 `ApplyMate::Net::UnsafeUrlError` (`reason` ∈ `:scheme :unresolvable :private`, `url`) names only the host in its
 message; the full URL may carry tokens. The Runner maps it to the code `private_address` (`unsupported`), wired in
-phase 2 unit 4. Pinning the checked IP into `ImpersonateHttp` via curl `--resolve` is deferred to phase 3a (see
-"Deferred to phase 3a"); `Resolution#ip` exists for it. The browser itself is covered by smokescreen (see Network
-isolation); the guard is the Ruby-side check before navigation.
+phase 2 unit 4. The browser itself is covered by smokescreen (see Network isolation); the guard is the Ruby-side check
+before navigation.
+
+**HTTP fetches of untrusted URLs: `ApplyMate::Net::Operation::GuardedFetch.call(url:, http:, method: :get, body: nil,
+headers: {})`** (`app/concepts/apply_mate/net/operation/guarded_fetch.rb`, internal, `skip_authorize`) is the one
+implementation (DetectPlatform's redirect walk, `fetch_schema`). model = `ApplyMate::Client::Response`.
+
+1. `ResolvePublicAddress` (raises `UnsafeUrlError` before any request).
+2. ONE request: `http.get(url, headers:, follow_redirects: false, resolve:)` or `http.post(url, body:, headers:,
+   resolve:)`. A 3xx is returned as is; a caller that walks redirects sends every `Location` through `GuardedFetch`
+   again, so every hop is checked and pinned.
+3. `http` must be an `ApplyMate::Client::ImpersonateHttp` (else `ArgumentError`): `AsyncHttp#get` takes `**` and would
+   silently drop `resolve:`.
+
+`ImpersonateHttp#get`/`#post` take `resolve:` (a `Resolution` or `nil`). With it, curl gets `--resolve
+host:port:ip` (`port` = the URL's, default 443/80; IPv6 in brackets) and `--noproxy '*'` (no env proxy), and never
+`-L`. `ArgumentError` (before curl runs) for `resolve:` + `follow_redirects: true`, + a client `proxy:` (the proxy would
+resolve the host itself), a `Resolution` without `ip`, or one for another host. In `:browser` specs
+`FixtureSite.resolution` returns `ip: '127.0.0.1'` (the fixture server runs in the spec process), so a pinned
+Ruby-side fetch of `FixtureSite.url(...)` works.
 
 ## Session API
 
 Code: `app/concepts/apply_mate/client/browser/session.rb` (facade), `driver/playwright.rb` (the only driver),
-`net_tracker.rb`, `target.rb`, `nav_result.rb`, `clock.rb`, `probe/*.js`, and the algorithms as internal operations in
-`operation/` (`Goto`, `WaitPastCloudflare`, `WaitForContentSettle`, `WaitQuiet`, `Locate`, `WaitReady`).
+`net_tracker.rb`, `target.rb`, `nav_result.rb`, `snapshot.rb`, `obstructed.rb`, `clock.rb`, `probe/*.js`, and the
+algorithms as internal operations in `operation/` (`Goto`, `WaitPastCloudflare`, `WaitForContentSettle`, `WaitQuiet`,
+`Locate`, `WaitReady`, `SnapshotAll`, `ReadListbox`, `WaitForListbox`, `WaitUntil`).
 
 ```ruby
 ApplyMate::Client::Browser::Session.open(deadline: ctx.scope_deadline, owner: Session.owner_for(apply)) do |session|
@@ -254,28 +277,68 @@ unit 4). `Session.owner_for(apply)` = `"<Browserd.owner_prefix><pid>:<apply hash
 |---|---|---|
 | `goto(url)` | — | `Operation::Goto` → `NavResult(status, final_url, challenge_passed, was_challenge)` |
 | `click(target)` | `:required` | `locator.click` (trusted input, Playwright actionability waits) |
+| `trial_click(target)` | `:required` | `locator.click(trial: true)`: the same actionability checks (an obstruction raises `Obstructed`), no click; `Stage::Submit` runs it inside `GuardAction` before the claim |
 | `fill(target, text)` | `:required` | `locator.fill` |
+| `type(target, text, delay_ms: rand(40..90))` | `:required` | `locator.press_sequentially(delay:)`; timeout `ACTION_TIMEOUT_MS + text.length × delay_ms` |
 | `press(target, key)` | `:required` | `locator.press` |
 | `select(target, value: nil, label: nil)` | `:required` | `locator.select_option` |
 | `set_checked(target, value)` | `:attached` | `locator.set_checked` |
 | `upload(target, path, via_chooser: false)` | `:attached` (`:required` with `via_chooser`) | `set_input_files(path)`, or `expect_file_chooser { target.click }.set_files(path)`; files stream over the protocol |
+| `scroll_into_view(target)` | `:attached` | `locator.scroll_into_view_if_needed` |
 | `probe(name, target, arg = nil)` | `:attached` | `locator.evaluate(PROBES[name], arg)` |
 | `present?(target, visibility:)` | given | `Locate`, `TargetNotFound` → `false` |
-| `ready?(root_target, timeout:, min_fields: 1)` | `:attached` | `Operation::WaitReady` (`timeout` in seconds) → Boolean |
+| `ready?(root_target, timeout:, min_fields: 1, keys: nil, attr: nil, ratio: 0.8, key_prefix: nil)` | `:attached` | `Operation::WaitReady` (`timeout` in seconds) → Boolean; keys mode when `keys:` given (see Probes `readiness`); `key_prefix` = the platform's per-render prefix (`Readiness#key_prefix`) |
+| `snapshot_all(markers: [], regions: [])` | — | `Operation::SnapshotAll` → `Snapshot` (below); `markers` are counted by `detect.js`, `regions` (CSS selectors, e.g. the platform's form root and excluded autofill pane) come back per element as `'regions'` (the ones the element or its field root sits inside) |
+| `dom_mark(target)` | — | `Operation::ReadListbox` in the target's frame and the top document → `{ frame_path:, option_count:, containers: { 'frame' / 'top' => { container key => visible option count } } }` |
+| `wait_for_listbox(since:, timeout:)` | — | `Operation::WaitForListbox`: polls `ReadListbox` every 100 ms → `[WaitForListbox::Option(label, target)]` of options new since the mark (disabled ones dropped), or `[]` at `timeout` seconds (clamped to the deadline); never raises because nothing opened |
+| `wait_until(timeout:) { … }` | — | `Operation::WaitUntil`: the block every 250 ms → its first truthy value, or `false` at `timeout` seconds (clamped). `TargetNotFound` / `Playwright::Error` in the block count as "not yet"; anything else propagates |
 | `html(frame_path: [])` | — | `page.content`; with a frame path the `outer_html` probe on that frame's `:root` |
 | `frames` | — | `[{ 'url', 'name' }]` of every frame |
-| `screenshot(full_page: false)` | — | PNG bytes |
+| `screenshot(full_page: false, mask_fillable: false)` | — | PNG bytes; `mask_fillable` paints over `Driver::Playwright::MASK_SELECTOR` (`input:visible, textarea, select, [contenteditable], [role=combobox], [role=textbox]`) in the main frame and every child frame (first `MAX_FRAMES`) |
 | `cookies` | — | `"name=value; …"` of the context |
 | `current_url` | — | `page.url` |
 | `settle(kind)` | — | `Operation::WaitQuiet` with profile `kind` → `{ quiet:, ms: }` |
 | `settle_content` | — | `Operation::WaitForContentSettle` → Boolean |
-| `network_mark` / `network_since(mark)` | — | `NetTracker#mark` / `#since` |
+| `network_mark` / `network_since(mark, bodies: false)` | — | `NetTracker#mark` / `#since` |
+| `network_in_flight(mark)` | — | `NetTracker#in_flight_since(mark)`: non-GET, non-ignored requests started at or after `mark` that have not finished or failed yet, however old |
+| `network_watch(pattern)` | — | `NetTracker#watch(pattern)`: capture response bodies of matching requests |
 
-Callers today: `Apply::Operation::Ai::FetchExternalForm` (`humanize: false`) and `Apply::Operation::SendApply::Browser`
-(`humanize: true`), see `.ai/docs/apply_handlers.md`. Step specs use `FakeSession` (`.ai/docs/rspec.md`), whose
-method list and parameters `session_contract_spec.rb` keeps identical to this class.
+Callers today: the legacy `Apply::Operation::Ai::FetchExternalForm` (`humanize: false`) and
+`Apply::Operation::SendApply::Browser` (`humanize: true`), see `.ai/docs/apply_handlers.md`, and the phase 3a engine
+(`.ai/docs/apply_engine.md`), each through a Runner session scope:
 
-Methods arrive with their callers: the rest of design §9.1 is listed in "Deferred to phase 3a".
+| Engine caller | Session methods |
+| ------------- | --------------- |
+| `Engine::CollectRenderedEvidence`, `RunGates` / gates (`CookieConsent` clicks) | `snapshot_all`, `current_url`, `click` |
+| `Engine::ReachForm`, `Apply::Recipe::Op::Goto` / `Unwrap`, `Engine::WaitReady` | `goto`, `current_url`, `snapshot_all`, `frames`, `wait_until`, `ready?` |
+| `Engine::FormElements`, `Engine::BuildFieldInventory` | `snapshot_all(markers:, regions:)`, `probe(:read_value)` (default values) |
+| `Engine::GuardAction`, `Engine::SetFieldValue` | `snapshot_all`, `settle(kind)` |
+| Widgets (`apply/widget/*`) | `fill`, `type`, `press`, `click`, `select`, `set_checked`, `upload`, `present?`, `dom_mark`, `wait_for_listbox`, `probe(:read_value)`, `probe(:snapshot)` |
+| `Stage::Submit` | `snapshot_all`, `trial_click`, `network_watch`, `network_mark`, `click`, `settle(:submit)` |
+| `Engine::VerifySubmit` / `CollectSubmitEvidence`, `Stage::Verify` | `wait_until`, `html(frame_path:)`, `current_url`, `frames`, `network_since(mark, bodies: true)`, `network_in_flight(mark)`, `probe(:read_value)`, `screenshot(full_page: true, mask_fillable: true)` |
+| `Engine::CaptureArtifact` | `screenshot(mask_fillable: true)`, `frames`, `html(frame_path:)` |
+
+Step specs use `FakeSession` (`.ai/docs/rspec.md`), whose method
+list and parameters `session_contract_spec.rb` keeps identical to this class. `pages` / `switch_to(index)` (design
+§9.1) arrive with the Navigator (phase 3b), their first caller.
+
+**`Snapshot`** (`ApplyMate::Client::Browser::Snapshot = Data.define(:frames, :elements, :evidence, :digest)`),
+built by `Operation::SnapshotAll`: one `Driver#evaluate_all_frames` call runs `snapshot.js` and `detect.js` on each
+frame's `document.documentElement` (first `Driver::Playwright::MAX_FRAMES = 20` frames, main first).
+
+| Part | Shape |
+|---|---|
+| `frames` | `[{ 'ref' => 'f<i>', 'index', 'url', 'title', 'parent' => nil \| 'f<j>', 'frame_path', 'outline', 'alerts', 'captcha', 'password_fields', 'truncated', 'readable' }]`; `readable: false` when the frame could not be evaluated (no elements) |
+| `elements` | every probe element plus `'ref' => 'f<i>:e<j>'`, `'frame' => 'f<i>'`, `'fingerprint' => "role\|name\|f<i>"` (role or tag, name downcased) and `'target'` (a `Target`) |
+| `evidence` | `{ frame_urls:, script_srcs:, iframe_srcs:, dom_markers: { marker => count summed over frames } }` |
+| `digest` | SHA1 of the fingerprints joined in order |
+
+Frame path of a child frame: its parent's path plus `{ 'selector' => 'iframe#<id>' }` when the `<iframe>` element has
+a CSS-safe id (`Driver#evaluate_all_frames` reads it via `frame.frame_element` from the parent side, so it works across
+origins), else `{ 'url_contains' => <frame url> }`. A child whose parent is not among the evaluated frames gets one
+flat `url_contains` hop (never the main frame's path). An element's `Target` = that frame path + the probe's `strategies`
++ `readonly`; `root` (the probe's `root_strategies`) is set only for radios, checkboxes, file inputs and any element
+that is `visible` through its label/root/dropzone but not `self_visible` (Locate then judges `:required` on the root).
 
 **`Operation::Goto`** (port of `gotoSmart`): `ResolvePublicAddress` (raises `UnsafeUrlError` before any navigation)
 → `driver.navigate(url)` (`waitUntil: 'domcontentloaded'`, `NAVIGATE_TIMEOUT_MS = 30_000`) →
@@ -320,8 +383,9 @@ frame_path: [])` builds a one-strategy target.
 4. None accepted → `TargetNotFound` (`#target`; `#ambiguous?` = some strategy matched several elements). Counting
    does not wait: wait first (`ready?`, `settle`).
 
-`Operation::WaitReady.call(driver:, target:, timeout_ms:, min_fields: 1)`: every 250 ms, `Locate(:attached)` the root
-and run the `readiness` probe; `true` once it reports `ready`, `false` at `min(timeout_ms, remaining)`. An
+`Operation::WaitReady.call(driver:, target:, timeout_ms:, min_fields: 1, keys: nil, attr: nil, ratio: 0.8, key_prefix: nil)`: every
+250 ms, `Locate(:attached)` the root and run the `readiness` probe (`{ min, keys, attr, ratio, keyPrefix }`; `keys` without `attr`
+→ `ArgumentError`); `true` once it reports `ready`, `false` at `min(timeout_ms, remaining)`. An
 **ambiguous** root (`TargetNotFound#ambiguous?`, e.g. `form` on a page that also has a search form) returns `false` at
 once: the target is too broad and polling would burn the deadline on an answer that cannot change.
 
@@ -351,13 +415,25 @@ Playwright (a blocking call from the reader thread deadlocks it) and never raise
 | `pending(ignore_older_ms: 3_000)` | in-flight requests (any method) younger than `ignore_older_ms`; ignored ones older than `STALE_MS = 60_000` are dropped for good |
 | `last_event_at` | monotonic ms of the last request start/finish/failure (`-Infinity` before any) |
 | `mark` / `since(mark)` | monotonic ms / records whose request started at or after `mark` |
+| `in_flight_since(mark)` | non-GET, non-`IGNORED_HOSTS` requests started at or after `mark` still in flight (no age cut-off: a slow submit POST is never "too old"); `VerifySubmit` refuses `:rejected` while it is > 0 |
 | `dispose` | unsubscribes (`Driver#close`) |
 
-A record `{ url:, method:, status:, at:, frame_url: }` is written when a **non-GET** request finishes (`status` from
-`request.existing_response`) or fails (`status: nil`), unless its host matches `IGNORED_HOSTS` (suffix match; `host/path`
-entries also match a path prefix): `google-analytics.com googletagmanager.com doubleclick.net recaptcha.net
+A record `{ url:, method:, status:, at:, frame_url:, body: }` is written when a **non-GET** request finishes (`status`
+from `request.existing_response`) or fails (`status: nil`), unless its host matches `IGNORED_HOSTS` (suffix match;
+`host/path` entries also match a path prefix): `google-analytics.com googletagmanager.com doubleclick.net recaptcha.net
 gstatic.com/recaptcha google.com/recaptcha hcaptcha.com challenges.cloudflare.com sentry.io segment.io hotjar.com
-facebook.net`. At most `MAX_RECORDS = 500`, oldest dropped. Response bodies for `submit_request` come with phase 3a.
+facebook.net`. At most `MAX_RECORDS = 500`, oldest dropped. Request bodies are never stored (they carry the
+applicant's answers).
+
+**Response bodies** (`watch(pattern)`, a `Regexp`; the platform's `success_evidence[:submit_request]` URL): for a
+**finished** non-GET request whose URL matches a watched pattern, the reader thread only *posts* the read to a
+per-tracker `Concurrent::ThreadPoolExecutor` (`max_threads: 1`, `max_queue: BODY_QUEUE = 8`, `fallback_policy: :abort`;
+a rejected post records `body: nil`, never blocks or raises). The read (`request.response.body`, a Playwright call)
+runs on that thread eagerly, while the browser still holds the response, and keeps the first `BODY_CAP = 64.kilobytes`
+(UTF-8, scrubbed). `since(mark, bodies: true)` waits on the **caller** thread for those reads, `BODY_WAIT_MS = 5_000` in
+total, and returns the strings (`nil` when the read failed, was dropped or is still running); with `bodies: false`
+(default) `body` is always `nil`. Unwatched, GET and failed requests are never read. `dispose` shuts the executor
+down (at most one thread per lease, so ≤ `APPLY_SLOTS` threads per worker).
 
 All monotonic time comes from `ApplyMate::Client::Browser::Clock` (`now_ms`, `sleep_ms`, `remaining_ms(deadline)`);
 unit specs stub it to drive the wait loops.
@@ -369,18 +445,65 @@ unit specs stub it to drive the wait loops.
 (leading `//` comment lines and prettier's trailing `;` stripped); no IO per call. Prettier-checked in CI
 (`app/**/*.js`).
 
+All probes are read-only: none marks or mutates the DOM. `snapshot` and `detect` also run per frame through
+`Operation::SnapshotAll` (`(arg) => probe(document.documentElement, arg)`); the others through `Session#probe` on a
+located element.
+
 | Probe | Signature | Returns |
 |---|---|---|
-| `read_value` | `(el)` | `{ tag, value, checked, files: [names], text }` for input / textarea / select (`text` = selected option) / contenteditable |
-| `readiness` | `(root, { min })` | `{ fields, ready }`: visible fillable controls under root, `ready = fields >= min` |
-| `snapshot` | `(root)` | minimal: `[{ index, tag, type, name, id, label, placeholder, visible }]` of interactive elements; the full snapshot is phase 3a |
+| `snapshot` | `(root)` | `{ frame: { url, title }, outline, alerts, captcha, password_fields, truncated, elements }` — the one definition of "interactive element" (design §6.1), see below |
+| `detect` | `(root, { markers })` | `{ url, name (window.name), title, script_srcs, iframe_srcs, iframes: [{ id, name, src }], dom_markers: { selector => count } }` (an invalid marker counts 0) |
+| `listbox` | `(root, { since })` | `{ containers: { key => visible option count }, options: [{ label, value, selected, disabled, listbox_id, strategies }] }` over visible `[role=option]` / `.el-select-dropdown__item`; container = closest `[role=listbox]`, `.el-select-dropdown`, `ul` (key `#id` or css path). With `since` (an earlier `containers`): only options whose container was absent or whose index in it ≥ the old count |
+| `readiness` | `(root, { min, keys, attr, ratio, keyPrefix })` | `{ fields, ready }`. Default: visible fillable controls under root, `ready = fields >= min`. Keys mode (`keys` non-empty): distinct keys found in `attr` of elements under root, any visibility, with `keyPrefix` (a regex source from the platform, e.g. `Apply::Platform::Ashby::INSTANCE_PREFIX_SOURCE`; none when nil) stripped from the start, case-insensitive; `ready = found >= ceil(keys.length × ratio)`. The probe hard-codes no platform rule. (`snapshot.js` / `listbox.js` keep their own UUID-prefix test for a different reason: such ids change per render on any site, so they are never used as locator strategies.) |
+| `read_value` | `(el)` | `{ tag, value, checked, files, text, displayed, invalid, error_text, pressed }`: `displayed` = selected option text / contenteditable text / combobox chip (leaf `[class*=chip]`, `singleValue`, `multiValue`, `single-value`, `multi-value__label` within ≤ 4 ancestors, stopping at the field root) / file names / value; `invalid` = `aria-invalid` or `:invalid`; `error_text` = `[role=alert]`, `[aria-live]` in the field root + the `aria-describedby` targets; `pressed` = `aria-pressed` / `aria-checked` as written |
 | `outer_html` | `(el)` | `el.outerHTML` (`Session#html(frame_path:)`) |
+
+**`snapshot.js` elements** (at most 800 per frame, `truncated: true` beyond): native `input` (not hidden; every file
+input, even hidden), `textarea`, `select`, `button`, `a[href]`, `summary`, explicit roles `button link tab combobox
+listbox option radio radiogroup checkbox switch textbox menuitem dialog`, contenteditable hosts; open shadow roots are
+walked. Per element:
+
+- `index tag type role name question` — `role` explicit or implicit (Playwright's mapping); `name` = `aria-labelledby`
+  → `aria-label` → content (buttons, links, tabs, options) → `label[for]` / parent `label` / `legend` (own text,
+  without nested controls, trailing `*`/`✱` stripped) → text just before the control inside its field root →
+  `placeholder` → `title`; `question` = the field root's title (`aria-labelledby`, `legend`, or the first
+  label/`[class*=question]`/`[class*=title]`/heading that is not an option label).
+- state `required` (attribute, `aria-required` on it or its root, `*`/`✱`, a `required` class token such as Ashby's
+  `_required_f7cvd_91` or a `[class*=required]` child on the label or question), `invalid` (`aria-invalid` or
+  `:user-invalid`), `checked expanded pressed selected disabled readonly`, `filled` (Boolean; values are never
+  returned), `aria_hidden`.
+- `self_visible` (box, not `visibility:hidden`/`display:none`, no transparent ancestor, not clipped to ≤ 1 px) and
+  `visible`: = `self_visible`, except file inputs (any label / `[class*=dropzone]` / `[class*=upload]` / nearby
+  button seen) and radios, checkboxes, comboboxes (label or field root seen); `in_viewport`.
+- `field_root`: closest `[data-field-path]`, else the closest `fieldset` / `[role=radiogroup]` / `[role=group]` that
+  holds only this control's group, else (fields only) the highest ancestor (≤ 6 levels, never `form`/`body`) without
+  another control group. Exposed as `root_strategies` and `attrs['data-field-path']`.
+- `group`: `radio_group` (same `name`, or `role=radio` in a `radiogroup`), `combobox` (`role=combobox` that is not a
+  `select`, or a readonly input with `aria-haspopup`, a sibling arrow/indicator, or an `.el-select`/`.v-select`/
+  `select__control` ancestor), `option_group` (a non-submit button in a field root with a question and ≥ 2 such
+  buttons); `group_key` on every member, `options: [{ label, value, checked, strategies }]` on the first member.
+  Selects carry `options: [{ label, value, selected, disabled }]`; comboboxes `chip` (current chip text).
+- flags `password` (`type=password`, `autocomplete` current/new-password), `search_like` (`type=search`, under
+  `[role=search]`, `header`, `footer`, a `nav` that is not `[role=tablist]`), `submit_like` (submit type, or "submit" in name/class, never inside a
+  field root, never search-like, only with a fillable control nearby), `href` for links.
+- `strategies`: `{ attr: { id } }` unless the id is instance-prefixed (`<uuid>_…`) or a React `:r…:` id;
+  `{ attr: { name[, value] } }` (radios/checkboxes with value) unless instance-prefixed; `{ role, name }`;
+  `{ label }`; always last `{ css: <nth-of-type path> }` (shadow trees joined by a descendant space). `attrs` keeps
+  `id name type autocomplete placeholder accept multiple maxlength value data-field-path` raw.
+
+Frame-level: `outline` (visible `h1`–`h3`, `tabs A* | B` with `*` = selected, visible dialogs; ≤ 40), `alerts`
+(visible `[role=alert]`/`[aria-live=assertive]`, ≤ 10), `captcha` (`recaptcha`, `recaptcha_invisible`,
+`recaptcha_challenge`, `hcaptcha`, `hcaptcha_invisible`, `turnstile`, `turnstile_invisible`, `datadome` from iframe
+srcs and `.grecaptcha-badge`; a widget counts as visible when its iframe is seen and taller than 30 px; the
+`Apply::Gate::VisibleCaptcha` gate stops on the visible kinds only), `password_fields` (visible password elements).
 
 ## Deadlines & errors
 
 Every waiting driver primitive clamps its timeout with `clamp_ms(ms) = [ms, remaining_ms].min` and raises
-`DeadlineExceeded` when `remaining_ms <= 0` (`navigate`, `wait_for_network_idle`, `click`, `fill`, `press`,
-`select`, `set_checked`, `upload`, `probe`, `evaluate`, `count`, mouse). Timeouts: actions `ACTION_TIMEOUT_MS =
+`DeadlineExceeded` when `remaining_ms <= 0` (`navigate`, `wait_for_network_idle`, `click`, `fill`, `type`, `press`,
+`select`, `set_checked`, `scroll_into_view`, `upload`, `probe`, `evaluate`, `evaluate_all_frames`, `count`, mouse).
+`evaluate_all_frames` and `frame.evaluate` have no Playwright timeout (bounded by the lease TTL like every call
+without one); a frame that throws reads as `nil`. Timeouts: actions `ACTION_TIMEOUT_MS =
 10_000`, uploads `30_000`, probes `5_000`. Read-only primitives (`title`, `content`, `frames`, `cookies`,
 `current_url`, `screenshot` with its own 15 s) are not deadline-checked so failure artifacts can still be captured.
 Calls without a Playwright timeout are bounded by the lease TTL: browserd kills the browser, the ws drops, pending
@@ -393,6 +516,7 @@ calls fail → `Crashed`.
 | `ApplyMate::Client::Browser::VersionMismatch` | `AcquireLease` | phase 2 unit 4 |
 | `ApplyMate::Client::Browser::DeadlineExceeded` | driver primitives | phase 2 unit 4 |
 | `ApplyMate::Client::Browser::TargetNotFound` | `Locate` (all Session actions) | phase 2 unit 4 |
+| `ApplyMate::Client::Browser::Obstructed` (`locator`, `reason`) | `click`, `fill`, `type`, `press`, `select`, `set_checked` when Playwright's `TimeoutError` message (with its call log) matches `Driver::Playwright::OBSTRUCTION` (`intercepts pointer events`, `element is not visible/enabled/stable/editable`) | `target_obstructed`, phase 3a unit 4 |
 | `ApplyMate::Net::UnsafeUrlError` | `Goto` (before navigating) | `private_address`, phase 2 unit 4 |
 
 Any other `Playwright::Error` (navigation failure, an action timing out on a present element) propagates unchanged.
@@ -490,18 +614,6 @@ multi-arch image (`docker buildx build --platform linux/amd64,linux/arm64 -t
 andriano606/apply_mate_browserd:<triple> --push docker/browserd`, README "browserd"), then reboots the accessory and
 redeploys `apply_worker`. Pushing must happen before the deploy, or the accessory boot fails to pull.
 
-## Deferred to phase 3a
-
-Parts of design §9.1/§9.3 that phase 2 does not ship, because their first consumer arrives in phase 3a (adding them
-now would be public API no production code calls):
-
-| Item | Design | First consumer |
-|---|---|---|
-| `ImpersonateHttp` pinned to the guard's checked IP via curl `--resolve host:port:ip` (`Resolution#ip` already returned) | §9.3 PublicAddressGuard | `DetectPlatform` redirect walker, `fetch_schema` (3a). No phase-2 caller fetches an untrusted URL over HTTP: untrusted URLs go only through `Session#goto` (smokescreen) |
-| Session `type`, `snapshot_all`, `dom_mark`, `wait_for_listbox(since:, timeout:)`, `pages`, `switch_to(index)`, `scroll_into_view`, `wait_until(timeout:)`, `screenshot(mask_fillable:)` | §9.1 Session | widgets, Navigator, FailureArtifacts (3a/3b) |
-| Full `snapshot.js` (phase 2 ships the minimal probe) | §9.1 probes | `Apply::Field` extraction (3a) |
-| NetTracker response bodies (≤ 64 KB) for requests matching `success_evidence[:submit_request]` | §9.1 NetTracker | platform DSL + Verifier (3a) |
-
 ## Deviations from design §9.1 (Ruby side)
 
 - **`new_context` without options** instead of `new_context(locale:, timezone_id:)`: Camoufox sets locale, timezone
@@ -513,6 +625,17 @@ now would be public API no production code calls):
   and report a failed challenge. The interstitial always carries `Just a moment` (title) or `cf-chl-`/`_cf_chl_opt`.
 - **No `Locator` class:** resolution is `Operation::Locate`; `WaitReady` takes the root `target:` (not a locator)
   because a late-rendering root must be re-located on every poll.
+- **Probe signatures** (phase 3a): `snapshot.js` is `(root, { regions })` and `detect.js` is `(root, { markers })`,
+  both called from `SnapshotAll::FRAME_JS` with one `{ markers, regions }` argument; without `regions` every element's
+  `'regions'` is empty and the form-root / excluded-autofill classification silently does nothing. The `f<i>` part of
+  the fingerprint is added in Ruby (`SnapshotAll`), since one JS expression runs in every frame. A child frame's `iframe#id` hop comes from `frame.frame_element` (exact, cross-origin safe),
+  not from matching the parent's `iframe_srcs` (a frame's URL changes after an in-frame navigation, its `src` does
+  not).
+- **`dom_mark`** returns per-container counts (`containers`) besides `option_count`: a count per frame alone cannot
+  tell a newly opened listbox from an old one that shifted in DOM order.
+- **No `Driver#wait_for_function`**: nothing calls it (`wait_until` polls a Ruby block, `WaitReady` re-locates the
+  root each poll); it arrives with its first caller.
+- **`mask_fillable`** masks in every frame (up to `MAX_FRAMES`), not only first-level iframes.
 
 ## Deviations from design §9.3
 

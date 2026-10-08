@@ -7,9 +7,10 @@ RSpec.describe Apply::Ai::ResponseSchema::FillForm do
 
   describe '.extract' do
     it 'returns the input-name map from a fenced answer' do
-      raw = "```json\n{\"name\": \"Jane\", \"user[email]\": \"jane@example.com\"}\n```"
+      email = unique_email('jane')
+      raw = "```json\n{\"name\": \"Jane\", \"user[email]\": \"#{email}\"}\n```"
 
-      expect(described_class.extract(raw)).to eq('name' => 'Jane', 'user[email]' => 'jane@example.com')
+      expect(described_class.extract(raw)).to eq('name' => 'Jane', 'user[email]' => email)
     end
 
     it 'accepts scalar values that the operation stringifies' do

@@ -29,6 +29,10 @@ class Apply::Component::ActionBox < ApplyMate::Component::Base
     :in_progress
   end
 
+  def review_anchor
+    "##{Apply::Component::VacancyApplyCard.anchor_id(@apply)}"
+  end
+
   def new_apply_path
     helpers.new_apply_path(vacancy_id: @vacancy.hashid)
   end

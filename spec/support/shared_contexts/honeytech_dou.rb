@@ -13,8 +13,11 @@ RSpec.shared_context 'honeytech dou' do
   let(:honeytech_apply_html) { File.read(HoneytechDou::FIXTURES_DIR.join('honeytech_apply_page.html')) }
 
   # ── DB records ────────────────────────────────────────────────────────────────
+  let(:user_email) { unique_email('dev') }
+  let(:user_phone) { unique_phone }
+
   let(:user) do
-    User.create!(email: 'dev@example.com', name: 'Jane Doe',
+    User.create!(email: user_email, name: 'Jane Doe',
                  provider: 'google_oauth2', uid: 'uid-honeytech-test')
   end
 
@@ -37,9 +40,11 @@ RSpec.shared_context 'honeytech dou' do
                           auth_method: :session_id, session_id: 'test-session-id')
   end
 
+  # Facts already extracted for this CV, so Stage::AnswerFields makes no extraction call (the ordered AI replies of the
+  # handler specs stay the answers / CV ones; the inline extraction is covered in answer_fields_spec.rb).
   let(:user_profile) do
-    UserProfile.create!(user:, name: 'Jane Doe',
-                        cv: 'Senior Motion Designer with 5 years of experience in AI animation.')
+    cv = 'Senior Motion Designer with 5 years of experience in AI animation.'
+    UserProfile.create!(user:, name: 'Jane Doe', cv:, facts_cv_digest: Digest::SHA256.hexdigest(cv))
   end
 
   let(:ai_integration) do
@@ -67,6 +72,20 @@ RSpec.shared_context 'honeytech dou' do
     allow_any_instance_of(Grover).to receive(:to_pdf).and_return('%PDF-1.4 fake-pdf-content')
   end
 
+  # DetectPlatform's redirect walk (Handler::Dou runs it for every external apply): dou.ua/goto -> 302 -> the
+  # PeopleForce page, which no adapter knows (generic, no probable platform), so the legacy external path runs.
+  # Hosts resolve through FixtureSite.resolution (no DNS); ImpersonateHttp shells out to curl, so it is stubbed at
+  # the client level like the vacancy page.
+  def stub_honeytech_redirect_walk
+    allow(ApplyMate::Net::Operation::ResolvePublicAddress).to receive(:call) { |url:| FixtureSite.resolution(url) }
+    allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
+      .with(HoneytechDou::DOU_REDIRECT, hash_including(follow_redirects: false))
+      .and_return(ApplyMate::Client::Response.new('', { 'location' => HoneytechDou::PEOPLEFORCE_URL }, 302, nil))
+    allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
+      .with(HoneytechDou::PEOPLEFORCE_URL, hash_including(follow_redirects: false))
+      .and_return(ApplyMate::Client::Response.new(honeytech_apply_html, {}, 200, HoneytechDou::PEOPLEFORCE_URL))
+  end
+
   # ── Canned Gemini responses ───────────────────────────────────────────────────
   let(:gemini_check_form_page) do
     gemini_json_response(
@@ -88,8 +107,8 @@ RSpec.shared_context 'honeytech dou' do
     gemini_json_response(
       '```json' "\n" \
       '{"career_application_form[full_name]":"Jane Doe",' \
-      '"career_application_form[email]":"dev@example.com",' \
-      '"career_application_form[phone_numbers][]":"+380501234567",' \
+      "\"career_application_form[email]\":\"#{user_email}\"," \
+      "\"career_application_form[phone_numbers][]\":\"#{user_phone}\"," \
       '"career_application_form[cover_letter]":"I am an experienced motion designer ' \
       'passionate about AI-driven animation.",' \
       '"career_application_form[telegram_username]":"@janedoe",' \
@@ -108,7 +127,7 @@ RSpec.shared_context 'honeytech dou' do
       { 'name' => 'career_application_form[email]',
         'selector' => '[name="career_application_form[email]"]',
         'tag' => 'input', 'type' => 'email', 'form_index' => 1,
-        'label' => 'Електронна пошта', 'placeholder' => '', 'value' => 'dev@example.com' },
+        'label' => 'Електронна пошта', 'placeholder' => '', 'value' => user_email },
       { 'name' => 'career_application_form[resume]',
         'selector' => '[name="career_application_form[resume]"]',
         'tag' => 'input', 'type' => 'file', 'form_index' => 4,

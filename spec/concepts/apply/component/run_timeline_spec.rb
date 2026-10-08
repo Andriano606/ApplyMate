@@ -54,4 +54,23 @@ RSpec.describe Apply::Component::RunTimeline, type: :component do
       expect(timeline(as: admin).text).to include('schema mismatch')
     end
   end
+
+  context 'with failure artifacts on a step' do
+    let!(:failed) do
+      step(attempt: 1, position: 0, stage: 'fill', state: :failed, finished_at: t0 + 3.seconds, error_code: 'target_not_found')
+    end
+
+    before do
+      failed.artifacts.attach(io: StringIO.new('png'), filename: 'failure.png', content_type: 'image/png')
+      failed.artifacts.attach(io: StringIO.new('<html>'), filename: 'failure_f0.html', content_type: 'text/html')
+    end
+
+    it 'links every artifact by its position, never by the global attachment id' do
+      links = timeline.css('li a')
+
+      expect(links.map(&:text)).to eq(%w[failure.png failure_f0.html])
+      expect(links.pluck('href')).to eq([ "/artifacts/apply_step/#{failed.hashid}/1", "/artifacts/apply_step/#{failed.hashid}/2" ])
+      expect(timeline.text).to include(I18n.t('apply.run_timeline.artifacts'))
+    end
+  end
 end

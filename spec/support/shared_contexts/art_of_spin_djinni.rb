@@ -11,7 +11,7 @@ RSpec.shared_context 'art of spin djinni' do
 
   # ── DB records ────────────────────────────────────────────────────────────────
   let(:user) do
-    User.create!(email: 'dev@example.com', name: 'Jane Doe',
+    User.create!(email: unique_email('dev'), name: 'Jane Doe',
                  provider: 'google_oauth2', uid: 'uid-art-of-spin-test')
   end
 

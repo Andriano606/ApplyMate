@@ -6,7 +6,7 @@
 # Startable rows: queued / waiting_capacity, or running with a heartbeat older than Apply::STALE_AFTER
 # (a redelivered job after a deploy/crash). A live run (fresh heartbeat) or any other state matches no row
 # and raises NotStartable, so a second job never starts on top of a live run. The UPDATE rides the primary key.
-# ai_calls = 0 joins this statement with AiBudget (phase 3a).
+# ai_calls = 0 joins this statement once AiBudget exists (not in phase 3a: see apply_engine.md, "Deviations").
 class Apply::Operation::Engine::StartContext < ApplyMate::Operation::Base
   SQL = <<~SQL.squish
     UPDATE applies

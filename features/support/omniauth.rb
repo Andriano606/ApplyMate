@@ -8,7 +8,7 @@ OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
   provider: 'google_oauth2',
   uid: '101581344228860591082',
   info: {
-    email: 'andreykuluev96@gmail.com',
+    email: 'placeholder@invalid', # replaced by a unique address in every scenario (features/support/unique_contact.rb)
     name: 'Andrey Kuluev',
     image: 'https://lh3.googleusercontent.com/a/ACg8ocJUcQIYp-G_Wi7TLgPd8NgGYfXABa7XPDOu7evkGLpPIvspYkkI'
   }

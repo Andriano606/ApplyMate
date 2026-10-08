@@ -17,5 +17,5 @@ end
 
 # Filled form fields are read-only controls labelled through aria-label (Apply::Component::FilledFormPreview).
 Then('the last Apply card shows the field {string} filled with {string}') do |label, value|
-  expect(last_apply_card.find("[aria-label='#{label}']").value).to eq(value)
+  expect(last_apply_card.find("[aria-label='#{label}']").value).to eq(expand_unique(value))
 end

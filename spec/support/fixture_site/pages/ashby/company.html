@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Careers at Preply | Customer Care Team Lead</title>
+    <!-- Preply-like company wrapper (research/live_probe.md Part A): the server HTML has no form and no iframe; the
+         Ashby embed script (served by the alt origin, so the iframe is cross-origin) injects
+         iframe#ashby_embed_iframe. A Usercentrics-like cookie banner (open shadow root) appears after 1 s. -->
+    <style>
+      body { font-family: sans-serif; margin: 0; }
+      header, main { max-width: 60rem; margin: 0 auto; padding: 1rem; }
+      #ashby_embed iframe { width: 100%; height: 2600px; border: 0; }
+    </style>
+    <script src="{{ALT_ORIGIN}}/ashby/embed.js?version=2" defer></script>
+  </head>
+  <body>
+    <header>
+      <nav><a href="/">Preply</a> · <a href="/careers">Careers</a></nav>
+    </header>
+    <main>
+      <h1>Customer Care Team Lead</h1>
+      <p>Join the team that keeps learners and tutors happy.</p>
+      <div id="ashby_embed"></div>
+    </main>
+    <div id="usercentrics-root"></div>
+    <script>
+      setTimeout(() => {
+        const shadow = document.getElementById('usercentrics-root').attachShadow({ mode: 'open' });
+        shadow.innerHTML =
+          '<style>.banner { position: fixed; left: 0; right: 0; bottom: 0; padding: 1rem; background: #fff; ' +
+          'border-top: 1px solid #333; z-index: 50; }</style>' +
+          '<div class="banner" role="dialog" aria-label="Privacy settings">' +
+          '<p>We use cookies to improve your experience.</p>' +
+          '<button type="button" data-testid="uc-accept-all-button">Accept all</button> ' +
+          '<button type="button" data-testid="uc-deny-all-button">Accept necessary only</button></div>';
+        shadow.querySelectorAll('button').forEach((button) =>
+          button.addEventListener('click', () => shadow.querySelector('.banner').remove()),
+        );
+      }, 1000);
+    </script>
+  </body>
+</html>

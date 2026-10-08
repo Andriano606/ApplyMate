@@ -29,6 +29,10 @@ class ApplyPolicy < ApplicationPolicy
     owner?
   end
 
+  def approve_review?
+    owner?
+  end
+
   def mark_outcome?
     owner?
   end

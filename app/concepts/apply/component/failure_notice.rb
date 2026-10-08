@@ -17,10 +17,15 @@ class Apply::Component::FailureNotice < ApplyMate::Component::Base
   end
 
   def render?
-    @apply.failure.present? && !@apply.in_progress? && @apply.failure_code.present?
+    @apply.failure.present? && !@apply.in_progress? && @apply.failure_code.present? && !review_form_shown?
   end
 
   private
+
+  # The ReviewForm (VacancyApplyCard) carries the review title and reasons itself.
+  def review_form_shown?
+    @apply.needs_review? && code == 'review'
+  end
 
   def code
     @apply.failure_code

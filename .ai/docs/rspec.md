@@ -148,7 +148,7 @@ expect { run_operation }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
 }
 ```
 
-Lifecycle state, `failure`, the claim and `apply_steps` rows are written by the Runner. To assert them, run the step as
+Lifecycle state, `failure`, the claim and `apply_steps` rows are written by the Runner. Session scopes work the same way: declare the steps with `session_scope` on a one-off handler class, call `stub_browser_session(FakeSession.new(html:, final_url:))` first and the scope's steps get that fake as `ctx.session` (`session.open_options` records the `Session.open` kwargs: `humanize`, `identity`, `owner`, `deadline`). `ApplyEngineFakes::ScopedHandler` / `DigestOne` / `DigestTwo` cover digest skip + restore and scope atomicity (`apply_engine.md`, Specs). To assert them, run the step as
 the only step of a real run with `run_engine_step(apply, described_class, **options)`, which returns the reloaded
 apply (a block receives the handler instance, e.g. to stub `build_payload`), or run the whole handler
 (`Apply::Handler::Dou.new(apply:).call`):
@@ -194,7 +194,7 @@ against `FakeSession` (`spec/support/fake_session.rb`): same public methods and 
 `spec/concepts/apply_mate/client/browser/session_contract_spec.rb`), no browserd.
 
 ```ruby
-let(:session) { FakeSession.new(html: page_html, final_url: url) } # cookies: '', read_values: {}, missing: []
+let(:session) { FakeSession.new(html: page_html, final_url: url) } # cookies: '', read_values: {}, missing: [], snapshot:, listbox_options: []
 before { stub_browser_session(session) } # Session.open yields it, returns the block value, records the kwargs
 ```
 
@@ -202,9 +202,12 @@ before { stub_browser_session(session) } # Session.open yields it, returns the b
 |---|---|
 | `html:` / `final_url:` / `cookies:` | what `html`, `current_url`, `cookies` (and `goto`'s `NavResult`) return |
 | `missing: [css, …]` | a target whose **first** strategy's css is listed is not on the page: `click` / `fill` / `select` / `upload` / `probe` / … raise `TargetNotFound`, `present?` / `ready?` return `false` |
-| `read_values: { css => value }` | `probe(:read_value, target)['value']` for that target; otherwise it echoes the last `fill` / `select` into the same target |
+| `read_values: { css => value }` | `probe(:read_value, target)['value']` (and `'displayed'`) for that target; otherwise it echoes the last `fill` / `type` / `select` into the same target. The hash has the real probe's keys (`invalid: false`, `error_text: nil`, `pressed: nil`) |
+| `snapshot:` | the `ApplyMate::Client::Browser::Snapshot` that `snapshot_all` returns (default `FakeSession::EMPTY_SNAPSHOT`) |
+| `listbox_options:` | `[Operation::WaitForListbox::Option]` that every `wait_for_listbox` returns (default `[]`); `dom_mark` returns an empty mark |
+| `type` / `wait_until` | `type` appends to the target's echoed value; `wait_until` calls its block once and returns its value or `false` |
 | `on(:click) { \|target\| … }` | hook run before a call is handled: read the DB mid-step or `raise` (e.g. a button that vanishes after the claim) |
-| `calls` / `calls_of(:click)` | every call as `[method, *args, kwargs]` (kwargs hash only when the method has any), e.g. `[:goto, url]`, `[:settle, :click]`, `[:present?, target, { visibility: :required }]` |
+| `calls` / `calls_of(:click)` | every call as `[method, *args, kwargs]` (kwargs hash only when the method has any), e.g. `[:goto, url]`, `[:settle, :click]`, `[:present?, target, { visibility: :required }]`. `ready?` records `keys:/attr:/ratio:` only in keys mode, `screenshot` records `mask_fillable:` only when true |
 | `open_options` | one kwargs hash per `Session.open` (assert `humanize:` and `deadline <= ctx.deadline_at`) |
 
 ```ruby
@@ -240,11 +243,28 @@ widgets); unit specs with fakes cover the pure loops (`WaitQuiet`, `WaitPastClou
   job builds `docker/browserd`, starts it with `docker run` and runs `bundle exec rspec --tag browser`
   (`.ai/docs/browser.md` "Dev / CI / staging wiring").
 - **`FixtureSite`** (`spec/support/fixture_site.rb`, pages in `spec/support/fixture_site/pages/`): an in-process Puma
-  bound to `0.0.0.0` on a free port, started in `before(:suite)` only when a `:browser` example is selected.
-  `FixtureSite.url('/form.html')` = `http://#{FIXTURE_SITE_HOST}:<port>/form.html` (`FIXTURE_SITE_HOST` defaults to
+  bound to `0.0.0.0` on **two** free ports, started in `before(:suite)` only when a `:browser` example is selected.
+  `FixtureSite.url('/form.html')` = `http://#{FIXTURE_SITE_HOST}:<port>/form.html`; `FixtureSite.alt_url(path)` = the
+  same host on `alt_port`, a second **origin** (cross-origin iframes, embeds). `FIXTURE_SITE_HOST` defaults to
   `host.docker.internal`, which the browserd container resolves to the docker host; `browserd-test`'s and CI's
-  `EGRESS_ALLOW_RANGES=host.docker.internal` lets smokescreen reach exactly that one address). Routes: `GET /<page>.html` and `/slow-reveal.js` (form.html sets `fixture_session=abc123`),
-  `POST /submit` → 200 "Thank you for applying".
+  `EGRESS_ALLOW_RANGES=host.docker.internal` lets smokescreen reach exactly that one address (any port). Both ports
+  serve the same routes:
+  - `GET /<path>.html|.js` from `pages/` (subdirectories allowed, nothing outside it); in `.html` bodies `{{ORIGIN}}`
+    and `{{ALT_ORIGIN}}` become `url('')` / `alt_url('')`. `form.html` sets `fixture_session=abc123`.
+  - `GET /ashby/<slug>/<jid uuid>/application` → `ashby/application.html` and `GET /ashby/<slug>/<jid uuid>` →
+    `ashby/posting.html` (`FixtureSite::ASHBY_PAGES`). The first is the **canonical form URL** of an Ashby adapter whose
+    origin is `alt_url('/ashby')` (`FixtureAshby`, `spec/support/fixture_ashby_platform.rb`), which `ReachForm` and the
+    e2e browser spec navigate to; the second is the job URL the embed deep-links for `?ashby_jid=`. A new platform's
+    canonical-URL routing goes into the same table.
+  - `GET /ashby/posting.json` → `spec/fixtures/files/apply_engine/ashby/api_job_posting.json` (hand-written Ashby
+    `ApiJobPosting` answer, no real PII: 15 `fieldEntries` — String ×5, Email, Phone, File, Number, LongText,
+    ValueSelect with 15 and with 3 options, Boolean, MultiValueSelect ×2; paths match `ashby/application.html`).
+  - `POST /ashby/api/non-user-graphql?op=ApiJobPosting` → the same posting JSON, not recorded (the schema read of
+    `Apply::Operation::Platform::Ashby::FetchSchema` with `origin: FixtureSite.alt_url('/ashby')`).
+  - `POST /ashby/api/non-user-graphql?op=<any other op>` → appends `{ op:, body: }` to `FixtureSite.submissions`
+    (`Concurrent::Array`, cleared by `FixtureSite.reset!` before every `:browser` example) and answers
+    `{"data":{"submitApplicationForm":{"success":true}}}`.
+  - `POST /submit` → 200 "Thank you for applying".
 
   | Page | Contents |
   |---|---|
@@ -254,10 +274,31 @@ widgets); unit specs with fakes cover the pure loops (`WaitQuiet`, `WaitPastClou
   | `challenge.html` | "Just a moment..." title + `cf-chl-` marker, replaced by real content after 2 s |
   | `multi.html` | two identical `button.apply` |
   | `responsive.html` | two `input[name=email]`: `#email_mobile` hidden (`display: none`), `#email_desktop` visible (hidden-duplicate ambiguity) |
+  | `widgets.html` | react-select-like `#country-input[role=combobox]` whose menu (`[role=listbox]` + 4 `[role=option]`) is appended to `<body>` on click / ArrowDown and leaves a `.select__single-value` chip; readonly el-select `#city-input` with a pre-rendered hidden `.el-select-dropdown` (`li.el-select-dropdown__item`, no role); yes/no `aria-pressed` buttons in `[role=group]`; `#far-input` below a 1600 px spacer; `#cookie-overlay` that covers the page after 3 s and intercepts clicks (Obstructed) |
+  | `ashby/company.html` | Preply-like wrapper: no form/iframe in the HTML; `<script src="{{ALT_ORIGIN}}/ashby/embed.js?version=2">` injects `iframe#ashby_embed_iframe` (cross-origin) after 300 ms → `{{ALT_ORIGIN}}/ashby/posting.html?embed=js`, or, when the company page URL carries `?ashby_jid=<uuid>`, → `{{ALT_ORIGIN}}/ashby/preply/<jid>?embed=js` (the job URL detection keys on); a Usercentrics-like banner in an **open shadow root** (`#usercentrics-root`) with "Accept all" / "Accept necessary only" after 1 s |
+  | `ashby/embedded_application.html` | company page whose static cross-origin `iframe#ashby_embed_iframe` already shows `{{ALT_ORIGIN}}/ashby/application.html?embed=js`: `ReachForm` without a canonical navigation must find the form root inside the iframe (`reach_form_spec.rb`) |
+| `ashby/posting.html` | Ashby description: `nav[role=tablist]` with `a#job-application-form[role=tab]` and `a > button` "Apply for this Job", both → `application.html?embed=js` |
+  | `ashby/application.html` | Ashby application page (live_probe Part A), rendered 400 ms after load into `div#form[role=tabpanel]` (no `<form>`): autofill pane with its own hidden file input, `.ashby-application-form-field-entry[data-field-path]` entries, `_required_f7cvd_91` title class, clipped `#_systemfield_resume` + "Upload File", combobox opening **only on ArrowDown** (`div[role=listbox]#:r0:`, 15 options, chip on click), opacity-0 radios and checkboxes whose id/name carry a per-load instance UUID, Yes/No `aria-pressed` buttons, submit `button.ashby-application-form-submit-button` (no type) that POSTs JSON to `/ashby/api/non-user-graphql?op=SubmitApplicationForm` and replaces `#form` with "Thank you for applying" |
 
+- **`FixtureSite.on_submit { |submission| ... }`** runs the block inside the recording POST handler (before the answer
+  is sent), e.g. to read `Apply.find(id).submit_claimed_at` at the moment of the POST; hooks are cleared by `reset!`.
+- **`FixtureAshby`** (`spec/support/fixture_ashby_platform.rb`) is `Apply::Platform::Ashby` with `origin` =
+  `FixtureSite.alt_url('/ashby')` (raises outside a `:browser` example); `canonical_form_url`, the GraphQL URL and the
+  signals (host, job URL / frame src, embed script, `?ashby_jid=`, DOM marker) all derive from it, and the signals are
+  declared on first use because FixtureSite picks its ports after load. The key stays `ashby` (field ids
+  `ashby:<path>`). `stub_fixture_ashby_registry` points `Apply::Platform::Registry.platforms` / `dom_markers` /
+  `known_hosts` / `fingerprint` at it; `fixture_ashby_answers_json` is a Gemini AnswerFields reply (confidence 0.95)
+  for the fixture posting. Used by `spec/concepts/apply/handler/dou_ashby_browser_spec.rb` (stub
+  `ImpersonateHttp.new` with a real instance whose `get` / `post` answer the DOU page, the redirects and the posting;
+  wrap `Session.open` with `and_wrap_original` to count leases).
+- **Smoke survey** (`Apply::Operation::SmokeSurvey`, `apply:smoke` rake task, `apply_engine.md`): its spec runs the
+  real stages on a `FakeSession` (`stub_browser_session`) with a canned Ashby snapshot
+  (`application_frames.json` through `SnapshotAll`); the live check is a manual read-only run against the dev
+  `browserd` (`:9300`), never part of the suite.
 - **PublicAddressGuard seam:** the fixture host is a private address, so `browser_tag.rb` wraps
   `ApplyMate::Net::Operation::ResolvePublicAddress.call` (`and_wrap_original`, in a `before(:each, browser: true)`)
-  to return a `Resolution` for URLs on `FixtureSite.host`; every other URL runs the real operation (so
+  to return a `Resolution` (`ip: '127.0.0.1'`: the server runs in the spec process, so a pinned `GuardedFetch` of a
+  fixture URL works) for URLs on `FixtureSite.host`; every other URL runs the real operation (so
   `goto('http://127.0.0.1:1/')` still raises `UnsafeUrlError`). There is no production flag for this. Navigate in a
   `before` block (or the example), not in an `around` hook: `around` runs before the seam is installed.
 - **Leases:** every `Session.open` launches a fresh Camoufox (~2–5 s). Use an owner under
@@ -271,9 +312,10 @@ RSpec.describe ApplyMate::Client::Browser::Session, :browser do
   it 'fills and reads back' do
     described_class.open(deadline: 2.minutes.from_now, owner: "#{ApplyMate::Client::Browser::Browserd.owner_prefix}spec") do |session|
       session.goto(FixtureSite.url('/form.html'))
-      session.fill(ApplyMate::Client::Browser::Target.css('#email'), 'jane@example.com')
+      email = unique_email
+      session.fill(ApplyMate::Client::Browser::Target.css('#email'), email)
 
-      expect(session.probe(:read_value, ApplyMate::Client::Browser::Target.css('#email'))['value']).to eq('jane@example.com')
+      expect(session.probe(:read_value, ApplyMate::Client::Browser::Target.css('#email'))['value']).to eq(email)
     end
   end
 end
@@ -336,7 +378,7 @@ RSpec.shared_context 'honeytech dou' do
   let(:gemini_check_submit_result) { gemini_json_response('{"success":true,...}') }
 
   # Canonical filled inputs for this company — reuse in FillForm / SendApply specs
-  let(:filled_inputs) { [{ 'name' => 'email', 'value' => 'dev@example.com', ... }] }
+  let(:filled_inputs) { [{ 'name' => 'email', 'value' => user_email, ... }] }
 
   # Pre-AI state: same fields with blank values (input to FillForm)
   let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
@@ -431,3 +473,16 @@ module HoneytechDou
   FIXTURES_DIR = Rails.root.join('spec/fixtures/files/dou/external/honeytech')
 end
 ```
+
+## Unique test contacts
+
+Every test email or phone must differ on every use. Use `unique_email(prefix)` / `unique_phone` (`spec/support/unique_contact.rb`, included in all specs) in a `let`, and derive stubs and assertions from that same `let` rather than repeating a literal.
+A spec that needs a specific format (e.g. a national `0XXXXXXXXX` number) renders the random digits of `unique_phone`
+in that format instead of writing the number out (see `spec/concepts/apply/operation/engine/redact_spec.rb`).
+
+## Profile facts in specs
+
+The `:user_profile` factory sets `facts_cv_digest` to the digest of its CV, so the profile counts as already extracted
+and `Stage::AnswerFields` makes no `UserProfile::Operation::ExtractFacts` AI call (ordered AI stubs stay the answer /
+CV ones). Pass `facts_cv_digest: nil` to exercise the extraction (`answer_fields_spec.rb`, `extract_facts_spec.rb`);
+shared contexts that build a `UserProfile` directly and run the engine (`honeytech_dou.rb`) set it the same way.

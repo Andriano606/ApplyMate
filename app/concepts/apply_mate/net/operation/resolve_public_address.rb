@@ -5,8 +5,9 @@
 # URL is http(s) and EVERY address its host resolves to is public; a mix of public and private
 # answers is rejected too (DNS-rebinding defence: the client may connect to any of them).
 #
-# model = Resolution with the first (public) address. `ip` exists so phase 3a's DetectPlatform can pin
-# ImpersonateHttp to the checked address via curl `--resolve`; no phase-2 caller needs that yet.
+# model = Resolution with one (public) address: the first IPv4 answer, else the first answer. GuardedFetch passes it
+# to ImpersonateHttp (`resolve:`), which pins the connection to that address via curl `--resolve`, so curl cannot
+# fall back to another family: an IPv6 pin on an IPv4-only host (Resolv may list AAAA first) fails every fetch.
 #
 # Cost: literal IPs never hit DNS; a hostname is resolved via /etc/hosts, then DNS with a 3 s timeout
 # per attempt (Resolv::DNS retries per search domain / nameserver, so a dead resolver is bounded, not
@@ -24,6 +25,24 @@ class ApplyMate::Net::Operation::ResolvePublicAddress < ApplyMate::Operation::Ba
     ::/128 ::1/128 fc00::/7 fe80::/10
   ].map { |range| IPAddr.new(range) }.freeze
 
+  # The one public-address rule (both the DNS check below and literal_private?).
+  def self.public_ip?(address)
+    address = address.native if address.ipv4_mapped?
+    BLOCKED_RANGES.none? { |range| range.family == address.family && range.include?(address) }
+  end
+
+  # Without DNS: true when `host` is localhost or a literal IP that is not public. For URLs the guard never saw
+  # (frames a browser loaded); a hostname is false here and needs #perform!. The fully-qualified form (trailing dot,
+  # which Firefox keeps in frame / page URLs: `localhost.`, `app.localhost.`, `127.0.0.1.`) is the same host.
+  def self.literal_private?(host)
+    host = host.to_s.downcase.delete_prefix('[').delete_suffix(']').delete_suffix('.')
+    return true if host == 'localhost' || host.end_with?('.localhost')
+
+    !public_ip?(IPAddr.new(host))
+  rescue IPAddr::Error
+    false
+  end
+
   def perform!(url:, **)
     skip_authorize
 
@@ -32,7 +51,8 @@ class ApplyMate::Net::Operation::ResolvePublicAddress < ApplyMate::Operation::Ba
     raise ApplyMate::Net::UnsafeUrlError.new(:unresolvable, url:, host: uri.hostname) if addresses.empty?
     raise ApplyMate::Net::UnsafeUrlError.new(:private, url:, host: uri.hostname) unless all_public?(addresses)
 
-    self.model = Resolution.new(url: uri.to_s, host: uri.hostname, port: uri.port, ip: addresses.first.to_s)
+    pinned = addresses.find(&:ipv4?) || addresses.first
+    self.model = Resolution.new(url: uri.to_s, host: uri.hostname, port: uri.port, ip: pinned.to_s)
   end
 
   private
@@ -70,7 +90,6 @@ class ApplyMate::Net::Operation::ResolvePublicAddress < ApplyMate::Operation::Ba
   end
 
   def public_address?(address)
-    address = address.native if address.ipv4_mapped?
-    BLOCKED_RANGES.none? { |range| range.family == address.family && range.include?(address) }
+    self.class.public_ip?(address)
   end
 end

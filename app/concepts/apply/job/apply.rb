@@ -23,6 +23,23 @@ class Apply::Job::Apply < ApplicationJob
                                                           detail: error.message)
   end
 
+  # The tenant's host slot is taken (AcquireHostSlot -> Throttled): the Runner parked the row in waiting_capacity and
+  # the job runs again at the slot's next_allowed_at. Termination: after MAX_THROTTLE_WAITS throttled runs the apply
+  # becomes failed(:capacity) through HaltUnowned (the user Resumes). The waits have their own counter in
+  # exception_executions (serialized with the job, like retry_on's), not `executions`: that one also counts the
+  # PoolBusy retries, which would cut the throttle budget short. ReapStale sees the scheduled retry as alive.
+  MAX_THROTTLE_WAITS = 12
+  THROTTLE_WAITS_KEY = 'throttle_waits'
+  rescue_from Apply::Operation::Engine::Throttled do |error|
+    waits = exception_executions[THROTTLE_WAITS_KEY] = exception_executions.fetch(THROTTLE_WAITS_KEY, 0) + 1
+    if waits < MAX_THROTTLE_WAITS
+      retry_job(wait_until: error.until)
+    else
+      Apply::Operation::Engine::Lifecycle::HaltUnowned.call(apply_id: arguments.first, code: :capacity,
+                                                            detail: "host slot still taken after #{waits} runs")
+    end
+  end
+
   # The Runner records every outcome of a started run itself (and swallows NotStartable/Fenced).
   # What reaches the rescue failed before a run owned the row (handler resolution) or while
   # recording; HaltUnowned writes only queued/waiting_capacity rows, so a live run is untouched.
@@ -31,8 +48,8 @@ class Apply::Job::Apply < ApplicationJob
     Apply::Handler::Base.for(apply).call
   rescue ActiveRecord::RecordNotFound
     nil
-  rescue ApplyMate::Client::Browser::PoolBusy
-    raise # the Runner already recorded waiting_capacity; retry_on decides the rest, never unexpected_error
+  rescue ApplyMate::Client::Browser::PoolBusy, Apply::Operation::Engine::Throttled
+    raise # the Runner already recorded waiting_capacity; retry_on / rescue_from decide the rest, never unexpected_error
   rescue StandardError => e
     Apply::Operation::Engine::Lifecycle::HaltUnowned.call(apply_id:, code: :unexpected_error, detail: e.class.name)
     raise

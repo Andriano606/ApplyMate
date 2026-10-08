@@ -48,5 +48,17 @@ RSpec.describe VacancyQuestion::Operation::Index, type: :operation do
     it 'lists unasked open questions of the latest scraped form, label then placeholder' do
       expect(model.question_suggestions).to eq([ 'Tell us about yourself', 'Salary expectations' ])
     end
+
+    context 'when the latest apply has discovered fields' do
+      before do
+        fields = [ Apply::Field.from_h(id: 'q', kind: 'textarea', label: 'Why Preply?').to_h,
+                   Apply::Field.from_h(id: 'n', kind: 'text', label: 'Name').to_h ]
+        create(:apply, :failed, user: current_user, vacancy:, fields:, created_at: 1.hour.ago)
+      end
+
+      it 'prefers the fields over legacy inputs' do
+        expect(model.question_suggestions).to eq([ 'Why Preply?' ])
+      end
+    end
   end
 end

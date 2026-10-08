@@ -27,7 +27,7 @@ RSpec.describe Apply::Operation::Ai::FillForm do
       filled = apply.reload.filled_inputs
       expect(filled).to include(
         hash_including('name' => 'career_application_form[full_name]', 'value' => 'Jane Doe'),
-        hash_including('name' => 'career_application_form[email]',     'value' => 'dev@example.com')
+        hash_including('name' => 'career_application_form[email]',     'value' => user_email)
       )
     end
 

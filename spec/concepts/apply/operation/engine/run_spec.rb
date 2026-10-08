@@ -310,4 +310,206 @@ RSpec.describe Apply::Operation::Engine::Run, type: :job do
     expect(apply.attempt).to eq(1)
     expect(steps).to be_empty
   end
+
+  describe 'input digests, scopes and session options' do
+    let(:handler) { ApplyEngineFakes::ScopedHandler.new(apply:) }
+    let(:session) { FakeSession.new(html: '<html></html>', final_url: 'https://example.com/') }
+
+    before { stub_browser_session(session) }
+
+    def keys_of(attempt)
+      steps.select { |step| step.attempt == attempt }.map(&:key)
+    end
+
+    # Resumes the apply (failed -> queued) so the next Run is a new attempt.
+    def requeue!
+      Apply.where(id: apply.id).update_all(state: Apply.states[:queued], failure: nil)
+      apply.reload
+    end
+
+    it 'opens one Session per scope, humanized only for the submit scope, with the apply hashid as identity' do
+      run
+
+      expect(session.open_options.size).to eq(2)
+      expect(session.open_options.map { |o| o.slice(:humanize, :identity) }).to eq(
+        [ { humanize: false, identity: apply.hashid }, { humanize: true, identity: apply.hashid } ]
+      )
+      expect(session.open_options.first[:owner]).to eq(ApplyMate::Client::Browser::Session.owner_for(apply))
+    end
+
+    it 'stores scope, input_digest, a redacted result and a flushed, redacted trace on the step rows' do
+      allow(ApplyEngineFakes::DigestOne).to receive(:observe) do |ctx|
+        ctx.trace(:probe, note: "mail #{ctx.apply.user.email}")
+      end
+
+      run
+
+      row = steps.find { |step| step.key == 'fake_digest_one:survey' }
+      expect(row).to have_attributes(scope: 'survey', input_digest: 'v1', result: { 'ran' => 'fake_digest_one' })
+      expect(row.trace.sole).to include('event' => 'probe', 'note' => 'mail {{fact.email}}')
+      expect(steps.find { |step| step.key == 'fake_digest_two:survey' }.trace).to be_nil
+      expect(steps.find { |step| step.key == 'fake_prepare' }).to have_attributes(scope: nil, input_digest: nil)
+    end
+
+    it 'completes with the scoped keys in declaration order' do
+      run
+
+      expect(keys_of(1)).to eq(%w[fake_prepare fake_digest_one:survey fake_digest_two:survey fake_submit:submit])
+      expect(apply).to be_completed
+    end
+
+    it 'closes the scope on the context even when a step raises, and fails the row with the mapped code' do
+      seen = {}
+      allow(ApplyEngineFakes::DigestTwo).to receive(:observe) do |ctx|
+        seen[:ctx] = ctx
+        raise ApplyMate::Client::Browser::Obstructed.new('locator', 'covered by overlay')
+      end
+      allow(Rails.error).to receive(:report)
+
+      run
+
+      expect(seen[:ctx]).not_to be_session_open
+      expect(steps.last).to have_attributes(key: 'fake_digest_two:survey', state: 'failed', error_code: 'target_obstructed')
+      expect(apply).to be_failed
+    end
+
+    it 'attaches failure artifacts to the failed row while the scope session is still open' do
+      allow(ApplyEngineFakes::DigestTwo).to receive(:observe).and_raise(halt(:target_not_found))
+
+      run
+
+      failed = steps.find(&:failed?)
+      expect(failed.artifacts.map { |artifact| artifact.filename.to_s }).to contain_exactly('failure.png', 'failure_f0.html')
+      expect(session.calls).to include([ :screenshot, { full_page: false, mask_fillable: true } ])
+    end
+
+    it 'closes the scope when the Session cannot be opened' do
+      allow(ApplyMate::Client::Browser::Session).to receive(:open).and_raise(ApplyMate::Client::Browser::Crashed, 'gone')
+      allow(Rails.error).to receive(:report)
+
+      expect { run }.to have_enqueued_job(Apply::Job::Apply).with(apply.id)
+      expect(apply.failure).to include('code' => 'browser_crashed')
+      expect(keys_of(1)).to eq(%w[fake_prepare])
+    end
+
+    context 'when a second attempt starts after a failure in the submit scope' do
+      before do
+        allow(ApplyEngineFakes::SubmitStep).to receive(:observe).and_raise(halt(:target_not_found))
+        run
+        RSpec::Mocks.space.proxy_for(ApplyEngineFakes::SubmitStep).reset
+        requeue!
+      end
+
+      it 'skips the survey scope entirely (restore, no rows, no Session) and re-runs the rest' do
+        restored = []
+        allow(ApplyEngineFakes::DigestOne).to receive(:restored) { |_ctx, result| restored << [ :one, result ] }
+        allow(ApplyEngineFakes::DigestTwo).to receive(:restored) { |_ctx, result| restored << [ :two, result ] }
+        session.open_options.clear
+
+        run
+
+        expect(restored).to eq([ [ :one, { 'ran' => 'fake_digest_one' } ], [ :two, { 'ran' => 'fake_digest_two' } ] ])
+        expect(keys_of(2)).to eq(%w[fake_prepare fake_submit:submit])
+        expect(session.open_options.size).to eq(1)
+        expect(apply).to be_completed
+      end
+
+      it 're-runs the whole scope when one digest changed' do
+        allow(ApplyEngineFakes::DigestTwo).to receive(:digest).and_return('v2')
+        session.open_options.clear
+
+        run
+
+        expect(keys_of(2)).to eq(%w[fake_prepare fake_digest_one:survey fake_digest_two:survey fake_submit:submit])
+        expect(session.open_options.size).to eq(2)
+      end
+    end
+
+    context 'when a scope failed in one of its steps' do
+      it 'runs all steps of the scope again in ONE Session on the next attempt' do
+        allow(ApplyEngineFakes::DigestTwo).to receive(:observe).and_raise(halt(:target_not_found))
+        run
+        RSpec::Mocks.space.proxy_for(ApplyEngineFakes::DigestTwo).reset
+        requeue!
+        session.open_options.clear
+
+        run
+
+        expect(keys_of(2)).to eq(%w[fake_prepare fake_digest_one:survey fake_digest_two:survey fake_submit:submit])
+        expect(session.open_options.size).to eq(2) # survey + submit
+        expect(apply).to be_completed
+      end
+    end
+
+    it 'does not skip a scope whose succeeded rows come from different attempts' do
+      handler # build
+      run
+      # Pretend step one of the scope succeeded in attempt 1 and step two in a later attempt: not one unit.
+      ApplyStep.where(apply_id: apply.id, key: 'fake_digest_two:survey').update_all(attempt: 2)
+      Apply.where(id: apply.id).update_all(state: Apply.states[:queued], attempt: 2)
+      apply.reload
+      session.open_options.clear
+
+      run
+
+      expect(keys_of(3)).to include('fake_digest_one:survey', 'fake_digest_two:survey')
+    end
+
+    it 'leaves no rows and opens no Session for a scope whose condition is falsy' do
+      stub_const('FalsyScopeHandler', Class.new(Apply::Handler::Base))
+      FalsyScopeHandler.session_scope(:survey, if: ->(_ctx) { false }) { FalsyScopeHandler.add_step(ApplyEngineFakes::DigestOne) }
+      FalsyScopeHandler.add_step(ApplyEngineFakes::PrepareStep)
+
+      described_class.call(apply:, handler: FalsyScopeHandler.new(apply:))
+
+      expect(steps.map(&:key)).to eq(%w[fake_prepare])
+      expect(session.open_options).to be_empty
+    end
+
+    it 'skips a scope-less digest stage whose digest matches an earlier succeeded row' do
+      stub_const('DigestHandler', Class.new(Apply::Handler::Base))
+      DigestHandler.add_step(ApplyEngineFakes::DigestOne)
+      DigestHandler.add_step(ApplyEngineFakes::PrepareStep)
+      described_class.call(apply:, handler: DigestHandler.new(apply:))
+      requeue!
+      allow(ApplyEngineFakes::DigestOne).to receive(:restored)
+
+      described_class.call(apply:, handler: DigestHandler.new(apply:))
+
+      expect(ApplyEngineFakes::DigestOne).to have_received(:restored).with(anything, { 'ran' => 'fake_digest_one' })
+      expect(keys_of(2)).to eq(%w[fake_prepare])
+    end
+
+    it 're-runs a scope-less digest stage when its digest changed' do
+      stub_const('DigestHandler', Class.new(Apply::Handler::Base))
+      DigestHandler.add_step(ApplyEngineFakes::DigestOne)
+      described_class.call(apply:, handler: DigestHandler.new(apply:))
+      requeue!
+      allow(ApplyEngineFakes::DigestOne).to receive(:digest).and_return('other')
+
+      described_class.call(apply:, handler: DigestHandler.new(apply:))
+
+      expect(keys_of(2)).to eq(%w[fake_digest_one])
+    end
+  end
+
+  describe 'Throttled' do
+    let(:until_time) { 20.minutes.from_now.change(usec: 0) }
+
+    before do
+      allow(ApplyEngineFakes::PrepareStep).to receive(:observe)
+        .and_raise(Apply::Operation::Engine::Throttled.new(until: until_time))
+    end
+
+    it 're-raises for the job and parks the row in waiting_capacity with a capacity step row' do
+      expect { described_class.call(apply:, handler:) }.to raise_error(Apply::Operation::Engine::Throttled) do |error|
+        expect(error.until).to eq(until_time)
+      end
+      apply.reload
+
+      expect(apply).to be_waiting_capacity
+      expect(apply.stage).to be_nil
+      expect(steps.sole).to have_attributes(state: 'failed', error_code: 'capacity')
+    end
+  end
 end

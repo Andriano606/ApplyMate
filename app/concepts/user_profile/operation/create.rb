@@ -6,6 +6,7 @@ class UserProfile::Operation::Create < ApplyMate::Operation::Base
     authorize! model, :create?
     model.assign_attributes(params[:user_profile].permit(:name, :cv))
     model.save!
+    UserProfile::Job::ExtractFacts.perform_later(model.id) if model.saved_change_to_cv?
     notice(I18n.t('user_profile.create.success'))
   end
 end

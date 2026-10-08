@@ -12,4 +12,10 @@ class UserProfile < ApplicationRecord
 
   validates :name, presence: true
   validates :cv, presence: true
+
+  # facts = { 'ai' => extracted from the CV, 'user' => edited by the user }; a user value wins.
+  def fact(key)
+    facts_hash = facts || {}
+    facts_hash.dig('user', key.to_s).presence || facts_hash.dig('ai', key.to_s).presence
+  end
 end

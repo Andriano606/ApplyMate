@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe Apply, type: :model do
   let(:source1) { create(:source, name: "Source 1") }
   let(:source2) { create(:source, name: "Source 2") }
-  let(:user) { User.create!(email: "test@example.com", name: "Test User", provider: "google_oauth2", uid: "123") }
+  let(:user) { User.create!(email: unique_email("test"), name: "Test User", provider: "google_oauth2", uid: "123") }
   let(:vacancy) { create(:vacancy, source: source1) }
   let(:source_profile) { SourceProfile.create!(user: user, source: source1, name: "Profile 1", auth_method: :session_id) }
   let(:user_profile) { UserProfile.create!(user: user, name: "User Profile", cv: "My CV") }
@@ -176,6 +176,50 @@ RSpec.describe Apply, type: :model do
                                    source_profile: apply.source_profile)
       user.update_columns(applies_changed_at: Time.current.change(usec: 700_000))
       expect(described_class.attention_count_for(user)).to eq(2)
+    end
+  end
+
+  describe "#platform_known?" do
+    it "is false without a platform and for generic" do
+      expect(build(:apply, platform: nil)).not_to be_platform_known
+      expect(build(:apply, platform: "generic")).not_to be_platform_known
+    end
+
+    it "is true for a registered platform" do
+      expect(build(:apply, platform: "ashby")).to be_platform_known
+    end
+  end
+
+  describe "#question_labels" do
+    let(:field) do
+      lambda do |id, kind, label|
+        Apply::Field.from_h(id:, kind:, label:).to_h
+      end
+    end
+
+    it "reads textarea and rich_text fields with a label" do
+      apply = build(:apply, fields: [ field.call("a", "textarea", "Why us?"), field.call("b", "rich_text", "Tell us"),
+                                      field.call("c", "text", "Name"), field.call("d", "textarea", nil) ],
+                            inputs: [ { "tag" => "textarea", "label" => "Legacy" } ])
+
+      expect(apply.question_labels).to eq([ "Why us?", "Tell us" ])
+    end
+
+    it "falls back to legacy inputs when fields are blank" do
+      apply = build(:apply, inputs: [ { "tag" => "textarea", "label" => "Legacy" }, { "tag" => "input", "label" => "Name" } ])
+
+      expect(apply.question_labels).to eq([ "Legacy" ])
+    end
+  end
+
+  describe "#field_list / #answer_for" do
+    it "builds Apply::Field objects and looks up answers by field id" do
+      apply = build(:apply, fields: [ Apply::Field.from_h(id: "a", kind: "text").to_h ],
+                            answers: { "a" => { "value" => "x", "source" => "fact" } })
+
+      expect(apply.field_list.map(&:id)).to eq([ "a" ])
+      expect(apply.answer_for(:a)).to eq("value" => "x", "source" => "fact")
+      expect(apply.answer_for("zzz")).to be_nil
     end
   end
 end

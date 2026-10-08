@@ -1,0 +1,418 @@
+{
+  "data": {
+    "jobPosting": {
+      "id": "20587adf-cf02-473e-8a80-7b009711a2cf",
+      "title": "Customer Care Team Lead",
+      "departmentName": "Customer Care",
+      "locationName": "Kyiv",
+      "employmentType": "FullTime",
+      "applicationForm": {
+        "id": "a0000000-0000-4000-8000-000000000001",
+        "sections": [
+          {
+            "title": null,
+            "descriptionHtml": null,
+            "fieldEntries": [
+              {
+                "id": "e0000000-0000-4000-8000-000000000001",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000001",
+                  "path": "_systemfield_name",
+                  "humanReadablePath": "Full Name",
+                  "title": "Full Name",
+                  "type": "String",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000001",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000002",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000002",
+                  "path": "_systemfield_email",
+                  "humanReadablePath": "Email",
+                  "title": "Email",
+                  "type": "Email",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000002",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000003",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000003",
+                  "path": "6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01",
+                  "humanReadablePath": "Phone Number",
+                  "title": "Phone Number",
+                  "type": "Phone",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000003",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000004",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000004",
+                  "path": "_systemfield_resume",
+                  "humanReadablePath": "Resume",
+                  "title": "Resume",
+                  "type": "File",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000004",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000005",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000005",
+                  "path": "d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02",
+                  "humanReadablePath": "Linkedin profile URL",
+                  "title": "Linkedin profile URL",
+                  "type": "String",
+                  "isNullable": true,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000005",
+                "isRequired": false,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000006",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000006",
+                  "path": "3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03",
+                  "humanReadablePath": "",
+                  "title": "",
+                  "type": "String",
+                  "isNullable": true,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000006",
+                "isRequired": false,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000007",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000007",
+                  "path": "9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04",
+                  "humanReadablePath": "How did you get to know Preply?",
+                  "title": "How did you get to know Preply?",
+                  "type": "ValueSelect",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField",
+                  "selectableValues": [
+                    {
+                      "label": "Word of mouth",
+                      "value": "Word of mouth",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "LinkedIn",
+                      "value": "LinkedIn",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Facebook",
+                      "value": "Facebook",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Instagram",
+                      "value": "Instagram",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Twitter / X",
+                      "value": "Twitter / X",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "YouTube",
+                      "value": "YouTube",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Google search",
+                      "value": "Google search",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Job board",
+                      "value": "Job board",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "DOU",
+                      "value": "DOU",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Djinni",
+                      "value": "Djinni",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Glassdoor",
+                      "value": "Glassdoor",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Indeed",
+                      "value": "Indeed",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Referral from a Preply employee",
+                      "value": "Referral from a Preply employee",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Event or conference",
+                      "value": "Event or conference",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "Other",
+                      "value": "Other",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    }
+                  ]
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000007",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000008",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000008",
+                  "path": "677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05",
+                  "humanReadablePath": "If you selected other, please specify",
+                  "title": "If you selected other, please specify",
+                  "type": "String",
+                  "isNullable": true,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000008",
+                "isRequired": false,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000009",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000009",
+                  "path": "ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06",
+                  "humanReadablePath": "How many years have you managed support agents?",
+                  "title": "How many years have you managed support agents?",
+                  "type": "ValueSelect",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField",
+                  "selectableValues": [
+                    {
+                      "label": "Less than 2 years",
+                      "value": "Less than 2 years",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "3-5 years",
+                      "value": "3-5 years",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    },
+                    {
+                      "label": "More than 5 years",
+                      "value": "More than 5 years",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    }
+                  ]
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000009",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000010",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000010",
+                  "path": "0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07",
+                  "humanReadablePath": "How many agents have you managed at most?",
+                  "title": "How many agents have you managed at most?",
+                  "type": "Number",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000010",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000011",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000011",
+                  "path": "596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08",
+                  "humanReadablePath": "Salary expectations (gross, EUR per month)",
+                  "title": "Salary expectations (gross, EUR per month)",
+                  "type": "String",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000011",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000012",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000012",
+                  "path": "8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09",
+                  "humanReadablePath": "Why do you want to join Preply?",
+                  "title": "Why do you want to join Preply?",
+                  "type": "LongText",
+                  "isNullable": true,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000012",
+                "isRequired": false,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000013",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000013",
+                  "path": "c1d2e3f4-6a7b-4c8d-9e0f-1a2b3c4d5e10",
+                  "humanReadablePath": "Are you open to working in shifts?",
+                  "title": "Are you open to working in shifts?",
+                  "type": "Boolean",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField"
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000013",
+                "isRequired": true,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000014",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000014",
+                  "path": "c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11",
+                  "humanReadablePath": "Privacy notice",
+                  "title": "Privacy notice",
+                  "type": "MultiValueSelect",
+                  "isNullable": false,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField",
+                  "selectableValues": [
+                    {
+                      "label": "Acknowledge/Confirm",
+                      "value": "Acknowledge/Confirm",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    }
+                  ]
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000014",
+                "isRequired": true,
+                "descriptionHtml": "<p>I have read the <a href=\"https://preply.com/en/privacy\">privacy notice</a> and agree to the processing of my data for this application.</p>",
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              },
+              {
+                "id": "e0000000-0000-4000-8000-000000000015",
+                "field": {
+                  "id": "f0000000-0000-4000-8000-000000000015",
+                  "path": "e5f6a7b8-8c9d-4e0f-9a1b-3c4d5e6f7a12",
+                  "humanReadablePath": "Newsletter",
+                  "title": "Newsletter",
+                  "type": "MultiValueSelect",
+                  "isNullable": true,
+                  "isPrivate": false,
+                  "isDeactivated": false,
+                  "__typename": "ApplicationFormField",
+                  "selectableValues": [
+                    {
+                      "label": "I do not want to receive the newsletter",
+                      "value": "I do not want to receive the newsletter",
+                      "__typename": "ApplicationFormFieldSelectableValue"
+                    }
+                  ]
+                },
+                "fieldEntryId": "e0000000-0000-4000-8000-000000000015",
+                "isRequired": false,
+                "descriptionHtml": null,
+                "isHidden": false,
+                "__typename": "ApplicationFormFieldEntry"
+              }
+            ],
+            "__typename": "ApplicationFormSection"
+          }
+        ],
+        "__typename": "ApplicationForm"
+      },
+      "__typename": "JobPosting"
+    }
+  }
+}

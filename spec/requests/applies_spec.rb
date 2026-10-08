@@ -7,6 +7,7 @@ RSpec.describe 'Applies on the vacancy page', type: :request do
   let(:token)   { create(:api_token, user:) }
   let(:headers) { { 'Authorization' => "Bearer #{token.token}" } }
   let(:vacancy) { create(:vacancy, source: create(:source)) }
+  let(:filled_email) { unique_email }
   let!(:apply)  { create(:apply, :completed, user:, vacancy:) }
 
   def html
@@ -33,7 +34,7 @@ RSpec.describe 'Applies on the vacancy page', type: :request do
     let(:filled_inputs) do
       [
         { 'name' => 'why', 'tag' => 'textarea', 'type' => 'textarea', 'label' => 'Why us?', 'value' => 'Because Ruby' },
-        { 'name' => 'email', 'tag' => 'input', 'type' => 'email', 'label' => 'Email', 'value' => 'dev@example.com' },
+        { 'name' => 'email', 'tag' => 'input', 'type' => 'email', 'label' => 'Email', 'value' => filled_email },
         { 'name' => 'token', 'tag' => 'input', 'type' => 'hidden', 'value' => 'secret-token' }
       ]
     end
@@ -67,7 +68,7 @@ RSpec.describe 'Applies on the vacancy page', type: :request do
       card = html.at_css("#apply_#{failed_apply.hashid}")
       expect(card.at_css('[role="alert"]').text).to include(I18n.t('apply.failure.outcome_unknown'), I18n.t('apply.failure_hint.outcome_unknown'))
       expect(card.at_css('textarea[aria-label="Why us?"]').text.strip).to eq('Because Ruby')
-      expect(card.at_css('input[aria-label="Email"]')['value']).to eq('dev@example.com')
+      expect(card.at_css('input[aria-label="Email"]')['value']).to eq(filled_email)
       expect(card.to_html).not_to include('secret-token')
     end
 
@@ -148,6 +149,29 @@ RSpec.describe 'Applies on the vacancy page', type: :request do
 
         expect(flash_stream).to include(I18n.t('apply.cancel.success'))
         expect(queued.reload).to be_cancelled
+      end
+    end
+
+    describe 'POST /applies/:id/approve_review' do
+      let!(:waiting) do
+        create(:apply, user:, vacancy: create(:vacancy, source: create(:source)), state: :needs_review,
+                       fields: [ answer_field(id: 'why', kind: 'textarea', label: 'Why us?').to_h ],
+                       answers: { 'why' => answer_entry('Because', confidence: 0.2) })
+      end
+
+      it 'approves the edited answers, re-queues the apply and flashes' do
+        expect { post approve_review_apply_path(waiting, answers: { why: 'My words' }), headers: stream_headers }
+          .to have_enqueued_job(Apply::Job::Apply).with(waiting.id)
+
+        expect(flash_stream).to include(I18n.t('apply.approve_review.success'))
+        expect(waiting.reload).to be_queued
+        expect(waiting.answers.dig('why', 'value')).to eq('My words')
+      end
+
+      it "does not reveal another user's apply" do
+        post approve_review_apply_path(create(:apply, state: :needs_review)), headers: stream_headers
+
+        expect(response).to have_http_status(:not_found)
       end
     end
 

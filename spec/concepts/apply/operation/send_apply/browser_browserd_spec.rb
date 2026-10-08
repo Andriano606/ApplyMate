@@ -40,7 +40,7 @@ RSpec.describe Apply::Operation::SendApply::Browser, :browser do
       expect(apply.reload).to have_attributes(submit_selector: 'button[type="submit"].primary',
                                               submit_text: 'Submit application')
 
-      fill_values('full_name' => 'Jane Doe', 'email' => 'jane@example.com', 'cover' => "Line one\nLine two",
+      fill_values('full_name' => 'Jane Doe', 'email' => unique_email('jane'), 'cover' => "Line one\nLine two",
                   'experience' => 'senior', 'consent' => '1')
       described_class.call(ctx:)
 
@@ -66,7 +66,7 @@ RSpec.describe Apply::Operation::SendApply::Browser, :browser do
       expect(apply.reload).to have_attributes(trigger_selector: '#open-form', submit_text: 'Send')
       expect(apply.inputs.map { |input| input['name'] }).to eq(%w[late_name late_email])
 
-      fill_values('late_name' => 'Jane Doe', 'late_email' => 'jane@example.com')
+      fill_values('late_name' => 'Jane Doe', 'late_email' => unique_email('jane'))
       described_class.call(ctx:)
 
       expect(page_after_submit_sent_to_ai?).to have_been_made.once

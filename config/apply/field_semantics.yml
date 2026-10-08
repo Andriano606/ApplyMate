@@ -1,0 +1,150 @@
+# Label lexicon of Apply::Operation::Answer::Classify (design §8.1, uk / en / ru).
+#
+# semantics: ordered; the FIRST semantic with a matching regex wins (case-insensitive, matched against the field label,
+#            then the placeholder). Sensitive semantics come first so that "I agree to receive our newsletter" is a
+#            marketing opt-in and never a consent. A regex may appear under one semantic only (spec-enforced).
+#            Classify normalizes the text first (Classify::TRAILER: squished, trailing `* : . ? !` and a trailing
+#            "(...)" note removed), so "Phone number (with country code) *" is matched as "Phone number".
+#
+# Precision over recall. A profile-fact semantic (names, email, phone, location) is filled from the profile at
+# confidence 1.0 and a consent is affirmed under the default auto_consent, neither of which is a review reason. So
+# those patterns are ANCHORED to the whole label (`^...$`): "Are you open to relocation?" must not be a location,
+# "Describe your mobile development experience" must not be a phone, "Name of your current employer" must not be
+# the applicant's name. consent_required names consent wording only ("I agree to the privacy policy"), never a bare
+# "agree" ("Do you agree to work from the office?" is a question for the AI). An unmatched label goes to the AI
+# (`other`), which sees the CV; a wrong match submits the wrong data silently.
+# The sensitive semantics stay broad on purpose: a false positive there keeps a field away from the AI (decline option
+# / missing_profile_fact halt), which is the safe direction.
+semantics:
+  marketing_opt_in:
+    - newsletter
+    - marketing (e-?mails?|communications?|messages?|materials?|updates|offers)
+    - promotional (e-?mails?|communications?|messages?|materials?|offers)
+    - розсилк
+    - рекламн\S* (повідомлен|розсил|матеріал)
+    - рассылк
+    - рекламн\S* (сообщен|материал)
+  consent_required:
+    - ^gdpr$
+    - gdpr (consent|notice|declaration|agreement|statement)
+    - privacy (notice|policy|statement)
+    - consent (to|for) (the )?(processing|storage|collection|use of|privacy|terms|data)
+    - consent$
+    - i (agree|consent) to (the )?(terms|privacy|processing|storage|collection|use of my|data)
+    - i (acknowledge|confirm) (that )?(i have read|the (terms|privacy))
+    - i have read (and (agree|accept)|the (terms|privacy))
+    - terms (and|&) conditions
+    - персональн\S* дан
+    - (згод\S*|погоджу\S*) на обробку
+    - ^згода$
+    - політик\S* конфіденційн
+    - согласи\S* на обработку
+    - ^согласие$
+    - политик\S* конфиденциальн
+  demographic:
+    - gender
+    - ethnic
+    - \brace\b
+    - disabilit
+    - veteran
+    - sexual orientation
+    - pronoun
+    - nationality
+    - national origin
+    - \bстать\b
+    - національн
+    - национальн
+    - инвалидн
+    - \bпол\b
+  legal_status:
+    - work authori[sz]ation
+    - authori[sz]ed to work
+    - legally (authori[sz]ed|eligible)
+    - right to work
+    - visa
+    - sponsorship
+    - citizenship
+    - громадянств
+    - гражданств
+    - дозвіл на роботу
+    - віз[аи]
+    - разрешение на работу
+  linkedin:
+    - linkedin
+  github:
+    - github
+  cover_letter:
+    - cover letter
+    - motivation letter
+    - супровідн
+    - мотиваційн
+    - сопроводительн
+  salary:
+    - salary
+    - compensation
+    - зарплат
+    - заробітн
+    - оплат[аи] праці
+  first_name:
+    - ^(your |legal |preferred )?(first|given) name$
+    - ^(ваше )?ім['’]я$
+    - ^(ваше )?имя$
+  last_name:
+    - ^(your |legal )?(last|family) name$
+    - ^(your )?surname$
+    - ^(ваше )?прізвище$
+    - ^(ваша )?фамилия$
+  full_name:
+    - ^(your |legal |applicant'?s? )?(full )?name$
+    - ^(first|given) (and|&) (last|family) names?$
+    - ^(ваше |ваш )?(піб|фио)$
+    - ^(ваше )?повне ім['’]я$
+    - ^ім['’]я (та|і) прізвище$
+    - ^прізвище,? ім['’]я( (та|і) по батькові)?$
+    - ^(ваше )?полное имя$
+    - ^имя и фамилия$
+    - ^фамилия,? имя( (и )?отчество)?$
+  email:
+    - ^(your |work |personal |contact )?e-?mail( address)?$
+    - ^(ваша )?електронн\S* пошт\S*$
+    - ^(ваша )?(электронн\S* )?почта$
+    - ^(ваш )?e-?mail$
+  phone:
+    - ^(your |contact )?(mobile |cell )?(tele)?phone( number)?$
+    - ^mobile( number)?$
+    - ^(ваш )?(номер )?телефон\S*$
+    - ^номер (мобільного|мобильного)( телефону| телефона)?$
+  location:
+    - ^(your |current )?(location|city|country)( of residence)?$
+    - ^(your |current |home )?address$
+    - ^where are you (currently )?(located|based)$
+    - ^(ваше |ваша |поточне |поточна )?(місто|країна|локація|адреса|місцезнаходження)( проживання)?$
+    - ^(ваш |ваша )?(город|страна|адрес|локация|местоположение)( проживания)?$
+affirm:
+  - i agree
+  - i acknowledge
+  - i consent
+  - i accept
+  - agree
+  - accept
+  - acknowledge # Ashby's GDPR checkbox group: "Acknowledge/Confirm" (research/live_probe.md, Preply)
+  - confirm
+  - yes
+  - погоджуюсь
+  - погоджуюся
+  - підтверджую
+  - так
+  - согласен
+  - подтверждаю
+  - да
+decline:
+  - decline to self-identify
+  - decline to answer
+  - prefer not to say
+  - prefer not to answer
+  - i do not wish to answer
+  - i don't wish to answer
+  - не бажаю вказувати
+  - не хочу вказувати
+  - волію не вказувати
+  - предпочитаю не указывать

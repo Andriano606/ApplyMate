@@ -14,12 +14,12 @@ Feature: My applies on the vacancy page
     Given I have a "completed" apply for the last Vacancy with the filled form:
       | name  | tag      | type     | label                       | value           |
       | why   | textarea | textarea | Why do you want to join us? | I love Ruby     |
-      | email | input    | email    | Email                       | dev@example.com |
+      | email | input    | email    | Email                       | <unique_email:dev> |
     When I visit the show Vacancy page
     Then I see text "Відгук надіслано"
     And the last Apply card shows status "Завершено"
     And the last Apply card shows the field "Why do you want to join us?" filled with "I love Ruby"
-    And the last Apply card shows the field "Email" filled with "dev@example.com"
+    And the last Apply card shows the field "Email" filled with "<unique_email:dev>"
 
   Scenario: Opening an apply link lands on its card on the vacancy page
     Given I have a "failed" apply for the last Vacancy

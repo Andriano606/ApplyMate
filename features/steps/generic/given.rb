@@ -8,7 +8,7 @@ def convert_table_value(value)
   when 'true' then true
   when 'false' then false
   when /\A[\[{]/ then JSON.parse(value)
-  else value
+  else expand_unique(value)
   end
 end
 
@@ -34,7 +34,7 @@ end
 # Table format: each row is | attribute | value |
 #
 # Examples:
-#   Given the User with email "test@example.com" has:
+#   Given the User with email "<unique_email:admin>" has:
 #     | admin | true |
 #
 #   Given the last PrintOrderFile record has:
@@ -42,7 +42,7 @@ end
 #     | glb_conversion_status | done |
 Given(/^the (?:(last) )?(\w+)(?: with (\w+) "([^"]+)")?(?:\s+record)? has:$/) do |last, model_name, find_attr, find_value, table|
   model_class = model_name.constantize
-  record = last ? model_class.last : model_class.find_by!(find_attr => find_value)
+  record = last ? model_class.last : model_class.find_by!(find_attr => expand_unique(find_value))
   table.rows_hash.each do |attr, value|
     record.update!(attr => convert_table_value(value))
   end
@@ -74,7 +74,7 @@ Given('the OAuth user is {string} with email {string}') do |name, email|
     provider: 'google_oauth2',
     uid: '123456789',
     info: {
-      email: email,
+      email: expand_unique(email),
       name: name
     }
   )

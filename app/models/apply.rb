@@ -116,6 +116,26 @@ class Apply < ApplicationRecord
     ATTENTION_STATES.include?(state)
   end
 
+  def field_list
+    Array(fields).map { |hash| Apply::Field.from_h(hash) }
+  end
+
+  def answer_for(field_id)
+    (answers || {})[field_id.to_s]
+  end
+
+  def platform_known?
+    platform.present? && platform != 'generic'
+  end
+
+  # Labels of the open questions the user can ask the AI to answer (VacancyQuestion suggestions).
+  def question_labels
+    return field_list.select { |field| field.textarea? && field.label.present? }.map(&:label) if fields.present?
+
+    # Legacy branch: deleted in phase 4 together with form_data.
+    Apply::FormField.wrap(inputs).select(&:question?).map(&:label)
+  end
+
   # failure is jsonb: string keys after a reload, symbol keys on a freshly assigned instance.
   def failure_info
     (failure || {}).with_indifferent_access

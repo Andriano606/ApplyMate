@@ -59,6 +59,22 @@ RSpec.describe ApplyMate::Net::Operation::ResolvePublicAddress, type: :operation
       end
     end
 
+    context 'when the resolver lists an IPv6 answer first' do
+      let(:answers) { [ '2606:4700:10::ac42:a4c8', '104.20.28.254', '172.66.164.200' ] }
+
+      it 'pins the first IPv4 address (an IPv6 pin fails on an IPv4-only host)' do
+        expect(described_class.call(url: 'https://jobs.example.com/').model.ip).to eq('104.20.28.254')
+      end
+    end
+
+    context 'when the host has IPv6 answers only' do
+      let(:answers) { [ '2606:4700:10::ac42:a4c8' ] }
+
+      it 'pins the IPv6 address' do
+        expect(described_class.call(url: 'https://jobs.example.com/').model.ip).to eq('2606:4700:10::ac42:a4c8')
+      end
+    end
+
     context 'when public and private answers are mixed (DNS rebinding)' do
       let(:answers) { [ '93.184.215.14', '10.0.0.7' ] }
 
@@ -88,5 +104,28 @@ RSpec.describe ApplyMate::Net::Operation::ResolvePublicAddress, type: :operation
         expect(e.message).not_to include('secret')
         expect(e.url).to eq('http://127.0.0.1/reset?token=secret')
       }
+  end
+
+  describe '.literal_private? (no DNS)' do
+    it 'is true for localhost and literal non-public IPs, including bracketed and IPv4-mapped IPv6' do
+      %w[localhost app.localhost 127.0.0.1 10.1.2.3 192.168.50.155 [::1] ::ffff:10.0.0.1 [fd00::5]].each do |host|
+        expect(described_class.literal_private?(host)).to be(true), host
+      end
+    end
+
+    it 'is true for the fully-qualified (trailing-dot) forms Firefox keeps in frame URLs' do
+      %w[localhost. app.localhost. LOCALHOST. 127.0.0.1. 10.1.2.3.].each do |host|
+        expect(described_class.literal_private?(host)).to be(true), host
+      end
+    end
+
+    it 'is false for public IPs and for hostnames (those need the DNS check)' do
+      allow(Resolv).to receive(:new)
+
+      %w[93.184.215.14 93.184.215.14. [2606:4700::1] jobs.example.com jobs.example.com. intranet].each do |host|
+        expect(described_class.literal_private?(host)).to be(false), host
+      end
+      expect(Resolv).not_to have_received(:new)
+    end
   end
 end

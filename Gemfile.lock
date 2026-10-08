@@ -806,6 +806,7 @@ DEPENDENCIES
   pg (~> 1.1)
   playwright-ruby-client (= 1.63.0)
   propshaft
+  public_suffix
   puma (>= 5.0)
   pundit
   rack-timeout

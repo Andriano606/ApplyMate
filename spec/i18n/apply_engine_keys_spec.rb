@@ -12,8 +12,10 @@ RSpec.describe 'Apply engine locale keys' do
     Dir[concepts.join('apply/operation/**/*.rb')].each do |file|
       concepts.join(file).relative_path_from(concepts).to_s.delete_suffix('.rb').camelize.constantize
     end
-    # Spec-only fakes (spec/support/apply_engine_fakes.rb) are not part of the product's stages.
+    # Spec-only fakes (spec/support/apply_engine_fakes.rb) are not part of the product's stages; abstract bases
+    # (Apply::Operation::Stage::Base) declare none.
     Apply::Operation::Base.descendants.select { |klass| klass.name.start_with?('Apply::Operation::') }
+                          .reject { |klass| klass.name.end_with?('::Base') }
                           .map { |klass| klass.stage.to_s }.uniq
   end
 
@@ -45,7 +47,7 @@ RSpec.describe 'Apply engine locale keys' do
   end
 
   it 'discovers the pipeline stages (guards the iteration above against being vacuous)' do
-    expect(stages).to include('check_applyable', 'submit')
+    expect(stages).to include('check_applyable', 'submit', 'detect', 'schema')
   end
 
   it 'detects a Halt code without texts (the iteration is not vacuous)' do

@@ -90,4 +90,56 @@ RSpec.describe Artifact::Operation::Show, type: :operation do
       expect { result }.to raise_error(ActiveRecord::RecordNotFound)
     end
   end
+
+  describe 'with an apply_step artifact' do
+    let(:owner)  { 'apply_step' }
+    let(:step)   { create(:apply_step, apply:) }
+    let(:record) { step }
+    let(:name)   { '2' }
+
+    before do
+      step.artifacts.attach(io: StringIO.new('png'), filename: 'failure.png', content_type: 'image/png')
+      step.artifacts.attach(io: StringIO.new('<html>'), filename: 'failure_f0.html', content_type: 'text/html')
+    end
+
+    it 'resolves the 1-based position in attach order, not an attachment id' do
+      expect(disk_token(model.url).dig('_rails', 'data', 'key')).to eq(step.ordered_artifacts.second.blob.key)
+    end
+
+    %w[0 3 -1 abc].each do |position|
+      context "with position #{position.inspect}" do
+        let(:name) { position }
+
+        it 'is not found' do
+          expect { result }.to raise_error(ActiveRecord::RecordNotFound)
+        end
+      end
+    end
+
+    context 'when the apply belongs to another user' do
+      let(:apply) { create(:apply) }
+
+      it 'is not found' do
+        expect { result }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+
+    context 'when only another step has an artifact at that position' do
+      let(:record) { create(:apply_step, apply:) }
+
+      before { record }
+
+      it 'is not found' do
+        expect { result }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+
+    context 'with a named attachment instead of an id' do
+      let(:name) { 'cv' }
+
+      it 'is not found' do
+        expect { result }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+  end
 end

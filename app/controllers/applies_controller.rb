@@ -43,6 +43,12 @@ class AppliesController < ApplicationController
     end
   end
 
+  def approve_review
+    endpoint Apply::Operation::ApproveReview do |m|
+      handle_user_transition(m)
+    end
+  end
+
   def mark_outcome
     endpoint Apply::Operation::MarkOutcome do |m|
       handle_user_transition(m)

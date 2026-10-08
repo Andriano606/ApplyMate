@@ -3,7 +3,7 @@ Feature: Saved filter counters
   appeared or disappeared since the user last opened that preset.
 
   Background:
-    Given the OAuth user is "Andrii" with email "andrii@example.com"
+    Given the OAuth user is "Andrii" with email "<unique_email:andrii>"
     And I am logged in as Andrii Kuluev
     And a job source exists
     And the last Source has the following Vacancy records:

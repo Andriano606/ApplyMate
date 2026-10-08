@@ -39,15 +39,22 @@ app/concepts/
     client/gemini_scraping.rb              # ApplyMate::Ai::Client::GeminiScraping (web UI via Ferrum)
   apply/ai/
     prompt/
-      fill_form.rb                         # Apply::Ai::Prompt::FillForm        (shared)
+      fill_form.rb                         # Apply::Ai::Prompt::FillForm        (shared; legacy, deleted in phase 4)
+      answer_fields.rb                     # Apply::Ai::Prompt::AnswerFields    (engine answers; page text as untrusted blocks)
+      verify_submit.rb                     # Apply::Ai::Prompt::VerifySubmit    (engine Verify: post-submit text as an untrusted block)
       generate_cv.rb                       # Apply::Ai::Prompt::GenerateCv      (shared)
       check_form_page.rb                   # Apply::Ai::Prompt::CheckFormPage   (shared)
       browser/check_submit_result.rb       # Apply::Ai::Prompt::Browser::CheckSubmitResult
     response_schema/
-      fill_form.rb                         # Apply::Ai::ResponseSchema::FillForm
+      fill_form.rb                         # Apply::Ai::ResponseSchema::FillForm (legacy)
+      answer_fields.rb                     # Apply::Ai::ResponseSchema::AnswerFields ({ field_id => { value, confidence } })
+      verify_submit.rb                     # Apply::Ai::ResponseSchema::VerifySubmit ({ submitted, confidence, quote })
       generate_cv.rb                       # Apply::Ai::ResponseSchema::GenerateCv
       check_form_page.rb                   # Apply::Ai::ResponseSchema::CheckFormPage
       browser/check_submit_result.rb       # Apply::Ai::ResponseSchema::Browser::CheckSubmitResult
+  user_profile/ai/
+    prompt/extract_facts.rb                # UserProfile::Ai::Prompt::ExtractFacts (CV as an untrusted block)
+    response_schema/extract_facts.rb       # UserProfile::Ai::ResponseSchema::ExtractFacts
   vacancy_question/ai/
     prompt/answer_question.rb              # VacancyQuestion::Ai::Prompt::AnswerQuestion
     response_schema/answer_question.rb     # VacancyQuestion::Ai::ResponseSchema::AnswerQuestion
@@ -196,7 +203,9 @@ No rescue-and-log inside schemas: `InvalidResponse` propagates to the operation,
 | ------------------------------------------------------- | ----------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Apply::Ai::ResponseSchema::CheckFormPage`              | `:navigate` | yes                | required `has_form` (boolean), `trigger_selector`/`form_url`/`form_selector` (`string \| null`); `additionalProperties: false`. A blank or invalid answer raises `InvalidResponse` → `FetchExternalForm` fails with `failed_fetching_form` (there is no `has_form: false` default any more).                                                                                                                                                                                                                    |
 | `Apply::Ai::ResponseSchema::Browser::CheckSubmitResult` | `:verify`   | yes                | required `success` (boolean), `reason` (string). Strict like every `Json` schema: an unusable answer raises `InvalidResponse`. `Apply::Operation::SendApply::Browser#verify_submit` turns `success: false` into `Halt(:validation_rejected)` (not definitive) and lets `InvalidResponse` / a client `EmptyResponse` propagate (the Runner maps them to `invalid_ai_output`, `Run::ERROR_CODES`): the claim is kept, so all of them end in `submit_unverified` (an AI verdict alone never releases a claim, design §11.4). |
+| `Apply::Ai::ResponseSchema::VerifySubmit`               | `:verify`   | yes                | required `submitted` (boolean), `confidence` (number 0..1), `quote` (string, verbatim from the page or `""`); `additionalProperties: false`. Used only by `Apply::Operation::Engine::VerifySubmit` as a **corroborating** signal: asked only when at least one deterministic signal holds and exactly one is missing for `min_signals`, never for a `browser_backed` integration; it counts only with `submitted: true`, `confidence >= 0.8` and a `quote` found in the redacted page text. Any error (`InvalidResponse`, client failure) is traced and counts as no signal. See `.ai/docs/apply_engine.md` "Submit and Verify". |
 | `VacancyQuestion::Ai::ResponseSchema::AnswerQuestion`   | `:answers`  | yes                | required `answer` (`string`, `minLength: 1`); `extract` returns `super[:answer]` (a String) and raises `InvalidResponse, 'AI AnswerQuestion response has no answer'` when it is whitespace-only (no `pattern` in the schema: llama.cpp's grammar conversion behind Ollama `format` rejects unanchored patterns).                                                                                                                                                                                                |
+| `UserProfile::Ai::ResponseSchema::ExtractFacts`         | `:answers`  | yes                | fixed nullable properties `full_name first_name last_name email phone linkedin github location salary notice_period years_experience work_authorization` (`string \| null`) and `languages` (array of strings); none required (a model may omit what the CV does not state), `additionalProperties: false`. `extract` keeps only known keys with a value (`compact_blank`). Called by `UserProfile::Operation::ExtractFacts`; the CV is passed as an untrusted block. |
 | `Apply::Ai::ResponseSchema::FillForm`                   | `:answers`  | **no** (text-mode) | `{ type: 'object', additionalProperties: { type: %w[string number boolean null] } }` — keys are the form's own input names. Scalars are accepted because `Apply::Operation::Ai::FillForm` stringifies every value; nested objects/arrays are rejected. `{}` passes validation and the operation's own blank guard raises.                                                                                                                                                                                       |
 
 `AiHandler` appends `format_instructions` for every client, native or not: the instruction text carries the field semantics the schema cannot express.
@@ -270,8 +279,8 @@ Three immutable `Data.define` value types in the `ApplyMate::Ai` namespace (same
 | Kind        | `MAX_OUTPUT_TOKENS` | `THINKING_BUDGETS` | `TIMEOUTS` (s) | Schemas                                                                                      |
 | ----------- | ------------------: | -----------------: | -------------: | -------------------------------------------------------------------------------------------- |
 | `:navigate` |               1 024 |              1 024 |             60 | `Apply::Ai::ResponseSchema::CheckFormPage`                                                   |
-| `:answers`  |               4 096 |              2 048 |             90 | `Apply::Ai::ResponseSchema::FillForm`, `VacancyQuestion::Ai::ResponseSchema::AnswerQuestion` |
-| `:verify`   |                 512 |                512 |             30 | `Apply::Ai::ResponseSchema::Browser::CheckSubmitResult`                                      |
+| `:answers`  |               4 096 |              2 048 |             90 | `Apply::Ai::ResponseSchema::FillForm`, `VacancyQuestion::Ai::ResponseSchema::AnswerQuestion`, `UserProfile::Ai::ResponseSchema::ExtractFacts` |
+| `:verify`   |                 512 |                512 |             30 | `Apply::Ai::ResponseSchema::Browser::CheckSubmitResult`, `Apply::Ai::ResponseSchema::VerifySubmit` |
 | `:cv`       |               8 192 |              2 048 |            180 | `Apply::Ai::ResponseSchema::GenerateCv`                                                      |
 
 **Thinking budget:** Gemini 2.5+ (and Ollama thinking models such as qwen3) spend reasoning tokens from the same output cap as the answer. Without a bound, dynamic thinking can eat the whole cap and the candidate comes back with `finishReason: "MAX_TOKENS"` and no text. So clients send `output_token_limit` (answer + thinking) as the cap, and `Client::Gemini` also sends `thinking_config.thinking_budget` for models matching `THINKING_MODEL`. Every budget is ≥ 512, the smallest non-zero `thinking_budget` all Gemini 2.5 models accept (flash-lite's floor). If a provider still returns no text (safety block, cut-off), the client raises `ApplyMate::Ai::Client::Base::EmptyResponse` naming `finishReason`, `blockReason` and `thoughtsTokenCount` (Gemini) or `done_reason` (Ollama) instead of returning nil.

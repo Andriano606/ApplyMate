@@ -54,4 +54,23 @@ RSpec.describe Apply::Component::VacancyApplyCard, type: :component do
     expect(card(apply).text).not_to include('secret detail')
     expect(card(apply, as: admin).text).to include('secret detail')
   end
+
+  context 'when the apply waits for review' do
+    let(:apply) do
+      create(:apply, user:, vacancy:, state: :needs_review, failure: { code: 'review', kind: 'human', detail: 'low_confidence' },
+                     fields: [ answer_field(id: 'name', label: 'Full name').to_h ], answers: { 'name' => answer_entry('Ada') })
+    end
+
+    it 'shows the review form instead of repeating the failure notice' do
+      html = card(apply)
+
+      expect(html.css('[data-test-id="apply-review-form"]').size).to eq(1)
+      expect(html.at_css('[data-test-id="apply-failure-notice"]')).to be_nil
+      expect(html.text.scan(I18n.t('apply.failure.review')).size).to eq(0)
+    end
+
+    it 'does not show the review form for other states' do
+      expect(card(create(:apply, :failed, user:, vacancy:)).at_css('[data-test-id="apply-review-form"]')).to be_nil
+    end
+  end
 end

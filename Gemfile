@@ -77,6 +77,9 @@ gem 'aws-sdk-s3', require: false
 # Authorization with Pundit
 gem 'pundit'
 
+# Registered domain of a URL (Answer::ReviewReasons: is the form on a site related to the vacancy?)
+gem 'public_suffix'
+
 # OmniAuth Google OAuth2
 gem 'omniauth-google-oauth2'
 gem 'omniauth-rails_csrf_protection'

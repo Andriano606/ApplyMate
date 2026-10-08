@@ -31,6 +31,13 @@ class Apply::Component::RunTimelineAttempt < ApplyMate::Component::Base
     step.error_detail.presence if step.failed? && @user&.admin?
   end
 
+  # [[filename, path]] of the failure / pre-submit evidence (masked screenshots, redacted HTML) of the step.
+  def artifact_links(step)
+    step.ordered_artifacts.each.with_index(1).map do |attachment, position|
+      [ attachment.filename.to_s, helpers.artifact_path('apply_step', step, position) ]
+    end
+  end
+
   def icon_config(step)
     STATE_ICONS[step.state]
   end

@@ -46,6 +46,18 @@ RSpec.describe Apply::TurboHandler::StatusUpdate do
     end
   end
 
+  describe '.broadcast for a needs_review apply' do
+    it 'renders the review form inside the card without current_user' do
+      apply = create(:apply, user:, vacancy:, state: :needs_review, failure: { code: 'review', kind: 'human', detail: 'low_confidence' },
+                             fields: [ answer_field(id: 'name', label: 'Full name').to_h ], answers: { 'name' => answer_entry('Ada') })
+
+      described_class.broadcast(apply)
+
+      card = Nokogiri::HTML.fragment(messages.last).at_css("article#apply_#{apply.hashid}")
+      expect(card.at_css('form[action$="/approve_review"] input[name="answers[name]"]')['value']).to eq('Ada')
+    end
+  end
+
   describe '.refresh (applies added or removed)' do
     it 'replaces the badge, the action box and the whole applies panel' do
       apply = create(:apply, :running, user:, vacancy:, stage: 'fetch_form')
