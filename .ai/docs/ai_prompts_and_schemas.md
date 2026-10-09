@@ -87,7 +87,8 @@ end
 `password`, `search`; `MAX_NAME = 80`, `MAX_HREF = 120`, `MAX_OPTIONS_SHOWN = 30`, `MAX_OPTION_LABEL = 40`). `role`,
 `type` and `tag` come from raw page attributes, so each must be ONE lowercase token (`KIND_TOKEN = /\A[a-z][a-z0-9_-]*\z/`,
 at most `MAX_KIND = 24` characters). Anything else is dropped (a bad role falls back to the tag), so a forged newline or a
-kilobyte-long attribute never reaches the prompt. Values are
+kilobyte-long attribute never reaches the prompt. An element the probe grouped as `group: combobox` (a custom select over a
+readonly textbox or a div trigger) renders as `combobox` whatever its role. Values are
 never shown: `<filled>` / `<empty>` come from the probe's `filled`. Both snapshot prompts use it, so the format cannot
 drift between them.
 

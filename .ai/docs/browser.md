@@ -491,13 +491,16 @@ walked. Per element:
 - `index tag type role name question` — `role` explicit or implicit (Playwright's mapping); `name` = `aria-labelledby`
   → `aria-label` → content (buttons, links, tabs, options; an EMPTY button / link is named by nothing outside itself,
   only `close` for a `close`/`dismiss` class token) → `label[for]` / parent `label` / `legend` / an adopted label →
-  text just before the control (for a checkbox / radio first the text just after it) inside its field root →
+  text just before the control (for a checkbox / radio first the text just after it) inside its field root; text
+  before a non-checkbox control that holds a link (`a[href]`, a footer "powered by" credit) is not a caption →
   `placeholder` → `title` (unless it only repeats the control's value) → for a file input its `question`. Label text is
   `ownText`: as rendered (CSS-hidden descendants, nested controls and a link / button wrapping a control skipped;
   inline children joined without a separator), required marks (`*`/`✱`, trailing or standalone) stripped. An adopted
   label: a `label[for]` whose control is not rendered (a display:none twin of a Vue phone input or a Froala editor's
-  textarea) or does not exist, in a container (≤ 4 ancestors, never across `<form>`) whose only rendered text-entry
-  control is this one. The `{ role, name }` strategy carries the browser's own accessible name (labelledby, aria-label,
+  textarea) or does not exist. The walk up has no depth cap (PeopleForce nests its phone input 7 ancestors below the
+  label's container) and never crosses `<form>` / `<body>`; the FIRST ancestor holding a second rendered text-entry
+  control or any other `label[for]` decides: exactly one label there whose control is unrendered (not a checkbox /
+  radio / file) or missing is adopted, anything else adopts nothing. The `{ role, name }` strategy carries the browser's own accessible name (labelledby, aria-label,
   content, own label, placeholder, title), never a heuristic one; `question` = the field root's title
   (`aria-labelledby`, `legend`, or the first label/`[class*=question]`/`[class*=title]`/heading that is not an option
   label).

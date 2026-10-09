@@ -27,18 +27,40 @@
   </div>
 
   <form id="apply" action="/submit" method="post">
-    <!-- PeopleForce: the label targets a hidden twin; the visible Vue phone input has no label of its own. -->
-    <div class="form-group" id="phone-group">
+    <!-- PeopleForce (live DOM depth): the label targets a hidden twin; the visible Vue phone input has no label of its
+         own and sits 7 ancestors below the label's container, beside a nameless country-code popover trigger. -->
+    <div class="!tw-mb-4" id="phone-group">
       <label class="required" for="career_application_form_phone_numbers">Номер телефону</label>
-      <input type="tel" hidden id="career_application_form_phone_numbers" name="career_application_form[phone_numbers][]">
-      <div class="pf-phone-number"><input id="career_application_form[phone_numbers][]" type="tel" maxlength="24"></div>
+      <div data-component="pf-phone-number">
+        <div hideicon="">
+          <div>
+            <div class="pf-relative pf-flex pf-gap-6">
+              <button type="button" id="reka-popover-trigger-v-0" aria-haspopup="dialog" aria-expanded="false"><span class="pf-flag"></span></button>
+              <div data-testid="input-base">
+                <div class="pf-flex">
+                  <div class="pf-relative"><input id="career_application_form[phone_numbers][]" type="tel" maxlength="24"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <input type="tel" hidden id="career_application_form_phone_numbers" name="career_application_form[phone_numbers][]">
+      </div>
     </div>
 
-    <!-- PeopleForce: Froala editor over a display:none textarea. -->
-    <div class="form-group" id="cover-group">
+    <!-- PeopleForce (live DOM depth): Froala editor over a display:none textarea, 4 ancestors below the label's
+         container, with its own toolbar buttons. -->
+    <div class="!tw-mb-4" id="cover-group">
       <label for="career_application_form_cover_letter">Супровідний лист</label>
-      <textarea class="hidden" name="career_application_form[cover_letter]" id="career_application_form_cover_letter" style="display: none;"></textarea>
-      <div class="fr-box"><div class="fr-wrapper"><div class="fr-element fr-view" contenteditable="true"></div></div></div>
+      <div>
+        <div id="career_application_form_v2_cover_letter_container_1" data-controller="forms--rich-text-component">
+          <div class="fr-box">
+            <div class="fr-toolbar"><button type="button" class="fr-command" data-cmd="bold">B</button></div>
+            <div class="fr-wrapper"><div class="fr-element fr-view" contenteditable="true"></div></div>
+          </div>
+        </div>
+        <textarea class="hidden" name="career_application_form[cover_letter]" id="career_application_form_cover_letter" style="display: none;"></textarea>
+      </div>
     </div>
 
     <!-- reCAPTCHA response field. -->
@@ -46,8 +68,8 @@
 
     <!-- PeopleForce: Alpine select = a readonly input showing the current value, items in a hidden list. -->
     <div class="form-group" id="salary-group">
-      <p>Бажана базова компенсація</p>
-      <input type="number" name="career_application_form[salary]" id="salary">
+      <label for="career_application_form_desired_salary">Бажана базова компенсація</label>
+      <input type="number" name="career_application_form[desired_salary]" id="career_application_form_desired_salary">
       <div x-data="selectComponentController" data-value="USD">
         <div title="USD - United States Dollar">
           <div x-ref="wrapper"><input value="USD - United States Dollar" title="USD - United States Dollar" type="text" readonly id="currency"></div>
@@ -116,5 +138,11 @@
     <button id="hcaptchaSubmitBtn" type="submit" class="hidden"></button>
     <button type="submit">Submit application</button>
   </form>
+
+  <!-- PeopleForce footer: a locale switcher (changing it navigates away) right after the "powered by" credit. -->
+  <footer>
+    <div>Працює на <a href="https://peopleforce.io">PeopleForce</a></div>
+    <div><div x-data="{}"><select name="locale" id="career_locale"><option value="en">English</option><option value="uk" selected>Українська</option></select></div></div>
+  </footer>
 </body>
 </html>

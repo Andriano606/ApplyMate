@@ -70,12 +70,19 @@ RSpec.describe Apply::Operation::Engine::BuildFieldInventory, :browser do
 
         expect(by_id(snapshot, 'career_application_form_phone_numbers')).to include('visible' => false)
         expect(by_id(snapshot, 'g-recaptcha-response')).to include('captcha_artifact' => true, 'visible' => false)
+        expect(by_id(snapshot, 'career_application_form[phone_numbers][]')).to include('name' => 'Номер телефону', 'required' => true)
         expect(by_id(snapshot, 'currency')).to include('group' => 'combobox', 'name' => '')
         expect(by_id(snapshot, 'first-name')['strategies']).to include({ 'role' => 'textbox', 'name' => "Ім'я" })
         expect(by_id(snapshot, 'resume-chooser')).to include('required' => false, 'chooser' => false)
         expect(by_id(snapshot, 'hcaptchaSubmitBtn')).to include('name' => '')
         expect(by_id(snapshot, 'close')).to include('name' => 'close')
         expect(snapshot.frames.first['captcha']).to include('hcaptcha_invisible', 'recaptcha_invisible')
+      end
+    end
+
+    it 'never names the footer locale switcher by the "powered by" credit link before it' do
+      on_fixture_form(ctx, url, form_root: '#apply') do |session, _fields|
+        expect(by_id(session.snapshot_all, 'career_locale')).to include('name' => '', 'search_like' => true)
       end
     end
 

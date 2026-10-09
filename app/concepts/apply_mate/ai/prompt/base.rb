@@ -63,9 +63,13 @@ class ApplyMate::Ai::Prompt::Base
     parts.join(' ')
   end
 
+  # A custom select the probe recognised (`group: combobox`: a readonly input or a div trigger that opens a list) is a
+  # combobox to the model, whatever role its markup declares (PeopleForce's currency picker is a plain readonly
+  # textbox); otherwise the role, then the tag.
   def kind_of(element)
     type = kind_token(element['type'])
-    kind = kind_token(element['role']) || (type == 'file' ? 'file' : kind_token(element['tag']))
+    kind = (element['group'] == 'combobox' && 'combobox') || kind_token(element['role']) ||
+           (type == 'file' ? 'file' : kind_token(element['tag']))
     type.present? && !%w[text file].include?(type) && type != kind ? "#{kind}:#{type}" : kind.to_s
   end
 

@@ -80,6 +80,13 @@ RSpec.describe Apply::Ai::Prompt::Navigate do
       expect(text.scan(ApplyMate::Ai::Prompt::Base::CLOSE_MARK).size).to eq(2)
     end
 
+    it 'renders a custom select over a readonly textbox (PeopleForce currency picker, group: combobox) as a combobox' do
+      elements << snapshot_element(role: 'textbox', name: '', group: 'combobox', readonly: true, filled: true)
+
+      expect(render).to include('[f0:e7] combobox <filled>')
+      expect(render).not_to include('[f0:e7] textbox')
+    end
+
     it 'never offers a non-rendered empty submit button (a captcha form submit)' do
       elements << snapshot_element(role: 'button', tag: 'button', name: '', visible: false, self_visible: false, submit_like: true)
 

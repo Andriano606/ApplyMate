@@ -318,28 +318,33 @@
     'textarea, [contenteditable]:not([contenteditable=false]), [role=textbox]';
   // A <label for> whose control is not rendered (a framework's display:none twin: a Vue phone widget's hidden input,
   // a rich-text editor's hidden textarea) or does not exist (a dangling `for`), in a container whose ONLY rendered
-  // text-entry control is `el`: the label belongs to what the person sees. Never adopts across a <form> or a second
-  // rendered text control, nor a label of a checkbox / radio / file input.
+  // text-entry control is `el`: the label belongs to what the person sees. The walk has no depth cap (a phone widget
+  // nests its input 7 levels below the label's container); it ends at the FIRST ancestor that holds a second rendered
+  // text control or any other <label for> - that ancestor decides: exactly one label there, orphaned, is adopted;
+  // anything else (a label of a rendered control, two orphans, a checkbox / radio / file input's label) adopts
+  // nothing. Never crosses a <form> or <body>.
+  const orphanedLabel = (label) =>
+    !label.control ||
+    (!seen(label.control) &&
+      !['checkbox', 'radio', 'file'].includes(typeOf(label.control)));
   const adoptedLabelOf = (el) => {
     if (!el.matches(TEXT_ENTRY) || !seen(el)) return null;
     for (
-      let node = el.parentElement, depth = 0;
-      node && depth < 4 && node !== doc.body && node.localName !== 'form';
-      node = node.parentElement, depth += 1
+      let node = el.parentElement;
+      node && node !== doc.body && node.localName !== 'form';
+      node = node.parentElement
     ) {
       const others = Array.from(node.querySelectorAll(TEXT_ENTRY)).filter(
         (control) => control !== el && !el.contains(control) && seen(control),
       );
       if (others.length) return null;
-      const orphans = Array.from(node.querySelectorAll('label[for]')).filter(
-        (label) =>
-          !label.control ||
-          (label.control !== el &&
-            !seen(label.control) &&
-            !['checkbox', 'radio', 'file'].includes(typeOf(label.control))),
+      const labels = Array.from(node.querySelectorAll('label[for]')).filter(
+        (label) => label.control !== el && !el.contains(label),
       );
-      if (orphans.length === 1) return orphans[0];
-      if (orphans.length > 1) return null;
+      if (labels.length)
+        return labels.length === 1 && orphanedLabel(labels[0])
+          ? labels[0]
+          : null;
     }
     return null;
   };
@@ -354,13 +359,14 @@
     return [adoptedLabelOf(el), false];
   };
   // Text just before the control (a label-like div) - for a checkbox / radio first the text just AFTER it ("[ ] I agree
-  // to ..."), never crossing another control or leaving the field root. Required marks stripped.
+  // to ..."), never crossing another control or leaving the field root. Required marks stripped. Text before the
+  // control that holds a link is navigation ("Powered by <a>PeopleForce</a>" beside a footer locale select), not a
+  // caption; a link inside the text AFTER a checkbox is the consent wording itself ("I agree to the <a>Policy</a>").
   const nearbyText = (el, fieldRoot, following) => {
     const controls = `${FIELD_CONTROLS}, button`;
-    const scan = (start, step) => {
+    const scan = (start, step, stop) => {
       for (let sibling = start; sibling; sibling = step(sibling)) {
-        if (sibling.matches(controls) || sibling.querySelector(controls))
-          return '';
+        if (sibling.matches(stop) || sibling.querySelector(stop)) return '';
         const text = stripMark(textOf(sibling));
         if (text && text.length <= 150) return text;
       }
@@ -373,8 +379,16 @@
     ) {
       const text =
         (following &&
-          scan(node.nextElementSibling, (n) => n.nextElementSibling)) ||
-        scan(node.previousElementSibling, (n) => n.previousElementSibling);
+          scan(
+            node.nextElementSibling,
+            (n) => n.nextElementSibling,
+            controls,
+          )) ||
+        scan(
+          node.previousElementSibling,
+          (n) => n.previousElementSibling,
+          following ? controls : `${controls}, a[href]`,
+        );
       if (text) return text;
     }
     return '';
@@ -623,7 +637,9 @@
     if (id && !UNSTABLE_ID.test(id)) label = `${kind}#${clean(id, 60)}`;
     else {
       const peers = Array.from(
-        container.getRootNode().querySelectorAll(dialog ? SCOPE_DIALOG : 'form'),
+        container
+          .getRootNode()
+          .querySelectorAll(dialog ? SCOPE_DIALOG : 'form'),
       );
       label = `${kind}@${peers.indexOf(container) + 1}`;
     }
