@@ -127,6 +127,31 @@ RSpec.describe Apply::Operation::Stage::FillFields, :browser do
     end
   end
 
+  # Apply 324 (Hurma): the national digits typed after the fixed "+380" span come back as "95 456 11 45" from the
+  # site's mask; the exact read-back took that for a Mismatch and halted required_field_unfillable.
+  context 'with a masked phone input behind a fixed +380 span (generic/masked_phone.html)' do
+    let(:url) { FixtureSite.url('/generic/masked_phone.html') }
+
+    it 'fills the phone through the real read-back with no Mismatch, fallback or recovery turn' do
+      on_fixture_form(ctx, url, form_root: 'form#apply', scope: :submit) do |session, fields|
+        name = fixture_field(fields, 'ПІБ')
+        tel = fixture_field(fields, 'Телефон')
+        national = Apply::Operation::Answer::CoerceValue.call(field: tel, value: phone).model
+        expect(tel).to have_attributes(kind: 'tel', widget: 'text', prefix: '+380', required: true)
+        expect(national).to eq(phone.delete_prefix('+380'))
+        ctx.fields = fields
+        apply.update!(answers: { name.id => answer_entry('Jane Doe', source: 'fact', confidence: 1.0),
+                                 tel.id => answer_entry(national, source: 'fact', confidence: 1.0) })
+
+        expect(described_class.call(ctx:)[:step_result]).to eq('filled' => 2, 'unfilled' => [], 'pages' => 1)
+        expect(ctx.scratch.trace.pluck('event')).not_to include('widget_fallback', 'recover_turn', 'field_unrecovered')
+        expect(session.probe(:read_value, tel.target)['value'])
+          .to eq([ national[0, 2], national[2, 3], national[5, 2], national[7, 2] ].join(' '))
+        expect(a_request(:post, gemini)).not_to have_been_made
+      end
+    end
+  end
+
   it 'never advances past page 1 while a required page-1 field is left empty' do
     on_fixture_form(ctx, FixtureSite.url('/wizard.html'), form_root: 'form#apply', scope: :submit) do |_session, fields|
       ctx.fields = fields

@@ -25,6 +25,18 @@ RSpec.describe Apply::Ai::Prompt::RecoverField do
     expect(prompt.system).to include('ONE field', 'only click or press', 'never see it', ApplyMate::Ai::Prompt::Base::OPEN_MARK)
   end
 
+  # Apply 324: the AI gave up on a masked phone because the field was "already filled"; formatting never causes a
+  # Mismatch, so a filled field that disagrees holds other characters.
+  context 'when the field shows another value without being invalid' do
+    let(:read_back) { Apply::Widget::Base::ReadBack.new(displayed: 'Kyiv Poly', invalid: false, error_text: nil) }
+
+    it 'says that <filled> is not the value and that mask formatting is already ignored' do
+      expect(text).to include('PROBLEM the field shows something other than the value. <filled> does not mean it holds the value',
+                              'dial code an input mask adds')
+      expect(text).not_to include(wanted, 'Kyiv Poly')
+    end
+  end
+
   it 'lists the field elements with the shared element line, new ones marked, inside one untrusted block' do
     expect(text).to include('FIELD autocomplete required   TURN 1/2', 'PROBLEM the field reports itself invalid')
     expect(text.scan(ApplyMate::Ai::Prompt::Base::OPEN_MARK).size).to eq(1)

@@ -70,6 +70,33 @@ RSpec.describe Apply::Operation::Engine::Redact do
     expect(redact("call #{international} or #{national}")).to eq('call {{phone}} or {{phone}}')
   end
 
+  it 'masks the +380 spaced, the national and the parenthesised format' do
+    digits = unique_phone.delete_prefix('+380')
+    spaced = "+380 #{digits[0, 2]} #{digits[2, 3]} #{digits[5, 2]} #{digits[7, 2]}"
+    parenthesised = "(0#{digits[0, 2]}) #{digits[2, 3]}-#{digits[5, 2]}-#{digits[7, 2]}"
+
+    expect(redact("a #{spaced} b 0#{digits} c #{parenthesised} d")).to eq('a {{phone}} b {{phone}} c {{phone}} d')
+  end
+
+  # Every trace entry carries `at` (Time#iso8601(3)); the phone rule once turned it into "{{phone}}T18:49:20...".
+  it 'keeps ISO-8601 timestamps and dates intact' do
+    at = Time.zone.now.iso8601(3)
+    text = { 'at' => at, 'event' => 'widget_fallback' }.to_s
+
+    expect(redact(text)).to eq(text)
+    expect(redact('due 2026-10-09, posted 09.10.2026, seen 2026-10-09 18:49:20 +0300 (10/09/2026)'))
+      .to eq('due 2026-10-09, posted 09.10.2026, seen 2026-10-09 18:49:20 +0300 (10/09/2026)')
+  end
+
+  it 'masks a phone next to a timestamp without eating the timestamp' do
+    phone = unique_phone
+    at = Time.zone.now.iso8601
+
+    expect(redact("#{at} call #{phone}")).to eq("#{at} call {{phone}}")
+    expect(redact("#{at.first(10)} #{phone}")).to eq("#{at.first(10)} {{phone}}")
+    expect(redact("id 12 #{at}")).to eq("id 12 #{at}")
+  end
+
   it 'leaves short numbers alone' do
     expect(redact('HTTP 422 on step 3')).to eq('HTTP 422 on step 3')
   end

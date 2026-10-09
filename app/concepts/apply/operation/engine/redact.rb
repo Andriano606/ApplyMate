@@ -9,13 +9,22 @@
 #      parameters csrfmiddlewaretoken / sessionid / code (a provider error message carries its request URL: Gemini's
 #      has ?key=<API key>)
 #   3. the apply's own secrets are replaced by placeholders: source profile session id, user email
-#   4. any other email address and phone-like digit run is replaced by a placeholder
+#   4. any other email address and phone-like digit run is replaced by a placeholder; a date or an ISO-8601 timestamp
+#      (every trace entry's `at`) is a digit run too, so DATE is matched first and kept (a phone run stops before one)
 class Apply::Operation::Engine::Redact < ApplyMate::Operation::Base
   MAX_LENGTH = 2_000
   HEADER_LINE = /^[ \t]*(?:cookie|set-cookie|authorization)[ \t]*:.*(?:\r?\n|\z)/i
   SESSION_PARAM = /(csrfmiddlewaretoken|sessionid|code)=[^;&?#,"'\s]+/i
   EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/
-  PHONE = /\+?\d[\d\s().-]{8,}\d/
+  # 2026-10-09, 2026-10-09T18:49:20.733+03:00, 2026-10-09 18:49:20 +0300, 09.10.2026, 10/09/2026 18:49. Only a
+  # 19xx / 20xx year with a valid month and day counts, never inside a longer digit run.
+  DAY = '(?:0?[1-9]|[12]\\d|3[01])'
+  MONTH = '(?:0?[1-9]|1[0-2])'
+  YEAR = '(?:19|20)\\d{2}'
+  TIME = '(?:[T ]\\d{1,2}:\\d{2}(?::\\d{2}(?:[.,]\\d+)?)?(?:\\s?(?:Z|[+-]\\d{2}:?\\d{2})(?!\\d))?)?'
+  DATE = /(?<![\d+])(?:#{YEAR}[-.\/]#{MONTH}[-.\/]#{DAY}|#{DAY}[-.\/]#{DAY}[-.\/]#{YEAR})#{TIME}(?!\d)/
+  PHONE = /\+?\(?(?!#{DATE})\d(?:(?!#{DATE})[\d\s().-]){8,}\d/
+  DATE_OR_PHONE = /(#{DATE})|#{PHONE}/
   MIN_SECRET_LENGTH = 6 # a blank or 1-char "session id" must not rewrite every matching character
 
   def perform!(text:, apply: nil, max_length: MAX_LENGTH, **)
@@ -36,6 +45,6 @@ class Apply::Operation::Engine::Redact < ApplyMate::Operation::Base
   end
 
   def generic(text)
-    text.gsub(EMAIL, '{{email}}').gsub(PHONE, '{{phone}}')
+    text.gsub(EMAIL, '{{email}}').gsub(DATE_OR_PHONE) { ::Regexp.last_match(1) || '{{phone}}' }
   end
 end

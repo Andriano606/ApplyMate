@@ -3,8 +3,8 @@
 # A contenteditable editor (BuildFieldInventory's `rich_text`: a cover-letter box that is a div, not a textarea):
 # click, select everything (Control+a) so the old text is replaced, then `type` in the submit scope (Text's rule:
 # jitter, values up to TYPE_LIMIT) or `fill` (Playwright fills contenteditable hosts too). Fallback: `fill`.
-# Read-back: the host's innerText (`value` of read_value.js, not the 500-character `displayed`), whitespace squished,
-# must equal the answer exactly (Text#accepts?).
+# Read-back: the host's innerText (`value` of read_value.js, not the 500-character `displayed`), compared by
+# Text#accepts? (whitespace squished, else exact).
 class Apply::Widget::ContentEditable < Apply::Widget::Text
   SELECT_ALL = 'Control+a'
 

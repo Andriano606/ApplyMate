@@ -63,7 +63,10 @@ class Apply::Ai::Prompt::RecoverField < ApplyMate::Ai::Prompt::Base
     return 'nothing matching the value could be picked (no suggestion / option matched)' if read_back.nil?
     return 'the field reports itself invalid (see ERROR TEXT)' if read_back.invalid
 
-    'the field shows something other than the value'
+    'the field shows something other than the value. <filled> does not mean it holds the value: the check already ' \
+      'ignores formatting (extra whitespace; for a phone or a number also the spaces, dashes, parentheses and dial ' \
+      'code an input mask adds), so other characters are there (the value was cut, keys were lost, a country or ' \
+      'format selector changed it)'
   end
 
   def page_lines
