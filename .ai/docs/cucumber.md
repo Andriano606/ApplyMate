@@ -28,7 +28,7 @@ Values are auto-coerced: integers (`42`), floats (`3.14`), booleans (`true`/`fal
 ```gherkin
 # Update the last record of that model
 Given the last Apply record has:
-  | status | completed |
+  | state | completed |
 
 # Update by attribute value
 Given the Vacancy with title "Rails Developer" has:
@@ -46,9 +46,21 @@ Given the last User has the following SourceProfile records:
 ### OAuth / session setup
 
 ```gherkin
-Given the OAuth user is "Test User" with email "test@example.com"
+Given the OAuth user is "Test User" with email "<unique_email:user>"
 Given I am logged in as Andrii Kuluev
 ```
+
+### Unique emails and phones
+
+Never hardcode a test email or phone number. Gherkin cannot call Ruby, so write a placeholder,
+`<unique_email:NAME>` or `<unique_phone:NAME>` (`features/support/unique_contact.rb`). The first use in a
+scenario generates the value; later uses of the same `NAME` in that scenario return the same one; the next scenario
+gets a new one. Placeholders are expanded in table-step cell values, the `the OAuth user is ... with email` step,
+the `the X with attr "..." has:` lookup value, the filled-form table of `I have a ... apply ... with the filled form:`
+and the expected value of `the last Apply card shows the field ... filled with ...`. A step that takes a free-text
+value and should accept placeholders calls `expand_unique(value)`. "I am logged in as Andrii Kuluev" uses a fresh
+address per scenario too (a `Before` hook in `features/support/unique_contact.rb`). Specs use the same generators
+as `unique_email` / `unique_phone` (`spec/support/unique_contact.rb`).
 
 ### Records the table step cannot build
 
@@ -80,12 +92,23 @@ with FactoryBot for the user logged in by `I am logged in as Andrii Kuluev`
 (`features/steps/apply/given.rb`):
 
 ```gherkin
-Given I have a "failed_sending_cv" apply for the last Vacancy
+Given I have a "failed" apply for the last Vacancy               # state: queued|running|needs_human|completed|failed|...; traits fill failure/submitted_at
+When I click "Я подався вручну" on the last Apply card and confirm   # exit buttons post through Turbo with a confirm dialog
 Given I have a "completed" apply with a CV for the last Vacancy   # also lists it in the CV section
 Given I have a generated CV for the last Vacancy                    # a manual VacancyCv, created a day ago
 Given I have a "completed" apply for the last Vacancy with the filled form:
   | name | tag      | type     | label   | value       |
   | why  | textarea | textarea | Why us? | I love Ruby |
+```
+
+A needs_review apply for `Apply::Component::ReviewForm` (columns: `id`, `kind`, `label`, `value`, `source`), and a stub for the
+engine job that approving enqueues (Cucumber runs jobs inline, so without it the real engine would start):
+
+```gherkin
+Given the apply engine job is not run
+And I have a "needs_review" apply for the last Vacancy waiting for review with the answers:
+  | id  | kind | label     | value | source |
+  | why | text | Why Ruby? | Money | ai     |
 ```
 
 ## When Steps
@@ -221,10 +244,10 @@ Then I see error "can't be blank" under "vacancy[title]"
 
 ```gherkin
 Then the last Apply record should have:
-  | status | completed |
+  | state | completed |
 
-Then the Apply with status "pending" record should have:
-  | status | completed |
+Then the Apply with state "queued" record should have:
+  | state | completed |
 
 Then the following Vacancy records should exist:
   | title           | company_name |
@@ -271,7 +294,7 @@ Documents indexed via `after_commit` callbacks **do** fire in Cucumber (no trans
 `rspec/wait` is included globally via `features/support/wait_for.rb`. Use it in custom steps:
 
 ```ruby
-wait_for { Apply.last&.status }.to eq("completed")
+wait_for { Apply.last&.state }.to eq("completed")
 ```
 
 `Capybara.default_max_wait_time` is set to **30 seconds** in `features/support/jobs.rb`.

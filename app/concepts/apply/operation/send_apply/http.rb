@@ -1,49 +1,53 @@
 # frozen_string_literal: true
 
 class Apply::Operation::SendApply::Http < Apply::Operation::Base
-  def start_status
-    :sending_cv
-  end
+  stage :submit
 
-  def error_status
-    :failed_sending_cv
-  end
-
-  def success_status
-    :completed
-  end
+  LOGIN_PATH = %r{/login|/signin|/auth}i
 
   private
 
-  def run!(apply:, handler:, **)
+  # The claim is taken after everything that can fail without side effects (payload, CV download) and right
+  # before the POST. From then on every outcome but a 2xx or a success redirect lands in submit_unverified
+  # (claim rule), except a redirect to the login page: deterministic proof the board never accepted the POST,
+  # so the claim is released and the user is asked to refresh the session.
+  def run!(apply:, handler:, ctx:, **)
     # Submit through the source's own client so a Cloudflare-protected board sees the
     # same TLS fingerprint that fetched the form (AsyncHttp would get a 403 challenge).
     client     = apply.vacancy.source.http_client(request_timeout: 30)
     session_id = apply.source_profile.session_id
 
-    cookie_header = build_cookie_header(session_id, apply.cookies)
+    cookie_header = build_cookie_header(apply.vacancy.source.session_cookie_name, session_id, apply.cookies)
 
     headers = { 'Referer' => apply.vacancy.url }
     headers['Cookie'] = cookie_header if cookie_header.present?
+    payload = handler.build_payload(apply)
 
-    response = client.post_multipart(apply.action, payload: handler.build_payload(apply), headers:)
-    raise 'Submission failed — no response from server' if response.nil?
-
-    if (200..299).cover?(response.status)
-    elsif [ 301, 302, 303 ].include?(response.status)
-      location      = response.headers['location'].to_s
-      vacancy_uri   = URI.parse(apply.vacancy.url).path.chomp('/')
-      location_uri  = URI.parse(location)
-      location_path = location_uri.path.chomp('/')
-      same_page_no_success = location_path == vacancy_uri && !location_uri.query.to_s.include?('applied')
-
-      raise "Submission rejected — redirected to: #{location}" if location.match?(%r{/login|/signin|/auth}i) || same_page_no_success
-    else
-      raise "HTTP #{response.status}: #{response.body[0..500]}"
-    end
+    Apply::Operation::Engine::ClaimSubmit.call(ctx:)
+    verify_response(apply, client.post_multipart(apply.action, payload:, headers:))
   end
 
-  def build_cookie_header(session_id, captured_cookies)
+  # 2xx or a redirect elsewhere: submitted (the Runner's Finish records completed + submitted_at).
+  def verify_response(apply, response)
+    halt!(:outcome_unknown, detail: 'no response') if response.nil?
+    return if (200..299).cover?(response.status)
+    return verify_redirect(apply, response.headers['location'].to_s) if [ 301, 302, 303 ].include?(response.status)
+
+    halt!(:outcome_unknown, detail: "HTTP #{response.status}")
+  end
+
+  def verify_redirect(apply, location)
+    halt!(:session_expired, detail: location, definitive: true) if location.match?(LOGIN_PATH)
+
+    vacancy_path  = URI.parse(apply.vacancy.url).path.chomp('/')
+    location_uri  = URI.parse(location)
+    same_page_no_success = location_uri.path.chomp('/') == vacancy_path && !location_uri.query.to_s.include?('applied')
+    halt!(:outcome_unknown, detail: location) if same_page_no_success
+  end
+
+  # Captured form-page cookies first, then the profile's session under the platform's
+  # cookie name — so the authenticated session always wins over an anonymous captured one.
+  def build_cookie_header(session_cookie_name, session_id, captured_cookies)
     jar = {}
 
     captured_cookies.to_s.split(/;\s*/).each do |pair|
@@ -51,7 +55,7 @@ class Apply::Operation::SendApply::Http < Apply::Operation::Base
       jar[name.strip] = value if name.present? && value.present?
     end
 
-    jar['sessionid'] = session_id if session_id.present?
+    jar[session_cookie_name] = session_id if session_id.present?
 
     jar.map { |name, value| "#{name}=#{value}" }.join('; ')
   end

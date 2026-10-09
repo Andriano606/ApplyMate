@@ -53,6 +53,7 @@ gem 'solid_queue'
 gem 'solid_cable'
 gem 'mission_control-jobs'
 gem 'ferrum'
+gem 'playwright-ruby-client', '1.63.0', require: 'playwright' # pinned to browserd's playwright-core; AcquireLease asserts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION == lease.playwright_version
 
 # Reduces boot times through caching; required in config/boot.rb
 gem 'bootsnap', require: false
@@ -75,6 +76,9 @@ gem 'aws-sdk-s3', require: false
 
 # Authorization with Pundit
 gem 'pundit'
+
+# Registered domain of a URL (Answer::ReviewReasons: is the form on a site related to the vacancy?)
+gem 'public_suffix'
 
 # OmniAuth Google OAuth2
 gem 'omniauth-google-oauth2'
@@ -101,6 +105,9 @@ gem 'rubyzip'
 # OpenAPI / Swagger API docs (UI served in /admin)
 gem 'rswag-api'
 gem 'rswag-ui'
+
+# JSON Schema validation of AI answers (ApplyMate::Ai::ResponseSchema::Json)
+gem 'json-schema'
 
 group :development, :test do
   # Load environment variables from .env

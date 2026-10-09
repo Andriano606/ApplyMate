@@ -14,7 +14,7 @@ RSpec.describe Apply::Component::StatusBadge, type: :component do
   end
 
   context 'when the user has applied' do
-    let(:apply) { create(:apply, user:, vacancy:, status: :filling_form) }
+    let(:apply) { create(:apply, :running, user:, vacancy:, stage: 'fill_form') }
 
     # The badge is itself a turbo-frame (and sits in the 'vacancy-search' frame on the index),
     # so the link has to break out to the full vacancy page.
@@ -23,7 +23,7 @@ RSpec.describe Apply::Component::StatusBadge, type: :component do
 
       expect(link['href']).to eq(vacancy_path(vacancy, anchor: "apply_#{apply.hashid}"))
       expect(link['data-turbo-frame']).to eq('_top')
-      expect(link.text).to include(I18n.t('apply.status.filling_form'))
+      expect(link.text).to include(I18n.t('apply.stage.fill_form'))
     end
   end
 
@@ -40,15 +40,15 @@ RSpec.describe Apply::Component::StatusBadge, type: :component do
 
   context 'without a preset apply' do
     it 'shows the latest apply of the user for the vacancy' do
-      create(:apply, user:, vacancy:, status: :completed, created_at: 2.days.ago)
-      latest = create(:apply, user:, vacancy:, status: :failed_sending_cv, created_at: 1.day.ago)
-      create(:apply, vacancy:, status: :completed)
+      create(:apply, :completed, user:, vacancy:, created_at: 2.days.ago)
+      latest = create(:apply, :failed, user:, vacancy:, created_at: 1.day.ago)
+      create(:apply, :completed, vacancy:)
 
       render_inline(described_class.new(vacancy:, user:))
 
       link = page.native.at_css('a')
       expect(link['href']).to eq(vacancy_path(vacancy, anchor: "apply_#{latest.hashid}"))
-      expect(link.text).to include(I18n.t('apply.status.failed_sending_cv'))
+      expect(link.text).to include(I18n.t('apply.state.failed'))
     end
   end
 end

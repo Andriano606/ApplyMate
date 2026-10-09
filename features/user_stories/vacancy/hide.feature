@@ -5,7 +5,7 @@ Feature: Hiding vacancies
   appeared/disappeared counters of saved filters.
 
   Background:
-    Given the OAuth user is "Andrii" with email "andrii@example.com"
+    Given the OAuth user is "Andrii" with email "<unique_email:andrii>"
     And a job source exists
     And the last Source has the following Vacancy records:
       | external_id | title            | company_name | description       |

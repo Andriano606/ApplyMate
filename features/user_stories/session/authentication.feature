@@ -6,14 +6,14 @@ Feature: Google authentication
   So that I can access the application
 
   Scenario: User signs in with Google
-    Given the OAuth user is "Test User" with email "test@example.com"
+    Given the OAuth user is "Test User" with email "<unique_email:user>"
     When I open the home page
     And I click on "Увійти"
     And I click on "Увійти через Google"
     Then I see notice "Ви успішно увійшли"
 
   Scenario: User signs out
-    Given the OAuth user is "Test User" with email "test@example.com"
+    Given the OAuth user is "Test User" with email "<unique_email:user>"
     When I open the home page
     And I click on "Увійти"
     And I click on "Увійти через Google"

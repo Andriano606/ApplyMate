@@ -39,7 +39,17 @@ Rails.application.routes.draw do
   end
   resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :ai_integrations, only: [ :index, :new, :create, :edit, :update, :destroy ]
-  resources :applies, only: [ :index, :show, :new, :create, :destroy ]
+  resources :applies, only: [ :index, :show, :new, :create, :destroy ] do
+    member do
+      post :resume
+      post :cancel
+      post :approve_review
+      post :mark_outcome
+      post :provide_input
+    end
+  end
+  get 'artifacts/:owner/:id/:name', to: 'artifacts#show', as: :artifact,
+                                    constraints: { owner: /apply|vacancy_cv|apply_step/, name: /cv|screenshot|[1-9]\d?/ }
   resources :source_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :prompts, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]

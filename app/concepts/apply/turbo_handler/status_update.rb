@@ -13,8 +13,9 @@ class Apply::TurboHandler::StatusUpdate < ApplyMate::TurboHandler::Base
     view_context.turbo_frame_tag(frame_id(vacancy, user), &block)
   end
 
-  # A pipeline step changed one apply: badge, action box and only that apply's card. Re-rendering the whole
-  # panel here would collapse the accordions / reset the tabs the user opened on the other cards every step.
+  # The Runner changed one apply (stage or lifecycle transition): badge, action box and only that apply's card.
+  # Re-rendering the whole panel here would collapse the accordions / reset the tabs the user opened on the other
+  # cards every step.
   def self.broadcast(apply)
     latest = broadcast_summary(apply.vacancy, apply.user)
     Apply::TurboHandler::VacancyIndex.broadcast_card(apply, open: apply == latest)

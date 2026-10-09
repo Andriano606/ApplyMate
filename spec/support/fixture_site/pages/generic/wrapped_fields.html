@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Wrapped fields</title>
+  <style>
+    .pv-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #eee; }
+    .site-footer { margin-top: 400px; }
+  </style>
+</head>
+<body>
+  <!-- Hurma (Vue 3 / Vuetify): each text input sits 7 levels below the item that holds its title and "*", the form's
+       own submit is in a <footer> INSIDE the <form>, the phone input follows a fixed "+380" dial-code span. Ashby:
+       each field root has a description block beside the label (no aria-describedby). -->
+  <header class="site-header"><nav><a href="/careers">Careers</a></nav></header>
+  <main>
+    <form id="response-form" novalidate>
+      <div class="response-field-item">
+        <div class="response-form-item-title">First name, last name <span>*</span></div>
+        <div class="response-form-item">
+          <div class="response-form-item">
+            <div class="v-input">
+              <div class="v-input__control">
+                <div class="v-field">
+                  <div class="v-field__field">
+                    <input id="input-v-5" type="text">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="response-field-item">
+        <div class="response-form-item-title">Email <span>*</span></div>
+        <div class="response-form-item">
+          <div class="response-form-item">
+            <div class="v-input">
+              <div class="v-input__control">
+                <div class="v-field">
+                  <div class="v-field__field">
+                    <input id="input-v-7" type="email">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="response-field-item">
+        <div class="response-form-item-title">Phone number <span>*</span></div>
+        <div class="response-form-item">
+          <div class="phone-input">
+            <span class="country-code">+380</span>
+            <input id="phone" class="phone-number-input" type="tel" placeholder="">
+          </div>
+        </div>
+      </div>
+
+      <div class="ashby-application-form-field-entry">
+        <label class="ashby-application-form-question-title" for="d8cc3024-source">How did you get to know Preply?</label>
+        <div class="ashby-application-form-question-description"><p>Share with us the one source that led you to apply to Preply</p></div>
+        <input id="d8cc3024-source" name="d8cc3024-source" type="text">
+      </div>
+
+      <div class="ashby-application-form-field-entry">
+        <label class="ashby-application-form-question-title" for="f1e2-linkedin">LinkedIn</label>
+        <div class="ashby-application-form-question-description"><p>Drop your LinkedIn profile link here. We may use it along the way (i.e. https://www.linkedin.com/in/your-profile/)</p></div>
+        <input id="f1e2-linkedin" name="f1e2-linkedin" type="text">
+      </div>
+
+      <footer class="v-footer pv-footer">
+        <label><input id="footer-consent" type="checkbox" required> I consent to the processing of my personal data</label>
+        <button type="submit" id="send">OK</button>
+      </footer>
+    </form>
+  </main>
+  <footer class="site-footer">
+    <form id="newsletter">
+      <input id="newsletter-email" type="email" placeholder="Your email">
+      <button type="submit">Subscribe</button>
+    </form>
+  </footer>
+  <script>
+    document.getElementById('response-form').addEventListener('submit', (event) => event.preventDefault());
+    document.getElementById('newsletter').addEventListener('submit', (event) => event.preventDefault());
+  </script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Custom widgets (recorded from live Generic forms)</title>
+  <style>
+    .items, .hidden-file { display: none; }
+    .items.open { display: block; }
+    .dropdown-no-results, .dropdown-loading-results { display: none; }
+    .dropdown-no-results.shown { display: block; }
+    .hidden-file { position: absolute; clip: rect(0 0 0 0); }
+    .item, .dropdown-location { padding: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Custom widgets</h1>
+  <form id="apply" action="/submit" method="post">
+    <!-- PeopleForce: an Alpine select (x-data selectComponentController) = a readonly input showing the current value
+         and a hidden list of `data-value` items, toggled by a click on the wrapper; Escape does nothing. -->
+    <div class="form-group" id="currency-group">
+      <label class="required" for="currency">Валюта</label>
+      <div x-data="selectComponentController" data-value="USD">
+        <div title="USD - United States Dollar">
+          <div class="select-wrapper" id="currency-wrapper"><input value="USD - United States Dollar" title="USD - United States Dollar" type="text" readonly id="currency"></div>
+          <div class="items" id="currency-items">
+            <div class="item" data-value="AED" data-text="AED - UAE Dirham">AED - UAE Dirham</div>
+            <div class="item" data-value="EUR" data-text="EUR - Euro">EUR - Euro</div>
+            <div class="item" data-value="USD" data-text="USD - United States Dollar">USD - United States Dollar</div>
+          </div>
+        </div>
+      </div>
+      <input type="hidden" name="currency_code" value="USD" id="currency-code">
+    </div>
+
+    <!-- Headless UI Listbox: a button trigger showing its value, a role=listbox popup; Escape closes it. -->
+    <div class="field" id="country-field">
+      <label id="country-label">Country</label>
+      <button type="button" id="country-trigger" aria-haspopup="listbox" aria-labelledby="country-label" aria-expanded="false">Select...</button>
+      <ul role="listbox" id="country-list" hidden>
+        <li role="option">Ukraine</li>
+        <li role="option">Poland</li>
+      </ul>
+    </div>
+
+    <!-- Lever: an ARIA-less typeahead; the pick fills the hidden selectedLocation. -->
+    <label class="lever-location">
+      <div class="application-label">Current location</div>
+      <div class="application-field">
+        <input class="location-input" id="location-input" type="text" maxlength="100" name="location">
+        <input id="selected-location" type="hidden" name="selectedLocation">
+        <div class="dropdown-container"><div class="dropdown-results" id="location-results"></div>
+          <div class="dropdown-no-results" id="location-none">No location found. Try entering a different location</div>
+          <div class="dropdown-loading-results"><span>Loading</span></div>
+        </div>
+      </div>
+    </label>
+
+    <!-- A typeahead-looking input whose suggestion container never fills: a plain text field after all. -->
+    <div class="field">
+      <label for="city">City</label>
+      <div class="city-wrap"><input type="text" id="city" name="city"><div class="autocomplete-results"></div></div>
+    </div>
+
+    <!-- Ashby: an "Upload file" button beside its clipped file input. -->
+    <div class="upload" id="cv-upload">
+      <label for="cv">Resume</label>
+      <input type="file" id="cv" name="cv" class="hidden-file" tabindex="-1">
+      <div><button type="button" id="cv-button">Upload file</button></div>
+    </div>
+
+    <!-- Lever: a chooser anchor wrapping the file input. -->
+    <label class="lever-cover">
+      <div class="application-label">Cover letter</div>
+      <a href="#" id="cover-chooser"><span class="default-label">ATTACH COVER LETTER</span><input id="cover-input" name="cover" type="file"></a>
+    </label>
+
+    <button type="submit">Submit application</button>
+  </form>
+  <script>
+    const currency = document.getElementById('currency');
+    const currencyItems = document.getElementById('currency-items');
+    document.getElementById('currency-wrapper').addEventListener('click', () => currencyItems.classList.toggle('open'));
+    currencyItems.querySelectorAll('.item').forEach((item) => item.addEventListener('click', () => {
+      currency.value = item.dataset.text;
+      currency.title = item.dataset.text;
+      document.getElementById('currency-code').value = item.dataset.value;
+      currencyItems.classList.remove('open');
+    }));
+
+    const trigger = document.getElementById('country-trigger');
+    const countries = document.getElementById('country-list');
+    const setOpen = (open) => { countries.hidden = !open; trigger.setAttribute('aria-expanded', String(open)); };
+    trigger.addEventListener('click', () => setOpen(countries.hidden));
+    trigger.addEventListener('keydown', (event) => { if (event.key === 'Escape') setOpen(false); });
+    countries.querySelectorAll('[role=option]').forEach((option) => option.addEventListener('click', () => {
+      trigger.textContent = option.textContent;
+      setOpen(false);
+    }));
+
+    const PLACES = ['Kyiv, Kyiv City, Ukraine', 'Kyiv Oblast, Ukraine', 'Lviv, Lviv Oblast, Ukraine'];
+    const locationInput = document.getElementById('location-input');
+    const results = document.getElementById('location-results');
+    const none = document.getElementById('location-none');
+    let timer = null;
+    locationInput.addEventListener('input', () => {
+      clearTimeout(timer);
+      results.innerHTML = '';
+      none.classList.remove('shown');
+      timer = setTimeout(() => {
+        const query = locationInput.value.trim().toLowerCase();
+        if (query.length < 2) return;
+        const found = PLACES.filter((place) => place.toLowerCase().includes(query));
+        if (!found.length) none.classList.add('shown');
+        found.forEach((place) => {
+          const row = document.createElement('div');
+          row.className = 'dropdown-location';
+          row.textContent = place;
+          row.addEventListener('click', () => {
+            locationInput.value = place;
+            document.getElementById('selected-location').value = place;
+            results.innerHTML = '';
+          });
+          results.appendChild(row);
+        });
+      }, 200);
+    });
+  </script>
+</body>
+</html>

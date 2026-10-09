@@ -7,7 +7,7 @@ RSpec.describe Apply::Operation::VacancyIndex, type: :operation do
   let(:vacancy)      { create(:vacancy, source: create(:source)) }
   let(:params)       { { vacancy_id: vacancy.hashid } }
 
-  let!(:older_apply) { create(:apply, user: current_user, vacancy:, created_at: 2.days.ago) }
+  let!(:older_apply) { create(:apply, :completed, user: current_user, vacancy:, created_at: 2.days.ago) }
   let!(:newer_apply) { create(:apply, user: current_user, vacancy:, created_at: 1.day.ago) }
 
   before do

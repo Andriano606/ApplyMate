@@ -23,26 +23,48 @@ services:
       - "${DB_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-  chrome:
-    build: docker/chrome_vnc
-    image: chrome-vnc:latest
-    container_name: apply-mate-chrome-vnc
-    shm_size: "2gb"          # Chrome потребує достатньо shared memory
+  # Camoufox lease daemon for the apply engine (.ai/docs/browser.md). Image tag = pinned
+  # triple + browserd revision, keep in sync with docker/browserd/Dockerfile ARGs and package.json. This is the
+  # browserd `bin/dev` applies use (BROWSERD_URL=http://localhost:9300): it loads real
+  # third-party pages, so EGRESS_ALLOW_RANGES stays unset and Firefox reaches public
+  # addresses only (no LAN, no docker host).
+  browserd: &browserd
+    build: docker/browserd
+    image: andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2
+    init: true                 # tini reaps Firefox children
+    cap_add: [NET_ADMIN]       # entrypoint installs the egress firewall, then drops privileges
+    shm_size: 1g
+    tmpfs:
+      - /tmp:size=1g           # Playwright profiles; a hard kill cannot fill the disk
+    pids_limit: 2048           # counts threads; ~250-300 per Camoufox on an iframe-heavy page
     ports:
-      - "6081:6080"          # noVNC web → відкрий http://localhost:6080/vnc.html
-      - "5901:5900"          # VNC (для VNC-клієнтів типу RealVNC/TigerVNC)
-      - "9224:9222"          # Chrome DevTools Protocol
-    environment:
-      - SCREEN_WIDTH=1440
-      - SCREEN_HEIGHT=1080
-      - SCREEN_DEPTH=24
-      - VNC_PASSWORD=        # Встанови пароль або залиш порожнім
-      - EXTERNAL_CHROME_HOST=localhost:9224
-    volumes:
-      - ./scripts:/app/scripts   # Монтуй свої Python скрипти сюди
-    security_opt:
-      - seccomp:unconfined
+      - "127.0.0.1:9300-9303:9300-9303"   # control API + one ws port per lease slot
+    environment: &browserd_env
+      BROWSERD_TOKEN: ${BROWSERD_TOKEN:-dev-browserd-token}
+      MAX_BROWSERS: ${APPLY_SLOTS:-1}
+      LEASE_TTL_S: "1800"
+      HEADLESS: "true"
+      BROWSERD_OS: windows
+      BROWSERD_ADVERTISE_HOST: localhost
     restart: unless-stopped
+
+  # Test-only browserd for the :browser specs (BROWSERD_URL=http://localhost:9310 in
+  # .env.test.local). Its EGRESS_ALLOW_RANGES opens exactly ONE private address, the docker
+  # host (host.docker.internal resolved to a /32 at start), so Firefox can load the
+  # FixtureSite that rspec serves there. Never point BROWSERD_URL of `bin/dev` at it.
+  # 3 slots so a few workspaces can run :browser specs at once.
+  browserd-test:
+    <<: *browserd
+    ports:
+      - "127.0.0.1:9310-9313:9310-9313"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      <<: *browserd_env
+      PORT: "9310"
+      WS_PORT_BASE: "9311"
+      MAX_BROWSERS: "3"
+      EGRESS_ALLOW_RANGES: host.docker.internal
 
   elasticsearch:
     image: elasticsearch:8.13.0

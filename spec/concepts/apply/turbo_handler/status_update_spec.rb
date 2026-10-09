@@ -16,12 +16,12 @@ RSpec.describe Apply::TurboHandler::StatusUpdate do
     messages.map { |message| message[/target="([^"]+)"/, 1] }
   end
 
-  describe '.broadcast (a pipeline step changed one apply)' do
+  describe '.broadcast (the Runner changed one apply)' do
     let(:filled_inputs) { [ { 'tag' => 'textarea', 'label' => 'Why us?', 'value' => 'Because' } ] }
 
     it 'replaces the badge, the action box and only that apply card, never the whole panel' do
-      create(:apply, user:, vacancy:, status: :completed, created_at: 1.day.ago)
-      apply = create(:apply, user:, vacancy:, status: :filling_form, filled_inputs:)
+      create(:apply, :completed, user:, vacancy:, created_at: 1.day.ago)
+      apply = create(:apply, :running, user:, vacancy:, filled_inputs:)
 
       described_class.broadcast(apply)
 
@@ -35,8 +35,8 @@ RSpec.describe Apply::TurboHandler::StatusUpdate do
     end
 
     it 'renders an older apply card collapsed, as the panel does' do
-      older = create(:apply, user:, vacancy:, status: :failed_filling_form, filled_inputs:, created_at: 1.day.ago)
-      create(:apply, user:, vacancy:, status: :completed)
+      older = create(:apply, :completed, user:, vacancy:, filled_inputs:, created_at: 1.day.ago)
+      create(:apply, :completed, user:, vacancy:, created_at: 1.hour.ago)
 
       described_class.broadcast(older)
 
@@ -46,9 +46,21 @@ RSpec.describe Apply::TurboHandler::StatusUpdate do
     end
   end
 
+  describe '.broadcast for a needs_review apply' do
+    it 'renders the review form inside the card without current_user' do
+      apply = create(:apply, user:, vacancy:, state: :needs_review, failure: { code: 'review', kind: 'human', detail: 'low_confidence' },
+                             fields: [ answer_field(id: 'name', label: 'Full name').to_h ], answers: { 'name' => answer_entry('Ada') })
+
+      described_class.broadcast(apply)
+
+      card = Nokogiri::HTML.fragment(messages.last).at_css("article#apply_#{apply.hashid}")
+      expect(card.at_css('form[action$="/approve_review"] input[name="answers[name]"]')['value']).to eq('Ada')
+    end
+  end
+
   describe '.refresh (applies added or removed)' do
     it 'replaces the badge, the action box and the whole applies panel' do
-      apply = create(:apply, user:, vacancy:, status: :fetching_form)
+      apply = create(:apply, :running, user:, vacancy:, stage: 'fetch_form')
 
       described_class.refresh(vacancy, user)
 

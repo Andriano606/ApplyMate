@@ -1,0 +1,17 @@
+# Egress proxy policy for every Camoufox lease. Rendered by entrypoint.sh into
+# /run/browserd/smokescreen.yaml; __ALLOW_RANGES__ becomes a YAML flow list built from
+# EGRESS_ALLOW_RANGES (empty = [] = production-safe default).
+#
+# smokescreen resolves DNS itself and, on top of the ranges below, always denies
+# non-global-unicast (loopback, link-local, multicast), RFC1918 / ULA private ranges,
+# CGNAT and IPv4-embedded IPv6 addresses, plus the container's own interface addresses.
+# No ACL file: every role-less client may reach any PUBLIC address.
+ip: 127.0.0.1
+port: 4750
+allow_missing_role: true
+deny_ranges:
+  - 100.64.0.0/10 # CGNAT (smokescreen denies it by default too; explicit on purpose)
+  - 0.0.0.0/8 # "this network": global-unicast per Go, never a real destination
+# Overrides the private-range denies. Test only (docker-compose `browserd-test` and CI allow
+# host.docker.internal/32 for the fixture_site); dev `browserd` and staging never set it.
+allow_ranges: __ALLOW_RANGES__

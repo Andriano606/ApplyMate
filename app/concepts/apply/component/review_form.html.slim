@@ -1,0 +1,80 @@
+section(id=form_id class=SECTION_CLASSES *data_test_id('apply-review-form'))
+  h3.text-base.font-semibold.text-gray-900.dark:text-gray-100 = I18n.t('apply.review.title')
+  p.mt-1.text-sm.text-gray-600.dark:text-gray-400 = I18n.t('apply.review.answers_hint')
+  - if form_host
+    p.mt-1.break-all.text-xs.text-gray-500.dark:text-gray-400 *data_test_id('apply-review-origin')
+      = I18n.t('apply.review.origin')
+      '
+      span.font-medium.text-gray-700.dark:text-gray-200 = form_host
+
+  - if reasons.any?
+    ul.mt-3.space-y-1.text-sm.text-gray-700.dark:text-gray-300 *data_test_id('apply-review-reasons')
+      - reasons.each do |reason|
+        - if reason == 'foreign_origin'
+          li(class=ALERT_CLASSES role='alert')
+            p.font-semibold = reason_text(reason)
+            - if form_host
+              p.mt-0.5.break-all.text-base.font-bold = form_host
+        - else
+          li.flex.items-start.gap-2
+            = icon(:exclamation_triangle, size: 4, class: 'mt-0.5 shrink-0 text-amber-500')
+            span = reason_text(reason)
+
+  = helpers.form_with(url: helpers.approve_review_apply_path(@apply), method: :post, authenticity_token: false, \
+      class: 'mt-4 space-y-4', data: { controller: 'turbo-form' }) do
+    - rows.each do |field|
+      - id = input_id(field)
+      div(class='space-y-1' data-field-id=field.id *data_test_id('apply-review-field'))
+        .flex.flex-wrap.items-start.justify-between.gap-x-3.gap-y-1
+          - if input_kind(field) == :checkbox
+            span.sr-only = field.label
+          - else
+            label.text-sm.font-medium.text-gray-800.dark:text-gray-200 for=id = field.label
+          - if (chip = source_chip(field))
+            span(class=CHIP_CLASSES *data_test_id('apply-review-source')) = chip
+        - if description(field)
+          p.truncate.text-xs.text-gray-500.dark:text-gray-400 title=description(field) = description(field)
+        - case input_kind(field)
+        - when :file
+          p.text-sm.text-gray-700.dark:text-gray-300 *data_test_id('apply-review-file')
+            = icon(:document_text, size: 4, class: 'mr-1 inline text-indigo-500')
+            = cv_filename
+        - when :textarea
+          = helpers.text_area_tag input_name(field), value(field), id:, rows: 3, class: INPUT_CLASSES, \
+              required: field.required
+        - when :select
+          - if multiple?(field)
+            / A multiple select with nothing selected posts nothing: the blank sentinel makes "clear all" an edit.
+            = helpers.hidden_field_tag "#{input_name(field)}[]", '', id: nil
+            = helpers.select_tag "#{input_name(field)}[]", select_options(field), id:, multiple: true, \
+                class: INPUT_CLASSES
+          - else
+            = helpers.select_tag input_name(field), select_options(field), id:, class: INPUT_CLASSES, \
+                include_blank: !field.required, required: field.required
+        - when :checkbox
+          - if consent?(field)
+            p.text-xs.text-gray-500.dark:text-gray-400 = I18n.t('apply.review.consent_notice')
+          = helpers.hidden_field_tag input_name(field), '0', id: nil
+          label.flex.items-center.gap-2.text-sm.text-gray-700.dark:text-gray-300 for=id
+            = helpers.check_box_tag input_name(field), '1', checked?(field), id:, \
+                class: 'h-4 w-4 rounded border-gray-300 text-indigo-600'
+            span *data_test_id('apply-review-checkbox-label') = field.label
+        - else
+          = helpers.text_field_tag input_name(field), value(field), id:, type: text_type(field), \
+              step: number_step(field), maxlength: field.max_length.presence, class: INPUT_CLASSES, \
+              required: field.required
+
+    - if duplicate?
+      label(class=DUPLICATE_CLASSES)
+        = helpers.check_box_tag 'confirm_duplicate', '1', false, required: true, \
+            class: 'mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-indigo-600'
+        span
+          span.block.font-semibold = I18n.t('apply.review.duplicate_warning')
+          span.block = I18n.t('apply.review.confirm_duplicate')
+
+    .flex.flex-col.gap-2.sm:flex-row.sm:flex-wrap
+      = button(label: I18n.t('apply.review.approve'), variant: :primary, type: :submit, \
+          class: 'w-full justify-center sm:w-auto', **data_test_id('apply-review-approve'))
+      = link(url: cancel_path, label: I18n.t('apply.actions.cancel'), variant: :outline, \
+          class: 'w-full justify-center sm:w-auto', \
+          data: { turbo_method: :post, turbo_stream: true, turbo_confirm: I18n.t('apply.actions.cancel_confirm') })

@@ -99,11 +99,25 @@ def write_env_files
                  # capped at max_connections=500; keep N_worktrees × pool under that so
                  # worktrees can't exhaust connections and wedge each other.
                  'APP_DB_POOL' => '25',
-                 'PORT' => pick_port_for_workspace)
+                 'PORT' => pick_port_for_workspace,
+                 'BROWSERD_URL' => 'http://localhost:9300',
+                 'BROWSERD_TOKEN' => BROWSERD_TOKEN)
+  # BROWSERD_URL in the test env turns the :browser specs ON (spec/support/browser_tag.rb):
+  # compose_up! starts browserd-test, so a stopped container fails those specs loudly instead of
+  # silently skipping them.
   write_env_file('.env.test.local',
                  'APP_TEST_DB_NAME' => test_db_name,
-                 'ES_INDEX_NAMESPACE' => es_index_namespace)
+                 'ES_INDEX_NAMESPACE' => es_index_namespace,
+                 'BROWSERD_URL' => 'http://localhost:9310',
+                 'BROWSERD_TOKEN' => BROWSERD_TOKEN)
 end
+
+# The shared browserd containers from docker-compose.yml (one pair per host, used by every
+# workspace): `browserd` on :9300 for bin/dev (public internet only) and `browserd-test` on :9310
+# for the :browser specs (may also reach the docker host, where FixtureSite runs). Leases are
+# tagged per workspace and env (Browserd.owner_prefix), so workspaces never sweep each other's.
+# The token must match the compose default `${BROWSERD_TOKEN:-dev-browserd-token}`.
+BROWSERD_TOKEN = 'dev-browserd-token'
 
 # Returns the port this workspace should bind to. If one was already claimed (set in
 # .env.development.local), reuse it — stable per workspace across restarts. Otherwise

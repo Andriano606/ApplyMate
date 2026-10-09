@@ -1,0 +1,11 @@
+- if attempts.empty?
+  p.text-sm.italic.text-gray-400.dark:text-gray-500 = I18n.t('apply.timeline.empty')
+- else
+  .space-y-3 *data_test_id('apply-run-timeline')
+    - attempts.each_with_index do |(attempt, steps), index|
+      - if index.zero?
+        = render Apply::Component::RunTimelineAttempt.new(steps:, user: @user)
+      - else
+        = accordion(title: I18n.t('apply.timeline.attempt', n: attempt)) do
+          .border-t.border-gray-100.px-4.py-3.dark:border-gray-700
+            = render Apply::Component::RunTimelineAttempt.new(steps:, user: @user)

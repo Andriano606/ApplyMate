@@ -1,6 +1,11 @@
 # Staging environment configuration.
 # Usage: bin/kamal deploy -d staging
 
+<%# apply_slots: single source for the apply worker's Solid Queue threads (APPLY_SLOTS) and browserd MAX_BROWSERS
+    (one Camoufox per running apply). 3 = Raspberry Pi 5 16 GB, CPU-bound (4 cores); browserd caps it at 1..3.
+    spec/config/browserd_image_tag_spec.rb asserts both values stay equal. -%>
+<% apply_slots = 3 -%>
+
 # Different service name prevents container conflicts with production on the same host.
 service: apply_mate_staging
 
@@ -31,7 +36,7 @@ servers:
       - 192.168.50.155
     options:
       ulimit:
-        - "nofile=65536:65536"
+        - 'nofile=65536:65536'
 
   worker:
     hosts:
@@ -39,14 +44,40 @@ servers:
     cmd: bin/jobs
     options:
       ulimit:
-        - "nofile=65536:65536"
+        - 'nofile=65536:65536'
     env:
       clear:
-        SQ_QUEUES: "*"
-        SQ_POLLING_INTERVAL: "1"
-        SQ_PROCESSES: "4"
-        SQ_THREADS: "2"
+        SQ_ROLE: general
+        SQ_PROCESSES: '3'
+        SQ_THREADS: '2'
+        SQ_POLLING_INTERVAL: '1'
 
+  # Browser/AI jobs (queue :apply). APPLY_SLOTS (= apply_slots above) is the apply worker's
+  # thread count and browserd's MAX_BROWSERS.
+  apply_worker:
+    hosts:
+      - 192.168.50.155
+    cmd: bin/jobs
+    # docker stop -t: SIGTERM -> SIGKILL window. Must cover SolidQueue.shutdown_timeout (30 s,
+    # config/initializers/solid_queue_shutdown.rb) + 10 s for releasing browserd leases. Kamal's
+    # default for a role without proxy is drain_timeout (30 s), which would SIGKILL mid-shutdown.
+    stop_timeout: 45
+    options:
+      memory: 3g
+      memory-swap: 3g
+      shm-size: 512m
+      ulimit:
+        - 'nofile=65536:65536'
+    env:
+      clear:
+        SQ_ROLE: apply
+        APPLY_SLOTS: '<%= apply_slots %>'
+        SQ_POLLING_INTERVAL: '1'
+        # Kamal network alias of the browserd accessory below (control API; the lease ws ports
+        # 9301..9303 are on the same alias).
+        BROWSERD_URL: http://browserd:9300
+      secret:
+        - BROWSERD_TOKEN
 
 registry:
   username: andriano606
@@ -65,7 +96,7 @@ env:
     SOLID_QUEUE_IN_PUMA: false
     # Accessory container name = {service}-db (used by web + worker on RPi via Docker network).
     DB_HOST: apply_mate_staging-db
-    DB_PORT: "5432"
+    DB_PORT: '5432'
     RAILS_LOG_LEVEL: info
     WEB_CONCURRENCY: 2
     RAILS_MAX_THREADS: 2
@@ -83,7 +114,7 @@ accessories:
     image: postgres:17
     host: 192.168.50.155
     # External port 5434 avoids conflict with print_mate_staging-db on 5433.
-    port: "5434:5432"
+    port: '5434:5432'
     env:
       clear:
         POSTGRES_USER: apply_mate
@@ -102,8 +133,8 @@ accessories:
     # Offset by 2 from default to avoid conflict with print_mate_staging-minio on 9000/9001.
     options:
       publish:
-        - "9002:9000"
-        - "9003:9001"
+        - '9002:9000'
+        - '9003:9001'
     cmd: server /data --console-address ":9001"
     env:
       secret:
@@ -117,35 +148,53 @@ accessories:
     host: 192.168.50.155
     # External port 9201 avoids conflict if another app uses 9200.
     # App containers reach ES via Docker network on the internal port 9200.
-    port: "9201:9200"
+    port: '9201:9200'
     env:
       clear:
         discovery.type: single-node
-        xpack.security.enabled: "false"
+        xpack.security.enabled: 'false'
         # Kept low for RPi — raise to 512m/512m if you have headroom.
-        ES_JAVA_OPTS: "-Xms256m -Xmx256m"
+        ES_JAVA_OPTS: '-Xms256m -Xmx256m'
     directories:
       - data:/usr/share/elasticsearch/data
 
-  chrome_vnc:
-    image: andriano606/apply_mate_chrome_vnc:latest
+  # Camoufox lease daemon (.ai/docs/browser.md). Only apply_worker talks to it, over the Kamal
+  # network alias `browserd`; no `publish`, so the control API and ws ports never leave the host's
+  # Docker network. Tag = pinned triple <camoufox version>-<release>-pw<playwright-core> plus
+  # -<BROWSERD_REVISION> (bumped on any docker/browserd change); keep it in sync with docker/browserd (spec/config/browserd_image_tag_spec.rb). The owner pushes the
+  # multi-arch image by hand (README "browserd"); Kamal only pulls it.
+  # Sizing (design §18, Pi 5 16 GB): 6g RAM without swap and 3 of the 4 cores for apply_slots
+  # browsers; the cores, not RAM, are the limit. pids-limit counts THREADS: 3 leases on
+  # iframe-heavy pages (reCAPTCHA demo, YouTube, Ashby) peaked at 564 tasks in the container
+  # (measured 2026-10-07, ~40 idle + ~175 per Camoufox); 2048 leaves ~3.5x headroom and still
+  # stops a runaway fork loop.
+  browserd:
+    image: andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2
     host: 192.168.50.155
     options:
-      shm-size: "2gb"
-      security-opt: seccomp:unconfined
-      # network-alias gives the container a valid RFC hostname (no underscores)
-      # so Ruby's URI.join can parse it. Default CHROME_HOST='chrome-vnc' works as-is.
-      network-alias: chrome-vnc
-      publish:
-        - "6081:6080"   # noVNC web UI
-        - "5901:5900"   # VNC (RealVNC / TigerVNC)
-        - "9222:9222"   # Chrome DevTools Protocol
+      network-alias: browserd
+      init: true
+      memory: 6g
+      memory-swap: 6g
+      cpus: '3'
+      pids-limit: 2048
+      shm-size: 1g
+      tmpfs: '/tmp:rw,size=1g'
+      cap-add: NET_ADMIN
+      restart: unless-stopped
     env:
       clear:
-        SCREEN_WIDTH: "1920"
-        SCREEN_HEIGHT: "1080"
-        SCREEN_DEPTH: "24"
-        VNC_PASSWORD: ""
+        MAX_BROWSERS: '<%= apply_slots %>'
+        # Longest lease (s). Each POST /leases asks for its scope deadline + 60 s (8 min scopes; up to 20 min with
+        # a slow AI integration such as GeminiScraping, .ai/docs/apply_engine.md "Resource model").
+        LEASE_TTL_S: '1800'
+        PORT: '9300'
+        HEADLESS: 'true'
+        BROWSERD_OS: 'windows'
+        BROWSERD_ADVERTISE_HOST: browserd
+        # EGRESS_ALLOW_RANGES deliberately unset: Firefox reaches public addresses only.
+      secret:
+        - BROWSERD_TOKEN
 
   # ---- Observability stack: Loki + Promtail + Grafana ----
   # Other Kamal-managed containers reach Loki via the internal Docker network
@@ -161,7 +210,7 @@ accessories:
     # Run as root because Kamal's bind-mount host dir is owned by the SSH
     # user (andrii), and Loki's default UID 10001 can't write to it.
     options:
-      user: "0"
+      user: '0'
 
   # Promtail scrapes Docker container logs (Rails web + worker write to STDOUT;
   # captured by Docker's json-file driver) and forwards them to Loki.
@@ -176,22 +225,22 @@ accessories:
     directories:
       - positions:/tmp/positions
     options:
-      user: "root"
+      user: 'root'
       volume:
-        - "/var/run/docker.sock:/var/run/docker.sock:ro"
-        - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
+        - '/var/run/docker.sock:/var/run/docker.sock:ro'
+        - '/var/lib/docker/containers:/var/lib/docker/containers:ro'
 
   # Grafana UI on host port 3001. Anonymous Admin access — keep this server
   # off the public internet, or put it behind auth / reverse proxy.
   grafana:
     image: grafana/grafana:11.0.0
     host: 192.168.50.155
-    port: "3001:3000"
+    port: '3001:3000'
     env:
       clear:
-        GF_AUTH_ANONYMOUS_ENABLED: "true"
-        GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
-        GF_AUTH_DISABLE_LOGIN_FORM: "true"
+        GF_AUTH_ANONYMOUS_ENABLED: 'true'
+        GF_AUTH_ANONYMOUS_ORG_ROLE: 'Admin'
+        GF_AUTH_DISABLE_LOGIN_FORM: 'true'
     files:
       - docker/grafana/provisioning/dashboards/applymate.yml:/etc/grafana/provisioning/dashboards/applymate.yml
       - docker/grafana/provisioning/dashboards/sync_vacancies.json:/etc/grafana/provisioning/dashboards/sync_vacancies.json
@@ -202,4 +251,4 @@ accessories:
     # Run as root because Kamal's bind-mount host dir is owned by the SSH
     # user (andrii), and Grafana's default UID 472 can't write to it.
     options:
-      user: "0"
+      user: '0'

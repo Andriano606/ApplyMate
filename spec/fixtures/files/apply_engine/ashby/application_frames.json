@@ -1,0 +1,1868 @@
+[
+ {
+  "index": 0,
+  "url": "http://fixture.test:4002/ashby/application.html?embed=js",
+  "name": "",
+  "parent_index": null,
+  "element_id": null,
+  "value": {
+   "snapshot": {
+    "frame": {
+     "url": "http://fixture.test:4002/ashby/application.html?embed=js",
+     "title": "Customer Care Team Lead @ Preply"
+    },
+    "outline": [
+     "h1 Customer Care Team Lead",
+     "tabs Overview | Application*"
+    ],
+    "alerts": [],
+    "captcha": [],
+    "password_fields": 0,
+    "truncated": false,
+    "elements": [
+     {
+      "index": 0,
+      "tag": "a",
+      "type": null,
+      "role": "tab",
+      "name": "Overview",
+      "question": null,
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": false,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": null,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": "posting.html?embed=js",
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "job-overview"
+        }
+       },
+       {
+        "role": "tab",
+        "name": "Overview"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": null,
+      "regions": [],
+      "attrs": {
+       "id": "job-overview",
+       "name": null,
+       "type": null,
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": null
+      }
+     },
+     {
+      "index": 1,
+      "tag": "a",
+      "type": null,
+      "role": "tab",
+      "name": "Application",
+      "question": null,
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": true,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": null,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": "application.html?embed=js",
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "job-application-form"
+        }
+       },
+       {
+        "role": "tab",
+        "name": "Application"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(2)"
+       }
+      ],
+      "root_strategies": null,
+      "regions": [],
+      "attrs": {
+       "id": "job-application-form",
+       "name": null,
+       "type": null,
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": null
+      }
+     },
+     {
+      "index": 2,
+      "tag": "button",
+      "type": null,
+      "role": "button",
+      "name": "Upload file",
+      "question": null,
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": null,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "button",
+        "name": "Upload file"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": null,
+      "regions": [
+       "#form[role=\"tabpanel\"]",
+       ".ashby-application-form-autofill-input-root"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": "button",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": null
+      }
+     },
+     {
+      "index": 3,
+      "tag": "input",
+      "type": "file",
+      "role": null,
+      "name": "",
+      "question": null,
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": false,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]",
+       ".ashby-application-form-autofill-input-root"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": "file",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": null
+      }
+     },
+     {
+      "index": 4,
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "name": "Full Name",
+      "question": "Full Name",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "_systemfield_name"
+        }
+       },
+       {
+        "attr": {
+         "name": "_systemfield_name"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "Full Name"
+       },
+       {
+        "label": "Full Name"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "_systemfield_name"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "_systemfield_name",
+       "name": "_systemfield_name",
+       "type": "text",
+       "autocomplete": null,
+       "placeholder": "Type here...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "_systemfield_name"
+      }
+     },
+     {
+      "index": 5,
+      "tag": "input",
+      "type": "email",
+      "role": "textbox",
+      "name": "Email",
+      "question": "Email",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "_systemfield_email"
+        }
+       },
+       {
+        "attr": {
+         "name": "_systemfield_email"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "Email"
+       },
+       {
+        "label": "Email"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "_systemfield_email"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "_systemfield_email",
+       "name": "_systemfield_email",
+       "type": "email",
+       "autocomplete": null,
+       "placeholder": "hello@example.com...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "_systemfield_email"
+      }
+     },
+     {
+      "index": 6,
+      "tag": "input",
+      "type": "tel",
+      "role": "textbox",
+      "name": "Phone Number",
+      "question": "Phone Number",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01"
+        }
+       },
+       {
+        "attr": {
+         "name": "6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "Phone Number"
+       },
+       {
+        "label": "Phone Number"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01",
+       "name": "6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01",
+       "type": "tel",
+       "autocomplete": null,
+       "placeholder": "1-415-555-1234...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01"
+      }
+     },
+     {
+      "index": 7,
+      "tag": "button",
+      "type": null,
+      "role": "button",
+      "name": "Upload File",
+      "question": "Resume",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": null,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "button",
+        "name": "Upload File"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(5) > div:nth-of-type(1) > button:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "_systemfield_resume"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(5)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": "button",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "_systemfield_resume"
+      }
+     },
+     {
+      "index": 8,
+      "tag": "input",
+      "type": "file",
+      "role": null,
+      "name": "Resume",
+      "question": "Resume",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": false,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "_systemfield_resume"
+        }
+       },
+       {
+        "attr": {
+         "name": "_systemfield_resume"
+        }
+       },
+       {
+        "label": "Resume"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(5) > div:nth-of-type(1) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "_systemfield_resume"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(5)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "_systemfield_resume",
+       "name": "_systemfield_resume",
+       "type": "file",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": ".pdf,.doc,.docx",
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "_systemfield_resume"
+      }
+     },
+     {
+      "index": 9,
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "name": "Linkedin profile URL",
+      "question": "Linkedin profile URL",
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02"
+        }
+       },
+       {
+        "attr": {
+         "name": "d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "Linkedin profile URL"
+       },
+       {
+        "label": "Linkedin profile URL"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(6) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(6)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02",
+       "name": "d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02",
+       "type": "text",
+       "autocomplete": null,
+       "placeholder": "Type here...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02"
+      }
+     },
+     {
+      "index": 10,
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "name": "Type here...",
+      "question": null,
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03"
+        }
+       },
+       {
+        "attr": {
+         "name": "3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "Type here..."
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(7) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(7)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03",
+       "name": "3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03",
+       "type": "text",
+       "autocomplete": null,
+       "placeholder": "Type here...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03"
+      }
+     },
+     {
+      "index": 11,
+      "tag": "input",
+      "type": "text",
+      "role": "combobox",
+      "name": "How did you get to know Preply?",
+      "question": "How did you get to know Preply?",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": false,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": "combobox",
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "combobox",
+        "name": "How did you get to know Preply?"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(1) > div:nth-of-type(1) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(1)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": null,
+       "autocomplete": "off",
+       "placeholder": "Start typing...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04"
+      }
+     },
+     {
+      "index": 12,
+      "tag": "button",
+      "type": null,
+      "role": "button",
+      "name": "Toggle menu",
+      "question": "How did you get to know Preply?",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": null,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "button",
+        "name": "Toggle menu"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(1)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": "button",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04"
+      }
+     },
+     {
+      "index": 13,
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "name": "If you selected other, please specify",
+      "question": "If you selected other, please specify",
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05"
+        }
+       },
+       {
+        "attr": {
+         "name": "677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "If you selected other, please specify"
+       },
+       {
+        "label": "If you selected other, please specify"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(8) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(8)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05",
+       "name": "677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05",
+       "type": "text",
+       "autocomplete": null,
+       "placeholder": "Type here...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05"
+      }
+     },
+     {
+      "index": 14,
+      "tag": "input",
+      "type": "radio",
+      "role": "radio",
+      "name": "Less than 2 years",
+      "question": "How many years have you managed support agents?",
+      "required": true,
+      "invalid": false,
+      "checked": false,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": false,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": "radio_group",
+      "group_key": "radio:d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06",
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": [
+       {
+        "label": "Less than 2 years",
+        "value": "Less than 2 years",
+        "checked": false,
+        "strategies": [
+         {
+          "role": "radio",
+          "name": "Less than 2 years"
+         },
+         {
+          "label": "Less than 2 years"
+         },
+         {
+          "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > input:nth-of-type(1)"
+         }
+        ]
+       },
+       {
+        "label": "3-5 years",
+        "value": "3-5 years",
+        "checked": false,
+        "strategies": [
+         {
+          "role": "radio",
+          "name": "3-5 years"
+         },
+         {
+          "label": "3-5 years"
+         },
+         {
+          "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > input:nth-of-type(1)"
+         }
+        ]
+       },
+       {
+        "label": "More than 5 years",
+        "value": "More than 5 years",
+        "checked": false,
+        "strategies": [
+         {
+          "role": "radio",
+          "name": "More than 5 years"
+         },
+         {
+          "label": "More than 5 years"
+         },
+         {
+          "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > input:nth-of-type(1)"
+         }
+        ]
+       }
+      ],
+      "chip": null,
+      "strategies": [
+       {
+        "role": "radio",
+        "name": "Less than 2 years"
+       },
+       {
+        "label": "Less than 2 years"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-0",
+       "name": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06",
+       "type": "radio",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": "Less than 2 years",
+       "data-field-path": "ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06"
+      }
+     },
+     {
+      "index": 15,
+      "tag": "input",
+      "type": "radio",
+      "role": "radio",
+      "name": "3-5 years",
+      "question": "How many years have you managed support agents?",
+      "required": true,
+      "invalid": false,
+      "checked": false,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": false,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": "radio_group",
+      "group_key": "radio:d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06",
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "radio",
+        "name": "3-5 years"
+       },
+       {
+        "label": "3-5 years"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-1",
+       "name": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06",
+       "type": "radio",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": "3-5 years",
+       "data-field-path": "ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06"
+      }
+     },
+     {
+      "index": 16,
+      "tag": "input",
+      "type": "radio",
+      "role": "radio",
+      "name": "More than 5 years",
+      "question": "How many years have you managed support agents?",
+      "required": true,
+      "invalid": false,
+      "checked": false,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": false,
+      "in_viewport": true,
+      "aria_hidden": false,
+      "filled": false,
+      "group": "radio_group",
+      "group_key": "radio:d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06",
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "radio",
+        "name": "More than 5 years"
+       },
+       {
+        "label": "More than 5 years"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(2)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-2",
+       "name": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06",
+       "type": "radio",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": "More than 5 years",
+       "data-field-path": "ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06"
+      }
+     },
+     {
+      "index": 17,
+      "tag": "input",
+      "type": "number",
+      "role": "spinbutton",
+      "name": "How many agents have you managed at most?",
+      "question": "How many agents have you managed at most?",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07"
+        }
+       },
+       {
+        "attr": {
+         "name": "0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07"
+        }
+       },
+       {
+        "role": "spinbutton",
+        "name": "How many agents have you managed at most?"
+       },
+       {
+        "label": "How many agents have you managed at most?"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(9) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(9)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07",
+       "name": "0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07",
+       "type": "number",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07"
+      }
+     },
+     {
+      "index": 18,
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "name": "Salary expectations (gross, EUR per month)",
+      "question": "Salary expectations (gross, EUR per month)",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08"
+        }
+       },
+       {
+        "attr": {
+         "name": "596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "Salary expectations (gross, EUR per month)"
+       },
+       {
+        "label": "Salary expectations (gross, EUR per month)"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(10) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(10)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08",
+       "name": "596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08",
+       "type": "text",
+       "autocomplete": null,
+       "placeholder": "Type here...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08"
+      }
+     },
+     {
+      "index": 19,
+      "tag": "textarea",
+      "type": null,
+      "role": "textbox",
+      "name": "Why do you want to join Preply?",
+      "question": "Why do you want to join Preply?",
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "id": "8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09"
+        }
+       },
+       {
+        "attr": {
+         "name": "8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09"
+        }
+       },
+       {
+        "role": "textbox",
+        "name": "Why do you want to join Preply?"
+       },
+       {
+        "label": "Why do you want to join Preply?"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(11) > textarea:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(11)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09",
+       "name": "8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09",
+       "type": null,
+       "autocomplete": null,
+       "placeholder": "Type here...",
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09"
+      }
+     },
+     {
+      "index": 20,
+      "tag": "button",
+      "type": null,
+      "role": "button",
+      "name": "Yes",
+      "question": "Are you open to working in shifts?",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": false,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": null,
+      "group": "option_group",
+      "group_key": "options:html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12)",
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": [
+       {
+        "label": "Yes",
+        "value": null,
+        "checked": false,
+        "strategies": [
+         {
+          "role": "button",
+          "name": "Yes"
+         },
+         {
+          "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12) > div:nth-of-type(1) > button:nth-of-type(1)"
+         }
+        ]
+       },
+       {
+        "label": "No",
+        "value": null,
+        "checked": false,
+        "strategies": [
+         {
+          "role": "button",
+          "name": "No"
+         },
+         {
+          "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12) > div:nth-of-type(1) > button:nth-of-type(2)"
+         }
+        ]
+       }
+      ],
+      "chip": null,
+      "strategies": [
+       {
+        "role": "button",
+        "name": "Yes"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12) > div:nth-of-type(1) > button:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "c1d2e3f4-6a7b-4c8d-9e0f-1a2b3c4d5e10"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": "button",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "c1d2e3f4-6a7b-4c8d-9e0f-1a2b3c4d5e10"
+      }
+     },
+     {
+      "index": 21,
+      "tag": "button",
+      "type": null,
+      "role": "button",
+      "name": "No",
+      "question": "Are you open to working in shifts?",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": false,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": null,
+      "group": "option_group",
+      "group_key": "options:html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12)",
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "button",
+        "name": "No"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12) > div:nth-of-type(1) > button:nth-of-type(2)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "c1d2e3f4-6a7b-4c8d-9e0f-1a2b3c4d5e10"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(12)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": "button",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "c1d2e3f4-6a7b-4c8d-9e0f-1a2b3c4d5e10"
+      }
+     },
+     {
+      "index": 22,
+      "tag": "a",
+      "type": null,
+      "role": "link",
+      "name": "privacy notice",
+      "question": "Privacy notice",
+      "required": true,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": null,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": "#privacy",
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "link",
+        "name": "privacy notice"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(3) > div:nth-of-type(1) > p:nth-of-type(1) > a:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(3)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": null,
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11"
+      }
+     },
+     {
+      "index": 23,
+      "tag": "input",
+      "type": "checkbox",
+      "role": "checkbox",
+      "name": "Acknowledge/Confirm",
+      "question": "Privacy notice",
+      "required": true,
+      "invalid": false,
+      "checked": false,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": false,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "name": "Acknowledge/Confirm"
+        }
+       },
+       {
+        "role": "checkbox",
+        "name": "Acknowledge/Confirm"
+       },
+       {
+        "label": "Acknowledge/Confirm"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(3) > div:nth-of-type(2) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(3)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11-labeled-checkbox-0",
+       "name": "Acknowledge/Confirm",
+       "type": "checkbox",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11"
+      }
+     },
+     {
+      "index": 24,
+      "tag": "input",
+      "type": "checkbox",
+      "role": "checkbox",
+      "name": "I do not want to receive the newsletter",
+      "question": "Newsletter",
+      "required": false,
+      "invalid": false,
+      "checked": false,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": false,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": false,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": false,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "attr": {
+         "name": "I do not want to receive the newsletter"
+        }
+       },
+       {
+        "role": "checkbox",
+        "name": "I do not want to receive the newsletter"
+       },
+       {
+        "label": "I do not want to receive the newsletter"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(4) > div:nth-of-type(1) > input:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": [
+       {
+        "attr": {
+         "data-field-path": "e5f6a7b8-8c9d-4e0f-9a1b-3c4d5e6f7a12"
+        }
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > fieldset:nth-of-type(4)"
+       }
+      ],
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": "d4a4f9f2-1b50-47f1-b510-ca97e2d032ce_e5f6a7b8-8c9d-4e0f-9a1b-3c4d5e6f7a12-labeled-checkbox-0",
+       "name": "I do not want to receive the newsletter",
+       "type": "checkbox",
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": "e5f6a7b8-8c9d-4e0f-9a1b-3c4d5e6f7a12"
+      }
+     },
+     {
+      "index": 25,
+      "tag": "button",
+      "type": null,
+      "role": "button",
+      "name": "Submit Application",
+      "question": null,
+      "required": false,
+      "invalid": false,
+      "checked": null,
+      "expanded": null,
+      "pressed": null,
+      "selected": null,
+      "disabled": false,
+      "readonly": false,
+      "visible": true,
+      "self_visible": true,
+      "in_viewport": false,
+      "aria_hidden": false,
+      "filled": null,
+      "group": null,
+      "group_key": null,
+      "password": false,
+      "search_like": false,
+      "submit_like": true,
+      "href": null,
+      "options": null,
+      "chip": null,
+      "strategies": [
+       {
+        "role": "button",
+        "name": "Submit Application"
+       },
+       {
+        "css": "html > body:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(1)"
+       }
+      ],
+      "root_strategies": null,
+      "regions": [
+       "#form[role=\"tabpanel\"]"
+      ],
+      "attrs": {
+       "id": null,
+       "name": null,
+       "type": null,
+       "autocomplete": null,
+       "placeholder": null,
+       "accept": null,
+       "multiple": false,
+       "maxlength": null,
+       "value": null,
+       "data-field-path": null
+      }
+     }
+    ]
+   },
+   "detect": {
+    "url": "http://fixture.test:4002/ashby/application.html?embed=js",
+    "name": "",
+    "title": "Customer Care Team Lead @ Preply",
+    "script_srcs": [],
+    "iframe_srcs": [],
+    "iframes": [],
+    "dom_markers": {
+     ".ashby-application-form-field-entry": 15
+    }
+   }
+  }
+ }
+]

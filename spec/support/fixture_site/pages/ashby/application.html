@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Customer Care Team Lead @ Preply</title>
+    <!-- Hand-written copy of the Ashby application page markup (research/live_probe.md Part A; field paths match
+         spec/fixtures/files/apply_engine/ashby/api_job_posting.json): no <form> tag, everything in
+         div#form[role=tabpanel], one .ashby-application-form-field-entry[data-field-path] per field, required marked
+         only by a _required_ class on the question title, an autofill pane with its own file input, a clipped resume
+         input behind an "Upload File" button, an autocomplete combobox that opens ONLY on ArrowDown, opacity-0 radios
+         and checkboxes whose id/name carry a per-load instance UUID, and a submit button without type. The form renders
+         400 ms after load (client-side route).
+         Submit, as on jobs.ashbyhq.com (live bundle + apply 227's post-submit DOM): ~1 s for the reCAPTCHA token,
+         then the JSON POST /ashby/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction while unrelated
+         non-GET traffic fires at the same moment (ApiSetFormValue autosaves, a RUM beacon). On FormSubmitSuccess the
+         confirmation view replaces the form INSIDE #form (role=status, a "Success" heading and the org's own copy -
+         here one that matches no generic thank-you pattern); the URL does not change. On FormRender the form stays
+         with a role=alert "Your form needs corrections". Fixture-only simplification: the field values ride in the
+         submit's variables.values (the real SPA stores them earlier through ApiSetFormValue) so specs can read them. -->
+    <style>
+      body { font-family: sans-serif; margin: 1rem; }
+      .ashby-application-form-field-entry { margin: 1rem 0; position: relative; border: 0; padding: 0; }
+      .ashby-application-form-question-title { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+      ._required_f7cvd_91::after { content: ''; }
+      .clipped { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); padding: 0; }
+      ._autocomplete_d7ago_1 { position: relative; display: inline-block; }
+      ._listbox_d7ago_60 { position: absolute; top: 100%; left: 0; z-index: 10; background: #fff; border: 1px solid #999;
+        max-height: 240px; overflow: auto; min-width: 16rem; }
+      ._listbox_d7ago_60 [role=option] { padding: 0.25rem 0.5rem; cursor: pointer; }
+      ._chip_d7ago_80 { display: inline-block; background: #eef; padding: 0.1rem 0.5rem; border-radius: 1rem; }
+      .ashby-application-form-input-radio-group-option, ._checkboxOption_ac1xl_3 { position: relative; padding-left: 2rem;
+        margin: 0.25rem 0; }
+      .ashby-application-form-input-radio-group-option-radio, ._checkbox_ac1xl_11 { position: absolute; left: 0; top: 0;
+        width: 24px; height: 24px; margin: 0; opacity: 0; }
+      ._circle_rdzv8_1, ._tick_ac1xl_20 { position: absolute; left: 0; top: 0; width: 20px; height: 20px;
+        border: 2px solid #555; border-radius: 50%; }
+      ._tick_ac1xl_20 { border-radius: 4px; }
+      ._yesno_hq5b2_1 button[aria-pressed=true] { background: #335; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <h1 class="ashby-job-posting-heading">Customer Care Team Lead</h1>
+    <nav role="tablist" class="_tabs_5yu8i_1">
+      <a class="_tab_5yu8i_29" id="job-overview" role="tab" aria-selected="false" href="posting.html?embed=js"><span>Overview</span></a>
+      <a class="_tab_5yu8i_29" id="job-application-form" aria-controls="form" role="tab" aria-selected="true" href="application.html?embed=js"><span class="ashby-job-posting-right-pane-application-tab">Application</span></a>
+    </nav>
+    <div id="form" role="tabpanel" class="_tabPanel_5yu8i_300"></div>
+
+    <template id="form-template">
+      <div class="ashby-application-form-autofill-input-root _autofill_x1c2v_1">
+        <p>Autofill from resume</p>
+        <p>Upload your resume here to autofill key application fields.</p>
+        <button type="button" class="_button_zyh3g_28 autofill-trigger">Upload file</button>
+        <input type="file" class="clipped" tabindex="-1" />
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="_systemfield_name">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91" for="_systemfield_name">Full Name</label>
+        <input id="_systemfield_name" name="_systemfield_name" type="text" class="_input_1wkz4_28" placeholder="Type here..." />
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="_systemfield_email">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91" for="_systemfield_email">Email</label>
+        <input id="_systemfield_email" name="_systemfield_email" type="email" class="_input_1wkz4_28" placeholder="hello@example.com..." />
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91" for="6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01">Phone Number</label>
+        <input id="6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01" name="6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01" type="tel" class="_input_1wkz4_28" placeholder="1-415-555-1234..." />
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="_systemfield_resume">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91" for="_systemfield_resume">Resume</label>
+        <div class="ashby-application-form-input-file-dropzone _dropzone_t5y1d_1">
+          <button type="button" class="_button_zyh3g_28 upload-trigger">Upload File</button>
+          <span class="_fileName_t5y1d_40"></span>
+          <input id="_systemfield_resume" name="_systemfield_resume" type="file" class="clipped" tabindex="-1" accept=".pdf,.doc,.docx" />
+        </div>
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02">
+        <label class="ashby-application-form-question-title _heading_101oc_53" for="d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02">Linkedin profile URL</label>
+        <input id="d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02" name="d1689d85-6c1f-4b8e-9b0a-2c7e5d1f3a02" type="text" class="_input_1wkz4_28" placeholder="Type here..." />
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03">
+        <label class="ashby-application-form-question-title _heading_101oc_53" for="3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03"></label>
+        <input id="3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03" name="3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03" type="text" class="_input_1wkz4_28" placeholder="Type here..." />
+      </div>
+
+      <fieldset class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91">How did you get to know Preply?</label>
+        <div class="_autocomplete_d7ago_1">
+          <input class="ashby-application-form-input-autocomplete _input_d7ago_14" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-autocomplete="list" autocomplete="off" placeholder="Start typing..." />
+          <button type="button" class="_toggleButton_d7ago_32" tabindex="-1" aria-label="Toggle menu">&#9662;</button>
+        </div>
+        <div class="_chips_d7ago_70"></div>
+      </fieldset>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05">
+        <label class="ashby-application-form-question-title _heading_101oc_53" for="677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05">If you selected other, please specify</label>
+        <input id="677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05" name="677edf26-2a4b-4c8d-9e1f-3b5c7d9e1f05" type="text" class="_input_1wkz4_28" placeholder="Type here..." />
+      </div>
+
+      <fieldset class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91">How many years have you managed support agents?</label>
+        <div class="ashby-application-form-input-radio-group">
+          <div class="ashby-application-form-input-radio-group-option _option_rdzv8_10">
+            <input type="radio" class="ashby-application-form-input-radio-group-option-radio" value="Less than 2 years" data-instance-name="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06" data-instance-id="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-0" />
+            <span class="_circle_rdzv8_1"></span>
+            <label data-instance-for="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-0">Less than 2 years</label>
+          </div>
+          <div class="ashby-application-form-input-radio-group-option _option_rdzv8_10">
+            <input type="radio" class="ashby-application-form-input-radio-group-option-radio" value="3-5 years" data-instance-name="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06" data-instance-id="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-1" />
+            <span class="_circle_rdzv8_1"></span>
+            <label data-instance-for="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-1">3-5 years</label>
+          </div>
+          <div class="ashby-application-form-input-radio-group-option _option_rdzv8_10">
+            <input type="radio" class="ashby-application-form-input-radio-group-option-radio" value="More than 5 years" data-instance-name="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06" data-instance-id="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-2" />
+            <span class="_circle_rdzv8_1"></span>
+            <label data-instance-for="ab315a8b-7c2d-4e9f-8a1b-5c6d7e8f9a06-labeled-radio-2">More than 5 years</label>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91" for="0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07">How many agents have you managed at most?</label>
+        <input id="0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07" name="0b9874a9-3d4e-4f5a-9b6c-7d8e9f0a1b07" type="number" value="undefined" class="_input_1wkz4_28" />
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91" for="596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08">Salary expectations (gross, EUR per month)</label>
+        <input id="596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08" name="596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08" type="text" class="_input_1wkz4_28" placeholder="Type here..." />
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09">
+        <label class="ashby-application-form-question-title _heading_101oc_53" for="8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09">Why do you want to join Preply?</label>
+        <textarea id="8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09" name="8f841092-5f6a-4b7c-9d8e-0f1a2b3c4d09" class="_textarea_1wkz4_40" rows="4" placeholder="Type here..."></textarea>
+      </div>
+
+      <div class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="c1d2e3f4-6a7b-4c8d-9e0f-1a2b3c4d5e10">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91">Are you open to working in shifts?</label>
+        <div class="_yesno_hq5b2_1">
+          <button type="button" class="_option_hq5b2_9" aria-pressed="false">Yes</button>
+          <button type="button" class="_option_hq5b2_9" aria-pressed="false">No</button>
+        </div>
+      </div>
+
+      <fieldset class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11">
+        <label class="ashby-application-form-question-title _heading_101oc_53 _required_f7cvd_91">Privacy notice</label>
+        <div class="ashby-application-form-question-description">
+          <p>I have read the <a href="#privacy">privacy notice</a> and agree to the processing of my data for this application.</p>
+        </div>
+        <div class="_checkboxOption_ac1xl_3">
+          <input type="checkbox" class="_checkbox_ac1xl_11" name="Acknowledge/Confirm" data-instance-id="c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11-labeled-checkbox-0" />
+          <svg class="_tick_ac1xl_20" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8l3 3 7-7" fill="none" stroke="currentColor" /></svg>
+          <label data-instance-for="c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11-labeled-checkbox-0">Acknowledge/Confirm</label>
+        </div>
+      </fieldset>
+
+      <fieldset class="ashby-application-form-field-entry _fieldEntry_hkyf8_29" data-field-path="e5f6a7b8-8c9d-4e0f-9a1b-3c4d5e6f7a12">
+        <label class="ashby-application-form-question-title _heading_101oc_53">Newsletter</label>
+        <div class="_checkboxOption_ac1xl_3">
+          <input type="checkbox" class="_checkbox_ac1xl_11" name="I do not want to receive the newsletter" data-instance-id="e5f6a7b8-8c9d-4e0f-9a1b-3c4d5e6f7a12-labeled-checkbox-0" />
+          <svg class="_tick_ac1xl_20" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8l3 3 7-7" fill="none" stroke="currentColor" /></svg>
+          <label data-instance-for="e5f6a7b8-8c9d-4e0f-9a1b-3c4d5e6f7a12-labeled-checkbox-0">I do not want to receive the newsletter</label>
+        </div>
+      </fieldset>
+
+      <button class="_button_zyh3g_28 _primary_zyh3g_97 _greedy_zyh3g_221 _submitButton_5yu8i_411 ashby-application-form-submit-button"><span>Submit Application</span></button>
+    </template>
+
+    <script>
+      const HEAR_OPTIONS = [
+        'Word of mouth', 'LinkedIn', 'Facebook', 'Instagram', 'Twitter / X', 'YouTube', 'Google search', 'Job board',
+        'DOU', 'Djinni', 'Glassdoor', 'Indeed', 'Referral from a Preply employee', 'Event or conference', 'Other',
+      ];
+      // crypto.randomUUID needs a secure context; the fixture is served over plain http.
+      const uuid = () =>
+        'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+
+      function render() {
+        const instance = uuid();
+        const form = document.getElementById('form');
+        form.appendChild(document.getElementById('form-template').content.cloneNode(true));
+        form.querySelectorAll('[data-instance-name]').forEach((el) => (el.name = `${instance}_${el.dataset.instanceName}`));
+        form.querySelectorAll('[data-instance-id]').forEach((el) => (el.id = `${instance}_${el.dataset.instanceId}`));
+        form.querySelectorAll('[data-instance-for]').forEach((el) => (el.htmlFor = `${instance}_${el.dataset.instanceFor}`));
+
+        form.querySelectorAll('.upload-trigger, .autofill-trigger').forEach((button) =>
+          button.addEventListener('click', () => button.parentElement.querySelector('input[type=file]').click()),
+        );
+        const resume = document.getElementById('_systemfield_resume');
+        resume.addEventListener('change', () => {
+          resume.parentElement.querySelector('._fileName_t5y1d_40').textContent = Array.from(resume.files, (f) => f.name).join(', ');
+        });
+
+        form.querySelectorAll('._yesno_hq5b2_1 button').forEach((button) =>
+          button.addEventListener('click', () => {
+            button.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+          }),
+        );
+
+        setUpCombobox(form.querySelector('.ashby-application-form-input-autocomplete'));
+
+        form.querySelector('.ashby-application-form-submit-button').addEventListener('click', submit);
+      }
+
+      function setUpCombobox(input) {
+        const wrapper = input.parentElement;
+        const chips = wrapper.parentElement.querySelector('._chips_d7ago_70');
+        let listbox = null;
+        const close = () => {
+          if (listbox) listbox.remove();
+          listbox = null;
+          input.setAttribute('aria-expanded', 'false');
+        };
+        const open = () => {
+          close();
+          const filter = input.value.trim().toLowerCase();
+          listbox = document.createElement('div');
+          listbox.setAttribute('role', 'listbox');
+          listbox.id = ':r0:';
+          listbox.className = '_listbox_d7ago_60';
+          HEAR_OPTIONS.filter((label) => label.toLowerCase().includes(filter)).forEach((label, index) => {
+            const option = document.createElement('div');
+            option.setAttribute('role', 'option');
+            option.id = `:r0:-option-${index}`;
+            option.setAttribute('aria-selected', 'false');
+            option.textContent = label;
+            option.addEventListener('mousedown', (event) => event.preventDefault());
+            option.addEventListener('click', () => {
+              chips.innerHTML = '';
+              const chip = document.createElement('div');
+              chip.className = '_chip_d7ago_80';
+              chip.textContent = label;
+              chips.appendChild(chip);
+              input.value = '';
+              close();
+            });
+            listbox.appendChild(option);
+          });
+          wrapper.appendChild(listbox);
+          input.setAttribute('aria-expanded', 'true');
+        };
+        // A click on the input or the toggle does NOT open the menu (live probe); only ArrowDown does.
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (!listbox) open();
+          } else if (event.key === 'Escape') close();
+        });
+        input.addEventListener('input', () => {
+          if (listbox) open();
+        });
+      }
+
+      async function submit() {
+        const form = document.getElementById('form');
+        const values = {};
+        form.querySelectorAll('[data-field-path]').forEach((entry) => {
+          const path = entry.dataset.fieldPath;
+          const text = entry.querySelector('input[type=text], input[type=email], input[type=tel], input[type=number], textarea');
+          const file = entry.querySelector('input[type=file]');
+          const chip = entry.querySelector('._chip_d7ago_80');
+          const radio = entry.querySelector('input[type=radio]:checked');
+          const pressed = entry.querySelector('button[aria-pressed=true]');
+          const boxes = Array.from(entry.querySelectorAll('input[type=checkbox]:checked'), (box) => box.name);
+          if (text) values[path] = text.value;
+          else if (file) values[path] = file.files.length ? file.files[0].name : null;
+          else if (chip) values[path] = chip.textContent;
+          else if (radio) values[path] = radio.value;
+          else if (pressed) values[path] = pressed.textContent === 'Yes';
+          else if (boxes.length) values[path] = boxes;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // the reCAPTCHA token
+        const headers = { 'content-type': 'application/json' };
+        for (let i = 0; i < 12; i++) {
+          fetch('/ashby/api/non-user-graphql?op=ApiSetFormValue', {
+            method: 'POST', headers, body: JSON.stringify({ operationName: 'ApiSetFormValue', variables: { n: i } }),
+          });
+        }
+        fetch('/rum/api/v2/rum?ddsource=browser', { method: 'POST', body: 'view', keepalive: true });
+        const jobPostingId = location.pathname.split('/')[3];
+        const response = await fetch('/ashby/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            operationName: 'ApiSubmitSingleApplicationFormAction',
+            variables: { organizationHostedJobsPageName: 'preply', jobPostingId, values },
+          }),
+        });
+        const json = await response.json();
+        const result = json.data && json.data.submitApplicationFormAction;
+        const typename = result && result.applicationFormResult && result.applicationFormResult.__typename;
+        if (typename === 'FormSubmitSuccess') {
+          window.parent.postMessage('application_submitted', '*');
+          form.innerHTML =
+            '<div role="status" aria-live="polite" tabindex="-1" data-highlight="positive" ' +
+            'class="ashby-application-form-success-container _positive_f7cvd_112 _highlighted_f7cvd_138 _container_f7cvd_28">' +
+            '<h2 class="_heading_f7cvd_52 ">Success</h2>' +
+            '<p>We\u2019ll carefully review your profile and contact you once there\u2019s news to share.</p></div>';
+          window.scrollTo(0, 0);
+        } else if (typename === 'FormRender') {
+          const alert = document.createElement('div');
+          alert.setAttribute('role', 'alert');
+          alert.textContent = 'Your form needs corrections';
+          form.prepend(alert);
+        }
+      }
+
+      setTimeout(render, 400);
+    </script>
+  </body>
+</html>

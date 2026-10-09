@@ -1,13 +1,7 @@
 # frozen_string_literal: true
 
 class Apply::Operation::Ai::FillForm < Apply::Operation::Base
-  def start_status
-    :filling_form
-  end
-
-  def error_status
-    :failed_filling_form
-  end
+  stage :fill_form
 
   private
 
@@ -18,7 +12,7 @@ class Apply::Operation::Ai::FillForm < Apply::Operation::Base
       ai_integration:        apply.ai_integration
     )
 
-    raise "AI returned empty payload or invalid JSON: #{filled_form_hash.inspect}" if filled_form_hash.blank?
+    halt!(:invalid_ai_output, detail: 'AI returned an empty payload') if filled_form_hash.blank?
 
     inputs = (apply.inputs || []).map do |input|
       input    = input.with_indifferent_access

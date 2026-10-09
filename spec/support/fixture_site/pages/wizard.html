@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply: Platform Engineer (2 steps)</title>
+    <style>
+      body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; }
+      label { display: block; margin-top: 0.75rem; }
+      .step { color: #555; }
+      .error { color: #b00; }
+    </style>
+  </head>
+  <body>
+    <!-- A two-page application wizard rendered by script, the way SPA wizards do (Vue / React): page 2 replaces page 1
+         inside form#apply on Next, page 1's answers travel on as hidden inputs, and only the last page posts the form
+         to {{ORIGIN}}/submit (FixtureSite answers "Thank you for applying"). Next is a type=button that validates page 1
+         first; "Continue reading" outside the form is a decoy. Engine::ClassifyAdvance must call Next :next ("Step 1
+         of 2") and "Submit application" :final. -->
+    <article>
+      <h1>Platform Engineer</h1>
+      <p>We build the infrastructure behind thousands of job applications a day.</p>
+      <button type="button" id="read-more">Continue reading</button>
+    </article>
+
+    <form id="apply" action="{{ORIGIN}}/submit" method="post">
+      <div id="page"></div>
+    </form>
+
+    <template id="page-1">
+      <p class="step">Step 1 of 2</p>
+      <label for="full_name">Full name</label>
+      <input id="full_name" name="full_name" type="text" required />
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required />
+
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" type="tel" />
+
+      <p class="error" role="alert" hidden></p>
+      <button type="button" id="next">Next</button>
+    </template>
+
+    <template id="page-2">
+      <p class="step">Step 2 of 2</p>
+      <label for="cover">Cover letter</label>
+      <textarea id="cover" name="cover" rows="4" required></textarea>
+
+      <label><input id="consent" name="consent" type="checkbox" value="1" required /> I agree to the privacy policy</label>
+
+      <button type="button" id="back">Back</button>
+      <button type="submit" id="submit">Submit application</button>
+    </template>
+
+    <script>
+      (() => {
+        const form = document.getElementById('apply');
+        const page = document.getElementById('page');
+        const show = (id) => page.replaceChildren(document.getElementById(id).content.cloneNode(true));
+        const carried = ['full_name', 'email', 'phone'];
+
+        const next = () => {
+          const missing = carried.map((name) => document.getElementById(name)).filter((input) => !input.checkValidity());
+          const error = page.querySelector('.error');
+          if (missing.length) {
+            error.textContent = 'Please fill in every required field.';
+            error.hidden = false;
+            return;
+          }
+          // A site-side check the read-back never sees (a duplicate-account lookup): the field stays valid, Next stays
+          // on page 1 and only the alert says why. Engine: Stage::FillFields' Next-stall halt.
+          if (document.getElementById('email').value.startsWith('taken-')) {
+            error.textContent = 'This email is already registered.';
+            error.hidden = false;
+            return;
+          }
+          for (const name of carried) {
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = name;
+            hidden.value = document.getElementById(name).value;
+            form.appendChild(hidden);
+          }
+          show('page-2');
+          document.getElementById('back').addEventListener('click', () => {
+            form.querySelectorAll('input[type=hidden]').forEach((input) => input.remove());
+            mount();
+          });
+        };
+
+        const mount = () => {
+          show('page-1');
+          document.getElementById('next').addEventListener('click', next);
+        };
+        mount();
+      })();
+    </script>
+  </body>
+</html>

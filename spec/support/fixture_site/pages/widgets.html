@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Widgets</title>
+    <!-- Custom controls the widget drivers meet outside Ashby: a react-select-like combobox whose menu is portaled to
+         <body>, a readonly Element UI select (el-select) with a pre-rendered hidden dropdown, yes/no aria-pressed
+         buttons, a typeahead (suggestions after 2 typed characters), a contenteditable cover letter, a native and a
+         masked (dd.mm.yyyy) date, a range slider, a chooser-only dropzone (the file input is created on click), and a
+         cookie overlay that appears after 3 s and intercepts every click until accepted. -->
+    <style>
+      body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; }
+      .field { margin: 1rem 0; }
+      .select__control { display: flex; border: 1px solid #888; width: 16rem; padding: 0.25rem; }
+      .select__value-container { flex: 1; }
+      .select__input { border: 0; outline: 0; width: 100%; }
+      .select__menu-portal { position: absolute; z-index: 20; background: #fff; border: 1px solid #888; width: 16rem; }
+      .select__option { padding: 0.25rem; cursor: pointer; }
+      .el-select-dropdown { position: absolute; z-index: 20; background: #fff; border: 1px solid #888; }
+      .el-select-dropdown__list { list-style: none; margin: 0; padding: 0; }
+      .el-select-dropdown__item { padding: 0.25rem 0.5rem; cursor: pointer; }
+      button[aria-pressed=true] { background: #335; color: #fff; }
+      #cookie-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.4); }
+      #cookie-overlay .box { background: #fff; margin: 30vh auto; padding: 1rem; width: 20rem; }
+      .suggestions { list-style: none; margin: 0; padding: 0; width: 20rem; }
+      .suggestions li { padding: 0.25rem; cursor: pointer; border: 1px solid #ccc; }
+      .editor { border: 1px solid #888; min-height: 3rem; padding: 0.25rem; }
+      .dropzone { border: 2px dashed #888; padding: 1rem; }
+      .spacer { height: 1600px; }
+    </style>
+  </head>
+  <body>
+    <h1>Widgets</h1>
+
+    <div class="field" id="country-field">
+      <label id="country-label" for="country-input">Country</label>
+      <div class="select-shell">
+        <div class="select__control">
+          <div class="select__value-container">
+            <div class="select__placeholder">Select...</div>
+            <input class="select__input" id="country-input" role="combobox" aria-expanded="false" aria-haspopup="true" aria-autocomplete="list" autocomplete="off" />
+          </div>
+          <div class="select__indicators"><span class="select__dropdown-indicator">&#9662;</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="field" id="city-field">
+      <label for="city-input">City</label>
+      <div class="el-select">
+        <div class="el-input el-input--suffix">
+          <input id="city-input" type="text" readonly class="el-input__inner" placeholder="Select" autocomplete="off" />
+          <span class="el-input__suffix"><i class="el-select__caret el-icon-arrow-up"></i></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="permit-question" id="permit-field">
+      <span id="permit-question">Do you have a work permit?</span>
+      <button type="button" aria-pressed="false">Yes</button>
+      <button type="button" aria-pressed="false">No</button>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="school-label" id="school-field">
+      <label id="school-label" for="school-input">School</label>
+      <input id="school-input" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="school-listbox" autocomplete="off" />
+      <ul id="school-listbox" role="listbox" class="suggestions"></ul>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="cover-label" id="cover-field">
+      <span id="cover-label">Cover letter</span>
+      <div id="cover" contenteditable="true" aria-labelledby="cover-label" class="editor">Dear hiring manager, an old draft.</div>
+    </div>
+
+    <div class="field" role="group" id="start-date-field">
+      <label for="start-date">Start date</label>
+      <input id="start-date" type="date" />
+    </div>
+
+    <div class="field" role="group" id="birth-date-field">
+      <label for="birth-date">Birth date</label>
+      <input id="birth-date" type="text" placeholder="dd.mm.yyyy" inputmode="numeric" maxlength="10" />
+    </div>
+
+    <div class="field" role="group" id="experience-field">
+      <label for="experience">Years of experience</label>
+      <input id="experience" type="range" min="0" max="10" step="1" value="0" aria-valuenow="0" aria-valuemin="0" aria-valuemax="10" />
+      <output id="experience-output" for="experience">0</output>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="resume-zone-label" id="resume-zone-field">
+      <span id="resume-zone-label">Resume</span>
+      <button type="button" id="resume-zone" class="dropzone">Upload resume</button>
+      <span id="resume-zone-name"></span>
+    </div>
+
+    <button type="button" id="continue">Continue</button>
+    <div class="spacer"></div>
+    <p id="far-below">The end of the page.</p>
+    <input id="far-input" type="text" aria-label="Far input" />
+
+    <div class="el-select-dropdown el-popper" style="display: none">
+      <ul class="el-select-dropdown__list">
+        <li class="el-select-dropdown__item">Kyiv</li>
+        <li class="el-select-dropdown__item">Lviv</li>
+        <li class="el-select-dropdown__item">Odesa</li>
+      </ul>
+    </div>
+
+    <div id="cookie-overlay">
+      <div class="box">We use cookies. <button type="button" id="cookie-accept">Accept</button></div>
+    </div>
+
+    <script>
+      const COUNTRIES = ['Ukraine', 'Poland', 'Germany', 'Portugal'];
+      const countryInput = document.getElementById('country-input');
+      const control = countryInput.closest('.select__control');
+      let menu = null;
+      const closeMenu = () => {
+        if (menu) menu.remove();
+        menu = null;
+        countryInput.setAttribute('aria-expanded', 'false');
+      };
+      const openMenu = () => {
+        if (menu) return;
+        const rect = control.getBoundingClientRect();
+        menu = document.createElement('div');
+        menu.className = 'select__menu-portal';
+        menu.style.top = `${rect.bottom + window.scrollY}px`;
+        menu.style.left = `${rect.left + window.scrollX}px`;
+        const list = document.createElement('div');
+        list.className = 'select__menu';
+        list.setAttribute('role', 'listbox');
+        list.id = 'react-select-3-listbox';
+        COUNTRIES.forEach((label, index) => {
+          const option = document.createElement('div');
+          option.className = 'select__option';
+          option.setAttribute('role', 'option');
+          option.id = `react-select-3-option-${index}`;
+          option.textContent = label;
+          option.addEventListener('mousedown', (event) => event.preventDefault());
+          option.addEventListener('click', () => {
+            const container = control.querySelector('.select__value-container');
+            container.querySelector('.select__placeholder, .select__single-value')?.remove();
+            const value = document.createElement('div');
+            value.className = 'select__single-value';
+            value.textContent = label;
+            container.prepend(value);
+            closeMenu();
+          });
+          list.appendChild(option);
+        });
+        menu.appendChild(list);
+        document.body.appendChild(menu);
+        countryInput.setAttribute('aria-expanded', 'true');
+      };
+      control.addEventListener('mousedown', openMenu);
+      countryInput.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') openMenu();
+        if (event.key === 'Escape') closeMenu();
+      });
+
+      const cityInput = document.getElementById('city-input');
+      const dropdown = document.querySelector('.el-select-dropdown');
+      cityInput.addEventListener('click', () => {
+        const rect = cityInput.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+        dropdown.style.left = `${rect.left + window.scrollX}px`;
+        dropdown.style.display = 'block';
+      });
+      // Element UI closes the dropdown on Escape and on a click outside it.
+      cityInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') dropdown.style.display = 'none';
+      });
+      document.addEventListener('mousedown', (event) => {
+        if (event.target !== cityInput && !dropdown.contains(event.target)) dropdown.style.display = 'none';
+      });
+      dropdown.querySelectorAll('.el-select-dropdown__item').forEach((item) =>
+        item.addEventListener('click', () => {
+          cityInput.value = item.textContent;
+          dropdown.style.display = 'none';
+        }),
+      );
+
+      document.querySelectorAll('#permit-field button').forEach((button) =>
+        button.addEventListener('click', () => {
+          document.querySelectorAll('#permit-field button').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+        }),
+      );
+
+      // Typeahead: suggestions render into the sibling listbox only once 2+ characters are typed (no ArrowDown).
+      const SCHOOLS = [
+        'Kyiv Polytechnic Institute',
+        'Kyiv-Mohyla Academy',
+        'Taras Shevchenko National University of Kyiv',
+        'Lviv Polytechnic National University',
+        'Kharkiv National University of Radio Electronics',
+      ];
+      const schoolInput = document.getElementById('school-input');
+      const schoolList = document.getElementById('school-listbox');
+      const suggest = () => {
+        schoolList.replaceChildren();
+        const query = schoolInput.value.trim().toLowerCase();
+        const hits = query.length < 2 ? [] : SCHOOLS.filter((school) => school.toLowerCase().includes(query));
+        hits.forEach((label, index) => {
+          const option = document.createElement('li');
+          option.setAttribute('role', 'option');
+          option.id = `school-option-${index}`;
+          option.textContent = label;
+          option.addEventListener('mousedown', (event) => event.preventDefault());
+          option.addEventListener('click', () => {
+            schoolInput.value = label;
+            schoolList.replaceChildren();
+            schoolInput.setAttribute('aria-expanded', 'false');
+          });
+          schoolList.appendChild(option);
+        });
+        schoolInput.setAttribute('aria-expanded', String(hits.length > 0));
+      };
+      schoolInput.addEventListener('input', suggest);
+
+      // Masked date: digits only, dots inserted as you type (dd.mm.yyyy).
+      const birthDate = document.getElementById('birth-date');
+      birthDate.addEventListener('input', () => {
+        const digits = birthDate.value.replace(/\D/g, '').slice(0, 8);
+        let text = digits.slice(0, 2);
+        if (digits.length > 2) text += `.${digits.slice(2, 4)}`;
+        if (digits.length > 4) text += `.${digits.slice(4)}`;
+        birthDate.value = text;
+      });
+
+      const experience = document.getElementById('experience');
+      experience.addEventListener('input', () => {
+        experience.setAttribute('aria-valuenow', experience.value);
+        document.getElementById('experience-output').textContent = experience.value;
+      });
+
+      // Chooser-only dropzone: no file input in the DOM; a detached one is created and opened on click.
+      document.getElementById('resume-zone').addEventListener('click', () => {
+        const picker = document.createElement('input');
+        picker.type = 'file';
+        picker.addEventListener('change', () => {
+          document.getElementById('resume-zone-name').textContent = Array.from(picker.files, (file) => file.name).join(', ');
+        });
+        picker.click();
+      });
+
+      const overlay = document.getElementById('cookie-overlay');
+      setTimeout(() => (overlay.style.display = 'block'), 3000);
+      document.getElementById('cookie-accept').addEventListener('click', () => overlay.remove());
+    </script>
+  </body>
+</html>

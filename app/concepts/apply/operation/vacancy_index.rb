@@ -8,7 +8,7 @@ class Apply::Operation::VacancyIndex < ApplyMate::Operation::Base
     authorize! Apply.new, :index?
     # Rides index_applies_on_vacancy_id (a vacancy has a handful of applies), filtered by the user scope.
     applies = policy_scope(Apply).where(vacancy:)
-                                 .includes(:user_profile, :ai_integration, :source_profile)
+                                 .includes(:user_profile, :ai_integration, :source_profile, apply_steps: { artifacts_attachments: :blob })
                                  .with_attached_cv
                                  .with_attached_screenshot
                                  .order(created_at: :desc)

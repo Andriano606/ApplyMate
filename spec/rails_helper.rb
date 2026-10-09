@@ -38,6 +38,12 @@ rescue ActiveRecord::PendingMigrationError => e
 end
 RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
+  # Canned AI provider payloads (gemini_json_response, ollama_chat_response) — spec/support/ai_responses.rb
+  config.include AiResponses
+  # engine_context(apply) / rotate_run_token!(apply) — spec/support/apply_engine.rb
+  config.include ApplyEngineHelpers
+  # answer_field(...) / answer_entry(...) builders for the answer pipeline specs
+  config.include AnswerHelpers
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [
     Rails.root.join('spec/fixtures')
@@ -70,6 +76,9 @@ RSpec.configure do |config|
 
   # Automatically include shared operation context for operation specs
   config.include_context 'with shared operation spec variables', type: :operation
+
+  # unique_email / unique_phone: every test contact differs on each use (spec/support/unique_contact.rb)
+  config.include UniqueContact
 
   # Time travel helpers (travel_to / freeze_time) available in every spec
   config.include ActiveSupport::Testing::TimeHelpers

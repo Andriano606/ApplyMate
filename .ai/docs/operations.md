@@ -6,13 +6,13 @@ Operations are plain Ruby service objects in `app/concepts/<resource>/operation/
 
 **Operations must be named after the controller action.** Components should also match the action name by default, but may differ when the UI shape warrants it — the most common case is a modal component shared across `new`/`create` and `edit`/`update`.
 
-| Controller action | Operation | Component |
-|-------------------|-----------|-----------|
-| `index` | `Resource::Operation::Index` | `Resource::Component::Index` |
-| `new` / `create` | `Resource::Operation::Create` | `Resource::Component::New` or `Resource::Component::NewModal` |
-| `edit` / `update` | `Resource::Operation::Update` | `Resource::Component::Edit` or `Resource::Component::EditModal` |
-| `show` | `Resource::Operation::Show` | `Resource::Component::Show` |
-| `destroy` | `Resource::Operation::Destroy` | — |
+| Controller action | Operation                      | Component                                                       |
+| ----------------- | ------------------------------ | --------------------------------------------------------------- |
+| `index`           | `Resource::Operation::Index`   | `Resource::Component::Index`                                    |
+| `new` / `create`  | `Resource::Operation::Create`  | `Resource::Component::New` or `Resource::Component::NewModal`   |
+| `edit` / `update` | `Resource::Operation::Update`  | `Resource::Component::Edit` or `Resource::Component::EditModal` |
+| `show`            | `Resource::Operation::Show`    | `Resource::Component::Show`                                     |
+| `destroy`         | `Resource::Operation::Destroy` | —                                                               |
 
 When the same modal form is used for both create and update, name it after the form's purpose rather than the action — e.g. `Resource::Component::FormModal`. Both `create` and `update` actions pass the same component to `endpoint`.
 
@@ -290,8 +290,10 @@ sync_vacancies:
   schedule: every day at 5am
 
 clear_finished_jobs:
-  command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+  command: 'SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)'
   schedule: every hour at minute 12
 ```
 
 Format: `every <N> <unit>`, `every day at <time>`, `every hour at minute <N>`.
+
+**Queues.** Two queues exist, `default` and `apply` (see `architecture.md`, "Queue topology"). A job that may launch a browser or call AI must declare `queue_as :apply` and `limits_concurrency to: 1, key: ..., duration:` sized to its real runtime; everything else stays on `:default`.

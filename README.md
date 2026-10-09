@@ -2,46 +2,60 @@
 
 ## Local Development
 
-| Service        | URL                        | Notes                        |
-|----------------|----------------------------|------------------------------|
-| App            | http://localhost:3000      |                              |
-| MinIO API      | http://localhost:9000      | S3-compatible endpoint       |
-| MinIO Console  | http://localhost:9001      | user: minioadmin / minioadmin |
+| Service       | URL                          | Notes                                                                              |
+| ------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
+| App           | http://localhost:3000        |                                                                                    |
+| MinIO API     | http://localhost:9000        | S3-compatible endpoint                                                             |
+| MinIO Console | http://localhost:9001        | user: minioadmin / minioadmin                                                      |
+| browserd      | http://localhost:9300/health | Camoufox lease daemon for `bin/dev` (`docker compose up -d browserd`)              |
+| browserd-test | http://localhost:9310/health | Test-only browserd for the `:browser` specs (`docker compose up -d browserd-test`) |
+
+browserd variables (Conductor workspaces get them from `bin/conductor/setup.rb`; with `BROWSERD_URL` set in the test
+env the `:browser` specs run against the container). Development (`.env` / `.env.development.local`):
+
+```bash
+BROWSERD_URL=http://localhost:9300
+BROWSERD_TOKEN=dev-browserd-token   # = the docker-compose.yml default
+```
+
+Test (`.env.test.local`): the same token and `BROWSERD_URL=http://localhost:9310`. Only `browserd-test` may reach the
+docker host (where the specs serve their fixture pages); the dev `browserd` loads real job pages and reaches public
+addresses only.
 
 ## Deployment
 
 Deployed via [Kamal](https://kamal-deploy.org/).
 
-| Environment       | URL                                                         | Notes                          |
-|-------------------|-------------------------------------------------------------|--------------------------------|
-| localhost (Caddy) | https://dev.applymate.io                                    |                                |
-| Staging (public)  | https://staging.beapply.xyz                                 | Via Cloudflare Tunnel, SSL     |
-| Staging (local)   | http://staging.applymate.local                              | Requires `/etc/hosts` entry    |
+| Environment       | URL                            | Notes                       |
+| ----------------- | ------------------------------ | --------------------------- |
+| localhost (Caddy) | https://dev.applymate.io       |                             |
+| Staging (public)  | https://staging.beapply.xyz    | Via Cloudflare Tunnel, SSL  |
+| Staging (local)   | http://staging.applymate.local | Requires `/etc/hosts` entry |
 
 ### Staging infrastructure
 
-| Role       | Host           | Description                                           |
-|------------|----------------|-------------------------------------------------------|
-| `web`      | 192.168.50.155 | Puma (Raspberry Pi 5, arm64)                          |
-| `worker`   | 192.168.50.155  | Solid Queue — всі черги                               |
+| Role                   | Host           | Description                                                                                                                       |
+| ---------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `web`                  | 192.168.50.155 | Puma (Raspberry Pi 5, arm64)                                                                                                      |
+| `worker`               | 192.168.50.155 | Solid Queue — черга default (`SQ_ROLE=general`)                                                                                   |
+| `apply_worker`         | 192.168.50.155 | Solid Queue — черга apply, threads = `APPLY_SLOTS` (браузер/AI-джоби)                                                             |
+| `browserd` (accessory) | 192.168.50.155 | Camoufox lease daemon, `MAX_BROWSERS = APPLY_SLOTS = 3`, 6 GB / 3 CPU; портів назовні немає (лише мережа kamal, alias `browserd`) |
 
 ### Staging accessory URLs
 
-| Accessory      | URL                                                               | Notes                          |
-|----------------|-------------------------------------------------------------------|--------------------------------|
-| App (public)   | [https://staging.beapply.xyz](https://staging.beapply.xyz)       | Via Cloudflare Tunnel          |
-| App (local)    | [http://staging.applymate.local](http://staging.applymate.local) | Requires `/etc/hosts` entry    |
-| PostgreSQL     | `192.168.50.155:5434`                                             | No web UI                      |
-| MinIO S3 API   | [http://192.168.50.155:9002](http://192.168.50.155:9002)           | S3-compatible endpoint         |
-| MinIO Console  | [http://192.168.50.155:9003](http://192.168.50.155:9003)           | Web UI for bucket management   |
-| Elasticsearch  | [http://192.168.50.155:9201](http://192.168.50.155:9201)           | REST API                       |
-| Chrome noVNC   | [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html) | Browser-based VNC UI  |
-| Chrome VNC     | `192.168.50.155:5901`                                             | VNC client (RealVNC/TigerVNC)  |
-| Chrome CDP     | `192.168.50.155:9222`                                             | Chrome DevTools Protocol       |
+| Accessory     | URL                                                              | Notes                        |
+| ------------- | ---------------------------------------------------------------- | ---------------------------- |
+| App (public)  | [https://staging.beapply.xyz](https://staging.beapply.xyz)       | Via Cloudflare Tunnel        |
+| App (local)   | [http://staging.applymate.local](http://staging.applymate.local) | Requires `/etc/hosts` entry  |
+| PostgreSQL    | `192.168.50.155:5434`                                            | No web UI                    |
+| MinIO S3 API  | [http://192.168.50.155:9002](http://192.168.50.155:9002)         | S3-compatible endpoint       |
+| MinIO Console | [http://192.168.50.155:9003](http://192.168.50.155:9003)         | Web UI for bucket management |
+| Elasticsearch | [http://192.168.50.155:9201](http://192.168.50.155:9201)         | REST API                     |
 
 ### Prerequisites
 
 Add to `/etc/hosts` on your machine (for local access):
+
 ```
 192.168.50.155 staging.applymate.local
 ```
@@ -50,12 +64,12 @@ Add to `/etc/hosts` on your machine (for local access):
 
 Staging is publicly accessible via a named Cloudflare Tunnel — no port forwarding required.
 
-| What               | Value                                              |
-|--------------------|----------------------------------------------------|
-| Domain             | `staging.beapply.xyz` (DNS managed by Cloudflare) |
-| Tunnel name        | `apply-mate-staging`                               |
+| What               | Value                                                                        |
+| ------------------ | ---------------------------------------------------------------------------- |
+| Domain             | `staging.beapply.xyz` (DNS managed by Cloudflare)                            |
+| Tunnel name        | `apply-mate-staging`                                                         |
 | Tunnel credentials | `/home/andrii/.cloudflared/19a80cfc-968d-48cc-9197-9494e6b1071a.json` on RPi |
-| Config             | `/etc/cloudflared/config.yml` on RPi               |
+| Config             | `/etc/cloudflared/config.yml` on RPi                                         |
 
 The `cloudflared` daemon runs as a systemd service on the RPi and maintains 4 persistent connections to Cloudflare edge (Warsaw). SSL is handled automatically by Cloudflare.
 
@@ -133,12 +147,6 @@ bin/kamal accessory reboot minio -d staging
 
 # Логи MinIO
 bin/kamal accessory logs minio -d staging
-
-# Перезапуск Chrome VNC
-bin/kamal accessory reboot chrome_vnc -d staging
-
-# Логи Chrome VNC
-bin/kamal accessory logs chrome_vnc -d staging -f
 ```
 
 ### MinIO (staging)
@@ -160,59 +168,74 @@ ssh andrii@192.168.50.155 "sudo ufw allow from 192.168.31.0/24 to any port 9002 
 ```
 
 **Доступ:**
+
 - S3 API: `http://192.168.50.155:9002`
 - Веб-консоль: `http://192.168.50.155:9003`
 
-### Chrome VNC (staging)
+### browserd (Camoufox)
 
-Chrome з VNC-доступом для автоматизації та дебагу скрейпінгу.
-Dockerfile: `docker/chrome_vnc/Dockerfile`.
+`browserd` видає застосунку короткоживучі браузери Camoufox (Firefox з фінгерпринтом на рівні C++) — «лізи» —
+по протоколу Playwright. Кожен ліз — окремий процес браузера з власним TTL (дедлайн скоупу + 60 с, не більше `LEASE_TTL_S` = 1800 с); кількість одночасних браузерів обмежена
+`MAX_BROWSERS`. Браузери ходять в інтернет лише через проксі smokescreen (тільки публічні адреси) і не бачать
+внутрішніх сервісів. Повний опис (API лізів, reaper, ізоляція мережі, версії): `.ai/docs/browser.md`.
+Dockerfile: `docker/browserd/Dockerfile`; образ: `andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2`
+(тег = версії Camoufox і playwright-core + ревізія `BROWSERD_REVISION`; будь-яка зміна в `docker/browserd/` піднімає ревізію,
+інакше Kamal і compose не стягнуть новий образ).
 
-Архітектура всередині контейнера:
-- **Xvfb** — віртуальний дисплей
-- **Fluxbox** — мінімальний window manager
-- **x11vnc** — VNC-сервер (порт 5900)
-- **websockify + noVNC** — веб-інтерфейс для VNC (порт 6080)
-- **Chromium** — браузер з CDP на `127.0.0.1:19222`
-- **nginx** — проксі на порт 9222 → 19222, переписує `Host: localhost` та `webSocketDebuggerUrl` у відповідях, щоб Ferrum міг підключитися з worker-контейнера
+| Змінна                | Значення                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `BROWSERD_TOKEN`      | Bearer-токен (обов'язковий, ≥ 16 символів); у dev за замовчуванням `dev-browserd-token`                                              |
+| `MAX_BROWSERS`        | 1..3, ліміт одночасних браузерів (у dev = `APPLY_SLOTS`, за замовчуванням 1)                                                         |
+| `LEASE_TTL_S`         | найдовше життя лізу, за замовчуванням 1800; `POST /leases` просить `ttl_s` = дедлайн скоупу + 60 с                                   |
+| `HEADLESS`            | `true` / `virtual` (Xvfb) / `false`                                                                                                  |
+| `BROWSERD_OS`         | ОС фінгерпринту, `windows`                                                                                                           |
+| `EGRESS_ALLOW_RANGES` | лише для тестів (`browserd-test`, CI): `host.docker.internal` → /32 для fixture_site. Не задавати ні в dev `browserd`, ні на staging |
 
-Застосунок підключається через `ApplyMate::Client::Browser` → `CHROME_HOST=chrome-vnc` (мережевий аліас контейнера) → nginx → Chromium CDP.
-
-**Перший запуск:**
+**Локально:**
 
 ```bash
-# 0. Одноразово — створити multi-platform builder (якщо ще не створений)
+docker compose up -d browserd browserd-test   # перша збірка завантажує ~1.3 ГБ Camoufox
+curl -s localhost:9300/health        # {"ok":true,"leases":0,"max":1,...,"proxy_ok":true}
+curl -s localhost:9310/health        # browserd-test: "max":3
+curl -s -H 'Authorization: Bearer dev-browserd-token' localhost:9300/health/deep   # запуск браузера → about:blank
+```
+
+**Збірка і публікація мульти-арх образу (лише власник репозиторію):**
+
+```bash
+# Одноразово — multi-platform builder (якщо ще не створений)
 docker buildx create --name multiarch --driver docker-container --use
 # Якщо вже існує:
 docker buildx use multiarch
 
-# 1. Збудувати мульти-арх образ і запушити (amd64 + arm64 для RPi)
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t andriano606/apply_mate_chrome_vnc:latest \
+  -t andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2 \
   --push \
-  docker/chrome_vnc
-
-# 2. Підняти контейнер
-bin/kamal accessory boot chrome_vnc -d staging
+  docker/browserd
 ```
 
-**Доступ:**
-- noVNC (веб): [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html)
-- VNC клієнт: `192.168.50.155:5901`
-- Chrome CDP: `192.168.50.155:9222`
-
-**Після зміни Dockerfile або entrypoint.sh:**
+**Staging (Kamal accessory `browserd`):**
 
 ```bash
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t andriano606/apply_mate_chrome_vnc:latest \
-  --push \
-  docker/chrome_vnc
-
-bin/kamal accessory reboot chrome_vnc -d staging
+bin/kamal accessory boot browserd -d staging      # перший запуск
+bin/kamal accessory reboot browserd -d staging    # після зміни образу або env
+bin/kamal accessory logs browserd -d staging -f
 ```
+
+`config/deploy.staging.yml` задає `<% apply_slots = 3 %>` — одне значення для `APPLY_SLOTS` ролі `apply_worker` і
+`MAX_BROWSERS` аксесуара. `BROWSERD_URL=http://browserd:9300` є лише в `apply_worker`.
+
+**Токен `BROWSERD_TOKEN`** зберігається у staging credentials як `browserd.token` і потрапляє в Kamal через
+`.kamal/secrets.staging` (так само, як секрети MinIO). Згенерувати й додати:
+
+```bash
+openssl rand -hex 32
+EDITOR=nano bin/rails credentials:edit --environment staging   # browserd: token: <значення>
+```
+
+Ротація токена: змінити `browserd.token`, потім `bin/kamal accessory reboot browserd -d staging` і
+`bin/kamal deploy -d staging --roles=apply_worker`. Деталі (CI, розміри, stop_timeout): `.ai/docs/browser.md`.
 
 ### Credentials
 
@@ -225,12 +248,13 @@ EDITOR=nano bin/rails credentials:edit --environment staging
 ```
 
 Expected structure:
+
 ```yaml
 kamal:
   registry_password: your_docker_hub_access_token
   postgres_password: your_secure_db_password
 
-secret_key_base: your_secret_key_base  # generate with: bin/rails secret
+secret_key_base: your_secret_key_base # generate with: bin/rails secret
 
 google:
   client_id: your_google_client_id
@@ -238,14 +262,19 @@ google:
 
 # Staging only
 minio:
-  access_key_id: your_minio_user      # мінімум 3 символи
-  secret_access_key: your_minio_pass  # мінімум 8 символів
+  access_key_id: your_minio_user # мінімум 3 символи
+  secret_access_key: your_minio_pass # мінімум 8 символів
+
+browserd:
+  token: your_browserd_token # openssl rand -hex 32 (browserd вимагає ≥ 16 символів)
 ```
 
 > Keep `config/credentials/staging.key` in a password manager — without it the credentials cannot be decrypted.
 
 ### Running in SSL mode in development
+
 The benefits of running in SSL mode are:
+
 1. You run closer to what we do in production
 2. You get the benefit of http2.
 3. Some features only work over SSL such as using javascript to access the clipboard (copy/paste)
@@ -253,25 +282,30 @@ The benefits of running in SSL mode are:
 You need to have Caddy installed, eg with `brew install Caddy`
 
 Put the following line in `/etc/hosts`:
+
 ```
 127.0.0.1       dev.applymate.io
 ```
 
 Then run Caddy:
+
 ```bash
 caddy run --config config/Caddyfile.dev
 ```
+
 (this is also in Procfile.dev, so it should be automatically run with `bin/dev`)
 
 The first time you should probably run it manually, since it will then request some root privileges to install
 necessary root certificates locally.
 
 **Trust the Caddy local CA:**
+
 ```bash
 caddy trust
 ```
 
 **Chrome on Linux** uses its own NSS database and requires an extra step:
+
 ```bash
 # Install certutil if needed
 sudo apt install libnss3-tools
@@ -287,4 +321,3 @@ certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "Caddy Local Authority" \
 Then fully restart Chrome (`chrome://restart`).
 
 You can now access your local instance using https://dev.applymate.io
-

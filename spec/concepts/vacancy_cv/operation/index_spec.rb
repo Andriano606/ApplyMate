@@ -14,11 +14,11 @@ RSpec.describe VacancyCv::Operation::Index, type: :operation do
   end
 
   let!(:vacancy_cv)          { create(:vacancy_cv, vacancy:, user_profile:, created_at: 3.days.ago) }
-  let!(:apply_with_cv)       { attach_cv(create(:apply, user: current_user, vacancy:, created_at: 2.days.ago)) }
-  let!(:apply_generating_cv) { create(:apply, user: current_user, vacancy:, status: :generating_cv, created_at: 1.day.ago) }
+  let!(:apply_with_cv)       { attach_cv(create(:apply, :completed, user: current_user, vacancy:, created_at: 2.days.ago)) }
+  let!(:apply_generating_cv) { create(:apply, :running, user: current_user, vacancy:, created_at: 1.day.ago) }
 
   before do
-    create(:apply, user: current_user, vacancy:, status: :failed_generating_cv)
+    create(:apply, :failed, user: current_user, vacancy:)
     create(:vacancy_cv, vacancy:)
     attach_cv(create(:apply, user: create(:user), vacancy:))
     attach_cv(create(:apply, user: current_user))

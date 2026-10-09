@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <title>Process Engineer - Hurma-like phone mask</title>
+  <style>
+    .phone-input-wrapper { display: flex; align-items: center; gap: 4px; }
+    .country-selector { cursor: pointer; width: 24px; height: 16px; background: #ffd500; }
+  </style>
+</head>
+<body>
+  <!-- Recorded from a live Hurma form (apply 324): the required phone field is a Vue component with a country selector,
+       a fixed "+380" span beside the input and a mask that reformats the typed digits as "XX XXX XX XX". The input
+       never holds the digits as typed, so a read-back that compares text exactly can never accept it. -->
+  <form id="apply" action="/submit" method="post">
+    <div class="response-field-item">
+      <div class="response-form-item-title">ПІБ <span>*</span></div>
+      <div class="response-form-item"><input class="response-form-item-input" type="text" id="full-name"></div>
+    </div>
+    <div class="response-field-item">
+      <div class="response-form-item-title">Телефон <span>*</span></div>
+      <div class="response-form-item">
+        <div class="custom-phone-input response-form-item-input mb-2">
+          <div class="phone-input-wrapper">
+            <div class="country-selector" aria-haspopup="menu" aria-expanded="false"><span class="country-flag"></span></div>
+            <span class="country-code">+380</span>
+            <input class="phone-number-input" type="tel" placeholder="">
+          </div>
+        </div>
+      </div>
+    </div>
+    <button type="submit" class="send-button">Надіслати</button>
+  </form>
+  <script>
+    // The Vue mask: keep at most 9 national digits and show them as "XX XXX XX XX", on every input event (typed keys
+    // and a pasted fill alike).
+    const phone = document.querySelector('.phone-number-input');
+    phone.addEventListener('input', () => {
+      const digits = phone.value.replace(/\D/g, '').slice(0, 9);
+      const parts = [ digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9) ];
+      phone.value = parts.filter((part) => part.length > 0).join(' ');
+    });
+  </script>
+</body>
+</html>

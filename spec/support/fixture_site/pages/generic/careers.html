@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Animator / Motion Designer - HoneyTech careers</title>
+    <!-- A company careers page on a site no adapter knows (Apply::Platform::Generic): the vacancy text and a third-party
+         application widget in a cross-origin iframe (generic/widget.html on the second origin) that shows the form only
+         after its "Apply" tab is clicked. A cookie banner with a single "Accept all" fades in after 1 s in space that
+         is reserved for it (no layout shift, it covers nothing). No platform markers anywhere. -->
+    <style>
+      body { font-family: sans-serif; max-width: 48rem; margin: 0 auto; padding: 1rem; }
+      #cookie-banner { height: 3rem; visibility: hidden; background: #eef; padding: 0.5rem; }
+      #apply-widget { width: 100%; height: 900px; border: 1px solid #ccc; }
+    </style>
+  </head>
+  <body>
+    <div id="cookie-banner">
+      We use cookies to improve your experience. <button type="button" id="cookie-accept">Accept all</button>
+    </div>
+    <header>
+      <a href="{{ORIGIN}}/generic/careers.html">HoneyTech</a>
+    </header>
+    <main>
+      <h1>AI Animator / Motion Designer</h1>
+      <p>HoneyTech is looking for a motion designer who animates characters with AI tools.</p>
+      <ul>
+        <li>3+ years of motion design</li>
+        <li>After Effects, Blender</li>
+      </ul>
+      <iframe id="apply-widget" title="Job application" src="{{ALT_ORIGIN}}/generic/widget.html"></iframe>
+    </main>
+    <script>
+      const banner = document.getElementById('cookie-banner');
+      setTimeout(() => (banner.style.visibility = 'visible'), 1000);
+      document.getElementById('cookie-accept').addEventListener('click', () => (banner.style.visibility = 'hidden'));
+    </script>
+  </body>
+</html>

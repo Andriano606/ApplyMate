@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hostile markup (recorded from live Generic forms)</title>
+  <style>
+    .hidden { display: none; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .dropdown-no-results, .dropdown-loading-results, .resume-upload-failure, .resume-upload-working, .resume-upload-success { display: none; }
+    .items { display: none; }
+  </style>
+</head>
+<body>
+  <h1>EagleSTAR, Trainee FE Developer</h1>
+  <!-- Nested clickables outside the form: a custom role=button host around a native button (CleverStaff), a button
+       inside a link (Ashby job board), a nameless close icon. -->
+  <button-component role="button" id="launcher-host"><button type="button" id="launcher">Відгукнутися</button></button-component>
+  <a href="/application" id="apply-link"><button>Apply for this Job</button></a>
+  <div class="close-btn" role="button" tabindex="0" id="close"></div>
+  <!-- A div send control (role=button, no type, outside any form): ExecuteAction refuses it by name. -->
+  <div role="button" tabindex="0" id="lone-send">Send application</div>
+  <!-- CleverStaff uib-modal: the dialog's own "Відгукнутися" sits in the footer, outside its <form>, beside the page
+       launcher of the same name. -->
+  <div role="dialog" class="modal fade in" id="respond-modal">
+    <form name="respond"><input type="text" id="modal-email" aria-label="Email"></form>
+    <div class="modal-footer"><button type="button" id="modal-send">Відгукнутися</button></div>
+  </div>
+
+  <form id="apply" action="/submit" method="post">
+    <!-- PeopleForce (live DOM depth): the label targets a hidden twin; the visible Vue phone input has no label of its
+         own and sits 7 ancestors below the label's container, beside a nameless country-code popover trigger. -->
+    <div class="!tw-mb-4" id="phone-group">
+      <label class="required" for="career_application_form_phone_numbers">Номер телефону</label>
+      <div data-component="pf-phone-number">
+        <div hideicon="">
+          <div>
+            <div class="pf-relative pf-flex pf-gap-6">
+              <button type="button" id="reka-popover-trigger-v-0" aria-haspopup="dialog" aria-expanded="false"><span class="pf-flag"></span></button>
+              <div data-testid="input-base">
+                <div class="pf-flex">
+                  <div class="pf-relative"><input id="career_application_form[phone_numbers][]" type="tel" maxlength="24"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <input type="tel" hidden id="career_application_form_phone_numbers" name="career_application_form[phone_numbers][]">
+      </div>
+    </div>
+
+    <!-- PeopleForce (live DOM depth): Froala editor over a display:none textarea, 4 ancestors below the label's
+         container, with its own toolbar buttons. -->
+    <div class="!tw-mb-4" id="cover-group">
+      <label for="career_application_form_cover_letter">Супровідний лист</label>
+      <div>
+        <div id="career_application_form_v2_cover_letter_container_1" data-controller="forms--rich-text-component">
+          <div class="fr-box">
+            <div class="fr-toolbar"><button type="button" class="fr-command" data-cmd="bold">B</button></div>
+            <div class="fr-wrapper"><div class="fr-element fr-view" contenteditable="true"></div></div>
+          </div>
+        </div>
+        <textarea class="hidden" name="career_application_form[cover_letter]" id="career_application_form_cover_letter" style="display: none;"></textarea>
+      </div>
+    </div>
+
+    <!-- reCAPTCHA response field. -->
+    <textarea id="g-recaptcha-response" name="g-recaptcha-response" style="width: 250px; height: 40px; display: none;"></textarea>
+
+    <!-- PeopleForce: Alpine select = a readonly input showing the current value, items in a hidden list. -->
+    <div class="form-group" id="salary-group">
+      <label for="career_application_form_desired_salary">Бажана базова компенсація</label>
+      <input type="number" name="career_application_form[desired_salary]" id="career_application_form_desired_salary">
+      <div x-data="selectComponentController" data-value="USD">
+        <div title="USD - United States Dollar">
+          <div x-ref="wrapper"><input value="USD - United States Dollar" title="USD - United States Dollar" type="text" readonly id="currency"></div>
+          <div class="items">
+            <div class="item" data-value="AED" data-text="AED - UAE Dirham">AED - UAE Dirham</div>
+            <div class="item" data-value="USD" data-text="USD - United States Dollar">USD - United States Dollar</div>
+          </div>
+        </div>
+      </div>
+      <input type="hidden" name="career_application_form[currency_code]" value="USD">
+    </div>
+
+    <!-- Lever: CSS-hidden status text inside the wrapping label. -->
+    <label class="lever-location">
+      <div class="application-label">Current location </div>
+      <div class="application-field">
+        <input class="location-input" id="location-input" type="text" maxlength="100" name="location">
+        <div class="dropdown-container"><div class="dropdown-results"></div>
+          <div class="dropdown-no-results">No location found. Try entering a different location</div>
+          <div class="dropdown-loading-results"><span>Loading</span></div>
+        </div>
+      </div>
+    </label>
+
+    <!-- Lever: the CV label with a mid-label mark, a chooser anchor around the file input and hidden statuses. -->
+    <label class="lever-resume">
+      <div class="application-label">Resume/CV <span class="required">✱</span></div>
+      <a href="#" class="postings-btn visible-resume-upload" id="resume-chooser"><span class="default-label">ATTACH RESUME/CV</span><input id="resume-upload-input" name="resume" type="file"></a>
+      <span class="resume-upload-failure"><div>Couldn't auto-read resume.</div></span>
+      <span class="resume-upload-working">Analyzing resume...</span>
+      <span class="resume-upload-success">Success!</span>
+    </label>
+
+    <!-- Greenhouse: a visually-hidden "Attach" label, the question is the field's title. -->
+    <div class="file-upload" id="cover-letter-upload" role="group" aria-labelledby="upload-label-cover_letter">
+      <div class="label" id="upload-label-cover_letter">Cover Letter</div>
+      <label class="visually-hidden" for="cover_letter">Attach</label>
+      <input id="cover_letter" class="visually-hidden" type="file" accept=".pdf,.doc,.docx">
+      <button type="button">Attach</button>
+    </div>
+
+    <!-- Ashby: a resume-parse helper dropzone. -->
+    <div role="presentation" data-state="default" id="autofill">
+      <input type="file" style="position: absolute; clip: rect(0px, 0px, 0px, 0px);" tabindex="-1">
+      <div><h3>Autofill from resume</h3><p>Upload your resume here to autofill key application fields.</p><div><button type="button">Upload file</button></div></div>
+    </div>
+
+    <!-- CleverStaff: a title paragraph with a required star, a placeholder-named input. -->
+    <div class="field-block" id="first-name-block">
+      <p class="field-block__title">Ім'я <span class="form-title-star">*</span></p>
+      <input-component><div><input type="text" placeholder="Ім'я" id="first-name"></div></input-component>
+    </div>
+
+    <!-- CleverStaff: the consent text FOLLOWS the checkbox component. -->
+    <div class="personal-data-access" id="consent-block">
+      <checkbox-component><label class="checkbox"><input type="checkbox" id="consent"><span aria-hidden="true"></span></label></checkbox-component>
+      <span class="personal-data-access__text">Я даю дозвіл на обробку своїх персональних даних для цієї та інших вакансій <span class="form-title-star">*</span></span>
+    </div>
+
+    <!-- MacPaw: a label with an inline link and a non-breaking space. -->
+    <div id="terms-block"><input type="checkbox" id="terms"><label for="terms"><p>I agree to the&nbsp;<a href="https://example.com/policy">Privacy Policy</a>.</p></label></div>
+
+    <!-- Lever: invisible hCaptcha, framed only on submit. -->
+    <div id="h-captcha" class="h-captcha" data-sitekey="e33f87f8-0000-0000-0000-000000000000"></div>
+    <input id="hcaptchaResponseInput" type="hidden" name="h-captcha-response">
+    <button id="hcaptchaSubmitBtn" type="submit" class="hidden"></button>
+    <button type="submit">Submit application</button>
+  </form>
+
+  <!-- PeopleForce footer: a locale switcher (changing it navigates away) right after the "powered by" credit. -->
+  <footer>
+    <div>Працює на <a href="https://peopleforce.io">PeopleForce</a></div>
+    <div><div x-data="{}"><select name="locale" id="career_locale"><option value="en">English</option><option value="uk" selected>Українська</option></select></div></div>
+  </footer>
+</body>
+</html>

@@ -21,7 +21,7 @@ RSpec.describe Apply::Operation::FetchInternalForm do
     end
 
     describe '#call' do
-      subject(:run_operation) { described_class.call(apply:) }
+      subject(:run_operation) { described_class.call(ctx: engine_context(apply)) }
 
       it 'fetches the vacancy page with the session cookie' do
         run_operation
@@ -75,9 +75,31 @@ RSpec.describe Apply::Operation::FetchInternalForm do
         expect(cv).to include('type' => 'file')
       end
 
-      it 'completes without an error' do
-        run_operation
-        expect(apply.reload.error).to be_nil
+      it 'succeeds as the fetch_form stage' do
+        expect(run_operation).to be_success
+        expect(described_class.stage).to eq(:fetch_form)
+      end
+
+      context 'when the vacancy page comes back empty' do
+        before do
+          allow(http_client).to receive(:get).and_return(
+            ApplyMate::Client::AsyncHttp::Response.new('', {}, 200, ArtOfSpinDjinni::VACANCY_URL)
+          )
+        end
+
+        it 'halts with not_a_form' do
+          expect { run_operation }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+            expect(halt).to have_attributes(code: :not_a_form, detail: 'empty vacancy page')
+          }
+        end
+
+        it 'ends the run unsupported with a failed fetch_form step' do
+          run_engine_step(apply, described_class)
+
+          expect(apply).to be_unsupported
+          expect(apply.failure).to include('code' => 'not_a_form', 'stage' => 'fetch_form', 'after_claim' => false)
+          expect(apply.apply_steps.sole).to have_attributes(stage: 'fetch_form', state: 'failed', error_code: 'not_a_form')
+        end
       end
 
       context 'when the page returns several Set-Cookie headers (Django + Cloudflare)' do
@@ -118,7 +140,7 @@ RSpec.describe Apply::Operation::FetchInternalForm do
     end
 
     describe '#call' do
-      subject(:run_operation) { described_class.call(apply:) }
+      subject(:run_operation) { described_class.call(ctx: engine_context(apply)) }
 
       it 'fetches the vacancy page with the session cookie' do
         run_operation
@@ -162,9 +184,8 @@ RSpec.describe Apply::Operation::FetchInternalForm do
         expect(cv).to include('type' => 'file')
       end
 
-      it 'completes without an error' do
-        run_operation
-        expect(apply.reload.error).to be_nil
+      it 'succeeds' do
+        expect(run_operation).to be_success
       end
     end
   end

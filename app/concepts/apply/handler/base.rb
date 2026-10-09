@@ -2,7 +2,23 @@
 
 require 'faraday/multipart'
 
+# A job board's apply pipeline: an ordered list of steps (Apply::Operation::Base subclasses), run by
+# Apply::Operation::Engine::Run. See .ai/docs/apply_handlers.md and .ai/docs/apply_engine.md.
 class Apply::Handler::Base
+  # operation  Apply::Operation::Base subclass (declares `stage`)
+  # condition  nil or a lambda called with the run's Apply::Operation::Engine::Context; falsy skips the step
+  # options    keyword arguments forwarded to the operation's run!
+  # scope      nil, or the name of the session_scope the step is declared in (one browser lease per scope)
+  # position   index in the handler's step list (apply_steps.position)
+  #
+  # key (apply_steps.key, unique per attempt): "<stage>[:replay][:<scope>]", e.g. navigate:survey,
+  # navigate:replay:submit; a scope-less step's key is just its stage.
+  Step = Data.define(:operation, :condition, :options, :scope, :position) do
+    def key
+      [ operation.stage, options[:replay] ? 'replay' : nil, scope ].compact.join(':')
+    end
+  end
+
   class << self
     def for(apply)
       scraper_name = apply.source_profile.source.scraper.demodulize
@@ -11,13 +27,67 @@ class Apply::Handler::Base
       raise "No handler defined for scraper: #{scraper_name}"
     end
 
-    def add_step(operation, execute_condition: nil, **options)
-      @steps ||= []
-      @steps << { operation:, condition: execute_condition, options: }
+    def add_step(operation, if: nil, **options)
+      steps << Step.new(operation:, condition: binding.local_variable_get(:if), options:, scope: @current_scope,
+                        position: steps.size)
+    end
+
+    # Steps declared in the block share ONE browser session (one lease) and run as a unit: the Runner skips the
+    # unit only when every step in it can be restored, otherwise it re-runs all of them. `if:` is checked once
+    # before the session is opened (a falsy scope leaves no rows).
+    def session_scope(name, if: nil)
+      raise ArgumentError, 'session scopes do not nest' if @current_scope
+
+      scope_conditions[name] = binding.local_variable_get(:if)
+      @current_scope = name
+      yield
+    ensure
+      @current_scope = nil
+    end
+
+    # The engine pipeline of design §10.1. `if` (the handler's routing guard; Handler::Dou: an external apply) is put on
+    # every step and scope: DetectPlatform, FetchSchema, the :survey scope (ReachForm + DiscoverFields, while
+    # ctx.survey_needed?), AnswerFields, the CV, ReviewGate, AcquireHostSlot and the :submit scope. A platform no adapter
+    # knows stays `generic` and is reached by the Navigator inside ReachForm. The recipe-learning stage arrives in phase 6.
+    def engine!(if: nil)
+      guard = binding.local_variable_get(:if)
+      stages = Apply::Operation::Stage
+      add_step stages::DetectPlatform, if: guard
+      add_step stages::FetchSchema, if: guard
+      session_scope(:survey, if: all_of(guard, ->(ctx) { ctx.survey_needed? })) do
+        add_step stages::ReachForm
+        add_step stages::DiscoverFields
+      end
+      add_step stages::AnswerFields, if: guard
+      add_step Apply::Operation::Ai::GeneratePdfCv, if: guard, prompt_class: Apply::Ai::Prompt::GenerateCv,
+                                                    schema_class: Apply::Ai::ResponseSchema::GenerateCv
+      add_step stages::ReviewGate, if: guard
+      add_step stages::AcquireHostSlot, if: guard
+      session_scope(:submit, if: guard) do
+        add_step stages::ReachForm, replay: true
+        add_step stages::DiscoverFields, reconcile: true
+        add_step stages::FillFields
+        add_step stages::Submit
+        add_step stages::Verify
+      end
     end
 
     def steps
-      @steps || []
+      @steps ||= []
+    end
+
+    # { scope name => condition lambda or nil }
+    def scope_conditions
+      @scope_conditions ||= {}
+    end
+
+    private
+
+    def all_of(*conditions)
+      conditions = conditions.compact
+      return nil if conditions.empty?
+
+      ->(ctx) { conditions.all? { |condition| condition.call(ctx) } }
     end
   end
 
@@ -26,11 +96,7 @@ class Apply::Handler::Base
   end
 
   def call
-    self.class.steps.each do |step|
-      next if step[:condition] && !step[:condition].call(@apply)
-
-      step[:operation].call(apply: @apply, handler: self, **step[:options])
-    end
+    Apply::Operation::Engine::Run.call(apply: @apply, handler: self)
   end
 
   def cv_filename

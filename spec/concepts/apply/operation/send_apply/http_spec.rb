@@ -8,18 +8,24 @@ RSpec.describe Apply::Operation::SendApply::Http do
     ApplyMate::Client::AsyncHttp::Response.new(body, headers, status)
   end
 
+  # The step as the only step of a real run (claim rule + Lifecycle), with the payload stubbed on its handler.
+  def run_step
+    run_engine_step(apply, described_class) { |handler| allow(handler).to receive(:build_payload).and_return(payload) }
+  end
+
   context 'DOU internal apply (Coidea Agency)' do
     include_context 'coidea dou'
 
     let(:http_client) { instance_double(ApplyMate::Client::ImpersonateHttp) }
     let(:handler)     { instance_double(Apply::Handler::Base) }
+    let(:payload) do
+      { 'csrfmiddlewaretoken' => 'oT3J2ws9iVPG6NQGwgzRo2N0CGJ428nE87IOzxDNiX5OP907lcKlRKTxNt9843KR',
+        'descr'               => 'I am an experienced UI/UX designer.' }
+    end
 
     before do
       allow(ApplyMate::Client::ImpersonateHttp).to receive(:new).and_return(http_client)
-      allow(handler).to receive(:build_payload).and_return(
-        'csrfmiddlewaretoken' => 'oT3J2ws9iVPG6NQGwgzRo2N0CGJ428nE87IOzxDNiX5OP907lcKlRKTxNt9843KR',
-        'descr'               => 'I am an experienced UI/UX designer.'
-      )
+      allow(handler).to receive(:build_payload).and_return(payload)
 
       apply.update!(
         action:        CoideaDou::VACANCY_URL,
@@ -31,7 +37,7 @@ RSpec.describe Apply::Operation::SendApply::Http do
     end
 
     describe '#call' do
-      subject(:run_operation) { described_class.call(apply:, handler:) }
+      subject(:run_operation) { described_class.call(ctx: engine_context(apply), handler:) }
 
       context 'when the server responds 200 OK' do
         before { allow(http_client).to receive(:post_multipart).and_return(http_response(200)) }
@@ -69,14 +75,25 @@ RSpec.describe Apply::Operation::SendApply::Http do
           )
         end
 
-        it 'marks the apply as completed' do
+        it 'takes the submit claim before the POST' do
+          claimed_at_post = nil
+          allow(http_client).to receive(:post_multipart) do
+            claimed_at_post = Apply.find(apply.id).submit_claimed_at
+            http_response(200)
+          end
+
           run_operation
-          expect(apply.reload.status).to eq('completed')
+
+          expect(claimed_at_post).to be_present
         end
 
-        it 'completes without an error' do
-          run_operation
-          expect(apply.reload.error).to be_nil
+        it 'completes the run, claim first, then submitted' do
+          run_step
+
+          expect(apply).to be_completed
+          expect(apply.submit_claimed_at).to be_present
+          expect(apply.submitted_at).to be >= apply.submit_claimed_at
+          expect(apply.apply_steps.sole).to have_attributes(stage: 'submit', state: 'succeeded')
         end
       end
 
@@ -93,12 +110,25 @@ RSpec.describe Apply::Operation::SendApply::Http do
         end
 
         it 'includes the CV as a multipart file part under the file input name' do
-          described_class.call(apply:, handler: real_handler)
+          described_class.call(ctx: engine_context(apply), handler: real_handler)
           expect(http_client).to have_received(:post_multipart).with(
             anything,
             payload: hash_including('user_cv' => instance_of(Faraday::Multipart::FilePart)),
             headers: anything
           )
+        end
+      end
+
+      context 'when building the payload fails' do
+        before do
+          allow(handler).to receive(:build_payload).and_raise(ActiveStorage::FileNotFoundError)
+          allow(http_client).to receive(:post_multipart)
+        end
+
+        it 'never claims nor posts' do
+          expect { run_operation }.to raise_error(ActiveStorage::FileNotFoundError)
+          expect(apply.reload.submit_claimed_at).to be_nil
+          expect(http_client).not_to have_received(:post_multipart)
         end
       end
 
@@ -109,25 +139,30 @@ RSpec.describe Apply::Operation::SendApply::Http do
         end
 
         it 'treats the redirect as success and completes' do
-          run_operation
-          expect(apply.reload.status).to eq('completed')
-          expect(apply.reload.error).to be_nil
+          expect(run_step).to be_completed
         end
       end
 
-      # For error cases: Apply::Operation::Base updates status/error then re-raises,
-      # so use raise_error to catch the propagated error while still asserting DB state.
-
-      context 'when the server redirects back to the same vacancy page (rejected)' do
+      context 'when the server redirects back to the same vacancy page' do
         before do
           allow(http_client).to receive(:post_multipart)
             .and_return(http_response(302, location: CoideaDou::VACANCY_URL))
         end
 
-        it 'marks the apply as failed with a rejection message' do
-          expect { run_operation }.to raise_error(RuntimeError, /Submission rejected/)
-          expect(apply.reload.status).to eq('failed_sending_cv')
-          expect(apply.reload.error).to match(/Submission rejected/)
+        it 'halts with outcome_unknown' do
+          expect { run_operation }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+            expect(halt).to have_attributes(code: :outcome_unknown, detail: CoideaDou::VACANCY_URL)
+            expect(halt.releases_claim?).to be(false)
+          }
+        end
+
+        it 'ends submit_unverified with the claim kept' do
+          run_step
+
+          expect(apply).to be_submit_unverified
+          expect(apply.submit_claimed_at).to be_present
+          expect(apply.submitted_at).to be_nil
+          expect(apply.failure).to include('code' => 'outcome_unknown', 'stage' => 'submit', 'after_claim' => true)
         end
       end
 
@@ -137,10 +172,20 @@ RSpec.describe Apply::Operation::SendApply::Http do
             .and_return(http_response(302, location: 'https://jobs.dou.ua/login/?next=/apply'))
         end
 
-        it 'marks the apply as failed with a rejection message' do
-          expect { run_operation }.to raise_error(RuntimeError, /Submission rejected/)
-          expect(apply.reload.status).to eq('failed_sending_cv')
-          expect(apply.reload.error).to match(/Submission rejected/)
+        it 'halts definitively with session_expired' do
+          expect { run_operation }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+            expect(halt.code).to eq(:session_expired)
+            expect(halt.releases_claim?).to be(true)
+          }
+        end
+
+        it 'releases the claim and asks the user to refresh the session' do
+          run_step
+
+          expect(apply).to be_needs_human
+          expect(apply.submit_claimed_at).to be_nil
+          expect(apply.failure).to include('code' => 'session_expired', 'after_claim' => true)
+          expect(apply).to be_resumable
         end
       end
 
@@ -150,10 +195,21 @@ RSpec.describe Apply::Operation::SendApply::Http do
             .and_return(http_response(500, body: 'Internal Server Error'))
         end
 
-        it 'marks the apply as failed with the HTTP status' do
-          expect { run_operation }.to raise_error(RuntimeError, /HTTP 500/)
-          expect(apply.reload.status).to eq('failed_sending_cv')
-          expect(apply.reload.error).to match(/HTTP 500/)
+        it 'ends submit_unverified with outcome_unknown and the claim kept' do
+          run_step
+
+          expect(apply).to be_submit_unverified
+          expect(apply.submit_claimed_at).to be_present
+          expect(apply.failure).to include('code' => 'outcome_unknown', 'detail' => 'HTTP 500')
+        end
+      end
+
+      context 'when the POST gets no response' do
+        before { allow(http_client).to receive(:post_multipart).and_return(nil) }
+
+        it 'ends submit_unverified with outcome_unknown' do
+          expect(run_step).to be_submit_unverified
+          expect(apply.failure).to include('code' => 'outcome_unknown', 'detail' => 'no response')
         end
       end
     end
@@ -164,14 +220,15 @@ RSpec.describe Apply::Operation::SendApply::Http do
 
     let(:http_client) { instance_double(ApplyMate::Client::AsyncHttp) }
     let(:handler)     { instance_double(Apply::Handler::Base) }
+    let(:payload) do
+      { 'apply'               => 'true',
+        'message'             => 'I am an experienced 2D animator with 3+ years in Spine and slot games.',
+        'csrfmiddlewaretoken' => 'xcW3TcF3cryx6WqIAuccBTJfa1cXKOOQKiqerZlIAs9HiddqVeobZzyBM3c2NJaz' }
+    end
 
     before do
       allow(ApplyMate::Client::AsyncHttp).to receive(:new).and_return(http_client)
-      allow(handler).to receive(:build_payload).and_return(
-        'apply'               => 'true',
-        'message'             => 'I am an experienced 2D animator with 3+ years in Spine and slot games.',
-        'csrfmiddlewaretoken' => 'xcW3TcF3cryx6WqIAuccBTJfa1cXKOOQKiqerZlIAs9HiddqVeobZzyBM3c2NJaz'
-      )
+      allow(handler).to receive(:build_payload).and_return(payload)
 
       apply.update!(
         action:        ArtOfSpinDjinni::VACANCY_URL,
@@ -183,7 +240,7 @@ RSpec.describe Apply::Operation::SendApply::Http do
     end
 
     describe '#call' do
-      subject(:run_operation) { described_class.call(apply:, handler:) }
+      subject(:run_operation) { described_class.call(ctx: engine_context(apply), handler:) }
 
       context 'when the server responds 200 OK' do
         before { allow(http_client).to receive(:post_multipart).and_return(http_response(200)) }
@@ -239,14 +296,9 @@ RSpec.describe Apply::Operation::SendApply::Http do
           )
         end
 
-        it 'marks the apply as completed' do
-          run_operation
-          expect(apply.reload.status).to eq('completed')
-        end
-
-        it 'completes without an error' do
-          run_operation
-          expect(apply.reload.error).to be_nil
+        it 'completes the run' do
+          expect(run_step).to be_completed
+          expect(apply.submitted_via).to eq('engine')
         end
       end
 
@@ -263,7 +315,7 @@ RSpec.describe Apply::Operation::SendApply::Http do
         end
 
         it 'includes the CV as a multipart file part under cv_file' do
-          described_class.call(apply:, handler: real_handler)
+          described_class.call(ctx: engine_context(apply), handler: real_handler)
           expect(http_client).to have_received(:post_multipart).with(
             anything,
             payload: hash_including('cv_file' => instance_of(Faraday::Multipart::FilePart)),
@@ -272,16 +324,16 @@ RSpec.describe Apply::Operation::SendApply::Http do
         end
       end
 
-      context 'when the server redirects back to the same vacancy page (rejected)' do
+      context 'when the server redirects back to the same vacancy page' do
         before do
           allow(http_client).to receive(:post_multipart)
             .and_return(http_response(302, location: ArtOfSpinDjinni::VACANCY_URL))
         end
 
-        it 'marks the apply as failed with a rejection message' do
-          expect { run_operation }.to raise_error(RuntimeError, /Submission rejected/)
-          expect(apply.reload.status).to eq('failed_sending_cv')
-          expect(apply.reload.error).to match(/Submission rejected/)
+        it 'ends submit_unverified with the claim kept' do
+          expect(run_step).to be_submit_unverified
+          expect(apply.submit_claimed_at).to be_present
+          expect(apply.failure).to include('code' => 'outcome_unknown')
         end
       end
 
@@ -291,10 +343,10 @@ RSpec.describe Apply::Operation::SendApply::Http do
             .and_return(http_response(500, body: 'Internal Server Error'))
         end
 
-        it 'marks the apply as failed with the HTTP status' do
-          expect { run_operation }.to raise_error(RuntimeError, /HTTP 500/)
-          expect(apply.reload.status).to eq('failed_sending_cv')
-          expect(apply.reload.error).to match(/HTTP 500/)
+        it 'ends submit_unverified with the claim kept' do
+          expect(run_step).to be_submit_unverified
+          expect(apply.submit_claimed_at).to be_present
+          expect(apply.failure).to include('code' => 'outcome_unknown', 'detail' => 'HTTP 500')
         end
       end
     end

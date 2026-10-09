@@ -156,25 +156,42 @@ en:
   apply:
     action_box:
       apply: Apply
-      apply_again: Apply again
       completed: Application sent
-      failed_hint: The application could not be sent. See the error under "My applies".
       in_progress_hint: Your application is being processed — this page updates automatically.
       ready_hint: AI tailors a CV to this vacancy, fills in the application form and
         sends it. Progress shows up on this page.
       ready_title: Ready to apply?
-      retry: Try again
+      review: Review
       view_progress: View progress
+    actions:
+      applied_manually: I applied manually
+      applied_manually_confirm: Mark this application as submitted manually?
+      cancel: Cancel
+      cancel_confirm: Cancel this application?
+      fixed_retry: I fixed it, retry
+      not_sent: It was not sent
+      open_link: Open link
+      reapply: Apply again
+      retry: Try again
+      sent: It was sent
     apply_type:
       external: External
       internal: Internal
       unknown: Unknown
+    approve_review:
+      duplicate_confirmation_required: You have already applied to this vacancy. Confirm
+        that you want to apply again.
+      invalid_answer: Invalid answer in the field "%{label}".
+      not_allowed: This application is no longer waiting for review.
+      success: Answers approved, the application is queued
+    cancel:
+      not_allowed: Only a waiting, attention-needed or failed application can be cancelled.
+      success: Application cancelled
     card:
       cv: Resume
       cv_attached: Resume attached
       cv_not_attached: No resume attached
       delete: Delete apply
-      error_title: Error
       fields_tab: Fields
       filled_form: Filled form
       generate_answer: Generate answer
@@ -189,52 +206,240 @@ en:
       prompt_tab: Prompt
       screenshot: Screenshot after submit
     create:
-      success: Відгук створено
+      already_active: There is already an active application for this vacancy.
+      reapply_confirmation_required: You already applied to this vacancy. Confirm
+        to apply again.
+      success: Application created
     destroy:
-      confirm: Ви впевнені? Це видалить відгук.
-      success: Відгук видалено
+      confirm: Are you sure? This will delete the application.
+      success: Application deleted
+    failure:
+      ai_budget_exhausted: AI request budget exhausted
+      ai_lifetime_cap: Overall AI limit reached
+      ai_quota_exhausted: AI quota exhausted
+      already_applied: Already applied
+      already_claimed: Already submitted
+      bot_wall: Site blocks automation
+      browser_crashed: Browser crashed
+      budget_exhausted: Step budget exhausted
+      capacity: No free capacity
+      captcha_challenge: Captcha required
+      closed_posting: Posting closed
+      deadline: Run took too long
+      email_code: Email code required
+      external_messenger: Apply via messenger
+      human_timeout: Waiting time expired
+      invalid_ai_output: Invalid AI response
+      invalid_record: Invalid application data
+      legacy_failure: Legacy failure
+      login_required: Login required
+      manual_apply_required: Apply yourself
+      missing_profile_fact: Profile data missing
+      no_application_path: No way to apply
+      no_widget_driver: Unsupported form control
+      not_a_form: No application form
+      outcome_unknown: Outcome unknown
+      private_address: Disallowed address
+      required_field_unfillable: Could not fill a required field
+      review: Review needed
+      review_expired: Review time expired
+      session_expired: Session expired
+      stuck: Form is stuck
+      target_not_found: Page element not found
+      target_obstructed: Element obstructed
+      unexpected_error: Unexpected error
+      validation_rejected: Form rejected by the site
+      wizard_too_long: Form is too long
+      worker_lost: Run interrupted
+    failure_hint:
+      ai_budget_exhausted: The AI request limit for this application is used up. Apply
+        manually.
+      ai_lifetime_cap: The overall AI limit for this application has been reached.
+        Apply manually.
+      ai_quota_exhausted: The quota of the AI integration is exhausted. Try again
+        later, or cancel and apply again with another AI integration.
+      already_applied: You seem to have applied to this vacancy already. Confirm you
+        want to send again.
+      already_claimed: Submission has already started. Check whether the application
+        went through and confirm the result.
+      bot_wall: The site shows bot protection. Apply manually.
+      browser_crashed: The browser stopped unexpectedly. Try again.
+      budget_exhausted: The page could not be completed within the allowed number
+        of steps. Apply manually.
+      capacity: All slots are busy. The application will be retried automatically.
+      captcha_challenge: 'The site showed a captcha. Solve it yourself: open the link
+        and apply manually.'
+      closed_posting: This vacancy no longer accepts applications.
+      deadline: The application took too long to process. Try again.
+      email_code: The site sent a confirmation code by email. Apply manually.
+      external_messenger: The employer asks to apply via a messenger or email. Do
+        it manually.
+      human_timeout: The application waited for you for too long. Create it again
+        or apply manually.
+      invalid_ai_output: The AI returned a response that cannot be processed. Try
+        again or change the AI integration.
+      invalid_record: The application data failed validation. Create the application
+        again.
+      legacy_failure: This application failed before the system update. Try again.
+      login_required: Applying requires logging in to the employer site. Apply manually.
+      manual_apply_required: This form is not supported automatically (Google Forms,
+        captcha, etc.). Open the link, apply, and press "I applied manually".
+      missing_profile_fact: The form asks for data missing from your profile. Complete
+        the profile and press "I fixed it, retry".
+      no_application_path: No automatic way to apply to this vacancy was found.
+      no_widget_driver: The form has a control that is not supported yet. Apply manually.
+      not_a_form: The page has no application form. Apply manually.
+      outcome_unknown: We could not confirm the application was accepted. Check the
+        site and confirm the result.
+      private_address: The form address points to an internal network, so it was not
+        opened.
+      required_field_unfillable: A required field could not be filled from your profile.
+        Apply manually.
+      review: Review the filled form before it is sent.
+      review_expired: The application was not confirmed in time. Create it again.
+      session_expired: Update the session id in "External accounts" and press "I fixed
+        it, retry"
+      stuck: Automation got stuck on one page. Apply manually.
+      target_not_found: The button or form was not found; the page may have changed.
+        Try again or apply manually.
+      target_obstructed: Another page element covers the button. Apply manually.
+      unexpected_error: An unexpected error occurred. Try again.
+      validation_rejected: The site rejected the submitted data. Check your profile
+        and try again.
+      wizard_too_long: The form has too many steps to fill automatically. Apply manually.
+      worker_lost: The run was interrupted by a failure. Try again.
+    failure_notice:
+      after_claim_warning: Submission may already have started. Check the site before
+        applying again.
+      apply_yourself_title: Apply yourself
+      details_admin: Technical details
+      reminder: This application is waiting for you. If nothing is done, it will be
+        closed on %{date}.
     index:
+      filter:
+        all: All
+        attention: Need attention (%{count})
       table:
-        actions: Дії
-        ai_integration: AI інтеграція
-        company: Компанія
-        created_at: Дата
-        profile: Профіль
-        status: Статус
-        vacancy: Вакансія
-      title: Мої відгуки
+        actions: Actions
+        ai_integration: AI integration
+        company: Company
+        created_at: Date
+        failure: Reason
+        profile: Profile
+        status: Status
+        vacancy: Vacancy
+      title: My applications
+    input_request:
+      code_label: Code
+      email_code:
+        hint: The site sent a verification code to your e-mail. Enter it here and
+          the application will be finished automatically.
+        title: Enter the code from the e-mail
+      expires_at: Waiting until %{time}
+      generic:
+        hint: The site is waiting for a confirmation. Enter the code you received
+          here and the application will be finished automatically.
+        title: Confirmation needed
+      submit: Send code
+    mark_outcome:
+      confirm_required: Confirm that the application was definitely not sent.
+      not_allowed: This application cannot be marked in its current state.
+      not_sent_warning: If the application actually went through, this may create
+        a duplicate. Are you sure it was not sent?
+      success:
+        manual: Application marked as submitted manually
+        not_sent: Application marked as not sent
+        sent: Application marked as sent
     new:
-      button: Відгукнутись
+      button: Apply
       form:
-        ai_integration: AI інтеграція
-        fill_form_prompt: Промпт для заповнення форми
-        generate_cv_prompt: Промпт для генерації резюме
-        select_fill_form_prompt: Оберіть промпт для форми...
-        select_generate_cv_prompt: Оберіть промпт для резюме...
-        select_integration: Оберіть інтеграцію...
-        select_profile: Оберіть профіль...
+        ai_integration: AI integration
+        confirm_reapply: Yes, apply again
+        fill_form_prompt: Form-filling prompt
+        generate_cv_prompt: CV generation prompt
+        reapply_notice: You already applied to this vacancy and the application may
+          have gone through. Confirm to apply again.
+        select_fill_form_prompt: Select a form prompt...
+        select_generate_cv_prompt: Select a CV prompt...
+        select_integration: Select an integration...
+        select_profile: Select a profile...
         select_source_profile: Select account
         source_profile: Account %{source_name}
-        user_profile: Профіль
-      submit: Відгукнутись
-      title: Новий відгук
-    status:
-      checking_applyble: Перевірка доступності
-      completed: Завершено
-      failed_checking_applyble: Помилка перевірки доступності
-      failed_fetching_apply_type: Помилка визначення типу відгуку
-      failed_fetching_details: Помилка отримання деталей
-      failed_fetching_form: Помилка отримання форми
-      failed_filling_form: Помилка заповнення форми
-      failed_generating_cv: Помилка генерації резюме
-      failed_sending_cv: Помилка надсилання
-      fetching_apply_type: Визначення типу відгуку
-      fetching_details: Отримання деталей
-      fetching_form: Отримання форми
-      filling_form: Заповнення форми
-      generating_cv: Генерація резюме
+        user_profile: Profile
+      submit: Apply
+      title: New application
+    provide_input:
+      invalid_code: Enter the code (up to 32 characters).
+      not_allowed: This application is not waiting for a code right now.
+      success: Code sent
+    resume:
+      already_submitted: You already applied to this vacancy with another application,
+        so retrying would send a second one.
+      not_allowed: This application cannot be resumed in its current state.
+      success: Application queued again
+    review:
+      ai_confidence: "%{percent}%"
+      answers_hint: Check the answers and fix them if needed. The application is sent
+        after you approve.
+      approve: Approve and send
+      confirm_duplicate: I confirm I want to apply again.
+      consent_notice: By approving you give this consent on your own behalf.
+      cv_default: CV (attached automatically)
+      duplicate_warning: You have already applied to this vacancy.
+      origin: 'Form site:'
+      reason:
+        approximate: Some answers were chosen as the closest matching option.
+        consent_pending: Your confirmation of a consent is needed.
+        duplicate: You have already applied to this vacancy with another application.
+        foreign_origin: The form is hosted on a site unrelated to the vacancy.
+        low_confidence: The AI is not sure about some answers.
+        policy_always: You chose to review every application before it is sent.
+        unknown_platform: The form is on an unknown platform.
+      source:
+        ai: AI
+        approximate: Closest option
+        fact: From profile
+        override: Your setting
+        policy: By consent setting
+        policy_pending: Needs confirmation
+        user: You
+      title: Check the answers before sending
+    run_timeline:
+      artifacts: Artifacts
+    stage:
+      answer: Preparing answers
+      awaiting_input: Waiting for your code
+      check_applyable: Checking availability
+      detect: Detecting platform
+      discover: Discovering form fields
+      fetch_apply_type: Detecting apply type
+      fetch_details: Fetching details
+      fetch_form: Fetching form
+      fill: Filling fields
+      fill_form: Filling form
+      generate_cv: Generating CV
+      navigate: Opening the form
+      review: Review before submit
+      schema: Fetching form fields
+      submit: Submitting
+      throttle: Waiting for the platform slot
+      verify: Verifying the result
+    state:
+      cancelled: Cancelled
+      completed: Completed
+      failed: Failed
+      needs_human: Action needed
+      needs_review: Needs review
       queued: Queued
-      sending_cv: Надсилання
+      running: Running
+      submit_unverified: Unconfirmed
+      unsupported: Not supported
+      waiting_capacity: Waiting for a slot
+    timeline:
+      attempt: Attempt %{n}
+      duration_seconds: "%{count} s"
+      empty: No steps yet
+      title: Run
     vacancy_index:
       empty: You have not applied to this vacancy yet
       empty_hint: Click "Apply" — progress, the filled form and the CV will appear
@@ -317,6 +522,9 @@ en:
       no_vacancy: No vacancies fetched
   navbar:
     ai_integrations: AI Integrations
+    attention_count:
+      one: "%{count} application needs attention"
+      other: "%{count} applications need attention"
     my_applies: Мої відгуки
     my_profiles: Мої профілі
     prompts: Промпти

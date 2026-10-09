@@ -3,7 +3,7 @@
 require "rails_helper"
 
 RSpec.describe UserProfile::Operation::Destroy, type: :operation do
-  let(:user)         { User.create!(email: "test@example.com", name: "Test User", provider: "google_oauth2", uid: "u1") }
+  let(:user)         { User.create!(email: unique_email("test"), name: "Test User", provider: "google_oauth2", uid: "u1") }
   let(:user_profile) { UserProfile.create!(user: user, name: "My Profile", cv: "CV content") }
   let(:params)       { { id: user_profile.id } }
   let(:current_user) { user }
@@ -26,8 +26,7 @@ RSpec.describe UserProfile::Operation::Destroy, type: :operation do
         vacancy:        vacancy,
         source_profile: source_profile,
         user_profile:   user_profile,
-        ai_integration: ai_integration,
-        status:         :generating_cv
+        ai_integration: ai_integration
       )
     end
 

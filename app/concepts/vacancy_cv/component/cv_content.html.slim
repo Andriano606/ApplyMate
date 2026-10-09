@@ -17,7 +17,7 @@
               = icon(:send, size: 4)
               = I18n.t('vacancy_cv.go_to_apply')
         - unless generating?
-          = link(url: helpers.rails_blob_path(@record.cv, disposition: 'attachment'), \
+          = link(url: cv_path('attachment'), \
               label: I18n.t('vacancy_cv.download'), variant: :outline, size: :sm, data: { turbo: false })
 
       - if generating?
@@ -27,7 +27,7 @@
             id: "tabs_#{VacancyCv::TurboHandler::CvReady.frame_id(@record)}") do |t|
           - t.with_tab(label: I18n.t('vacancy_cv.tab_preview')) do
             iframe(
-              src="#{helpers.rails_blob_path(@record.cv, disposition: 'inline')}#toolbar=0"
+              src="#{cv_path('inline')}#toolbar=0"
               title=title
               loading='lazy'
               class='h-[70vh] w-full rounded-lg border border-gray-200 dark:border-gray-700 sm:h-[640px]'

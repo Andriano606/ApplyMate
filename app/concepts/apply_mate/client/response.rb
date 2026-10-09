@@ -14,8 +14,28 @@ module ApplyMate
       # instead of the real page.
       CLOUDFLARE_MARKERS = [ 'Just a moment', 'challenge-platform', 'cf-chl-', '_cf_chl_opt' ].freeze
 
+      # In a rendered page 'challenge-platform' alone is not a challenge: Cloudflare injects its bot-management
+      # script (/cdn-cgi/challenge-platform/scripts/jsd/main.js) into ordinary 200 pages. The interstitial
+      # always carries 'Just a moment' (title) or the cf-chl-/_cf_chl_opt markers as well.
+      INTERSTITIAL_MARKERS = (CLOUDFLARE_MARKERS - [ 'challenge-platform' ]).freeze
+
+      # The one marker check for HTTP bodies; Response instances delegate to it.
+      def self.cloudflare_challenge?(body)
+        markers_in?(body, CLOUDFLARE_MARKERS)
+      end
+
+      # The same check for a page a browser rendered (Browser::Operation::WaitPastCloudflare): title or HTML.
+      def self.cloudflare_interstitial?(html)
+        markers_in?(html, INTERSTITIAL_MARKERS)
+      end
+
+      def self.markers_in?(text, markers)
+        text.present? && markers.any? { |marker| text.include?(marker) }
+      end
+      private_class_method :markers_in?
+
       def cloudflare_challenge?
-        body.present? && CLOUDFLARE_MARKERS.any? { |marker| body.include?(marker) }
+        self.class.cloudflare_challenge?(body)
       end
 
       # A proxy is "working" if it reached the origin: any 2xx/3xx, or a 403 that is

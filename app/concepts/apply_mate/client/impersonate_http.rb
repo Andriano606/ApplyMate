@@ -16,6 +16,11 @@ require 'tempfile'
 # The curl-impersonate binary is arch-specific and NOT committed. Install it with
 # `bin/install-curl-impersonate` (downloads the right build into vendor/, gitignored)
 # or point CURL_IMPERSONATE_BIN at a wrapper (e.g. curl_chrome136) on the host.
+#
+# `resolve:` (a ResolvePublicAddress::Resolution) pins the connection to the address the PublicAddressGuard checked
+# (curl `--resolve host:port:ip`, `--noproxy '*'`), so a second DNS answer cannot point the request somewhere
+# private. A pinned request never follows redirects (each hop must pass the guard again: walk them with
+# ApplyMate::Net::Operation::GuardedFetch) and cannot go through a proxy (the proxy would resolve the host itself).
 class ApplyMate::Client::ImpersonateHttp
   include ApplyMate::Client::Multipart
 
@@ -37,12 +42,14 @@ class ApplyMate::Client::ImpersonateHttp
     @connect_timeout = connect_timeout
   end
 
-  def get(url, headers: {}, follow_redirects: true, **)
-    run(url, headers: headers, follow_redirects: follow_redirects)
+  def get(url, headers: {}, follow_redirects: true, resolve: nil, **)
+    raise ArgumentError, 'a pinned (resolve:) request must not follow redirects' if resolve && follow_redirects
+
+    run(url, headers: headers, follow_redirects: follow_redirects, resolve:)
   end
 
-  def post(url, body:, headers: {}, **)
-    run(url, method: 'POST', body: body, headers: headers, follow_redirects: true)
+  def post(url, body:, headers: {}, resolve: nil, **)
+    run(url, method: 'POST', body: body, headers: headers, follow_redirects: resolve.nil?, resolve:)
   end
 
   # Mirrors AsyncHttp#post_multipart so a Cloudflare-protected source can submit the
@@ -57,13 +64,16 @@ class ApplyMate::Client::ImpersonateHttp
 
   private
 
-  def run(url, method: 'GET', body: nil, headers: {}, follow_redirects: true)
+  def run(url, method: 'GET', body: nil, headers: {}, follow_redirects: true, resolve: nil)
+    pin = resolve && resolve_arg(url, resolve)
     body_file = Tempfile.new('ci_body')
     hdr_file  = Tempfile.new('ci_hdr')
     req_file  = write_request_body(body)
     begin
       # Body → -o file, headers → -D file, so stdout carries ONLY the -w http_code.
-      stdout, stderr, status = Open3.capture3(*command(url, method, req_file&.path, headers, follow_redirects, body_file, hdr_file))
+      args = command(url, method, req_file&.path, headers, follow_redirects, body_file, hdr_file)
+      args.insert(-2, '--resolve', pin, '--noproxy', '*') if pin
+      stdout, stderr, status = Open3.capture3(*args)
       raise RequestError, "curl-impersonate failed (exit #{status.exitstatus}): #{stderr.strip}" unless status.success?
 
       Response.new(File.read(body_file.path), parse_headers(File.read(hdr_file.path)), stdout.to_i, url)
@@ -100,6 +110,18 @@ class ApplyMate::Client::ImpersonateHttp
     headers.each { |key, value| args.push('-H', "#{key}: #{value}") }
     args << url
     args
+  end
+
+  # "host:port:ip" for curl --resolve (IPv6 in brackets). The pin must be for the URL's own host.
+  def resolve_arg(url, resolve)
+    raise ArgumentError, 'resolve: cannot be combined with a proxy (the proxy resolves the host)' if @proxy.present?
+    raise ArgumentError, 'resolve: has no checked address' if resolve.ip.blank?
+
+    host = URI.parse(url).hostname.to_s
+    raise ArgumentError, "resolve: is for #{resolve.host}, not #{host}" unless host.casecmp?(resolve.host.to_s)
+
+    ip = resolve.ip.include?(':') ? "[#{resolve.ip}]" : resolve.ip
+    "#{resolve.host}:#{resolve.port}:#{ip}"
   end
 
   # http://  → passed through; socks5:// → socks5h:// so DNS resolves through the

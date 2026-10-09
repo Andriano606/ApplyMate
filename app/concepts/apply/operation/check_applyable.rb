@@ -1,13 +1,7 @@
 # frozen_string_literal: true
 
 class Apply::Operation::CheckApplyable < Apply::Operation::Base
-  def start_status
-    :checking_applyble
-  end
-
-  def error_status
-    :failed_checking_applyble
-  end
+  stage :check_applyable
 
   private
 
@@ -18,7 +12,7 @@ class Apply::Operation::CheckApplyable < Apply::Operation::Base
 
     unless applyble
       apply.update!(applyble: false)
-      raise 'Vacancy is not applyable'
+      halt!(:no_application_path, detail: 'no reply button')
     end
 
     apply.update!(applyble: true)

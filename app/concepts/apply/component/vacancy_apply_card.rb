@@ -3,6 +3,8 @@
 # One apply on the vacancy page. id "apply_<hashid>" is the anchor AppliesController#show, the status badge
 # and the "My applies" table link to; data-model-id lets the destroy turbo stream (remove_by_id) drop it.
 class Apply::Component::VacancyApplyCard < ApplyMate::Component::Base
+  LAZY = :lazy
+
   # scroll-mt clears the sticky navbar when the page is opened at #apply_<hashid>; the ring marks that card
   # (data-highlighted is set by the anchor-scroll controller: CSS :target never matches a lazily loaded card).
   CARD_CLASSES = 'scroll-mt-24 rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 ' \
@@ -11,17 +13,21 @@ class Apply::Component::VacancyApplyCard < ApplyMate::Component::Base
                       'text-gray-700 dark:bg-gray-700 dark:text-gray-300'
   CV_ROW_CLASSES = 'flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 ' \
                    'px-4 py-3 dark:border-gray-700 sm:px-6'
-  ERROR_BOX_CLASSES = 'mx-4 mt-4 rounded-lg border border-red-200 bg-red-50 p-3 sm:mx-5 ' \
-                      'dark:border-red-900/50 dark:bg-red-900/20'
 
   def self.anchor_id(apply)
     "apply_#{apply.hashid}"
   end
 
-  def initialize(apply:, open: false)
-    @apply   = apply
-    @vacancy = apply.vacancy
-    @open    = open
+  # Broadcasts (ApplicationController.renderer has no current_user) pass user: explicitly.
+  def initialize(apply:, open: false, user: LAZY)
+    @apply       = apply
+    @vacancy     = apply.vacancy
+    @open        = open
+    @user_preset = user
+  end
+
+  def before_render
+    @user = @user_preset == LAZY ? current_user : @user_preset
   end
 
   private
@@ -35,7 +41,11 @@ class Apply::Component::VacancyApplyCard < ApplyMate::Component::Base
   end
 
   def screenshot_path
-    helpers.rails_blob_path(@apply.screenshot, disposition: 'inline')
+    helpers.artifact_path('apply', @apply, 'screenshot')
+  end
+
+  def cv_download_path
+    helpers.artifact_path('apply', @apply, 'cv', disposition: 'attachment')
   end
 
   def meta_items
@@ -51,9 +61,5 @@ class Apply::Component::VacancyApplyCard < ApplyMate::Component::Base
     return I18n.t('apply.apply_type.unknown') if @apply.apply_type.blank? || @apply.unknown?
 
     I18n.t("apply.apply_type.#{@apply.apply_type}")
-  end
-
-  def new_apply_path
-    helpers.new_apply_path(vacancy_id: @vacancy.hashid)
   end
 end

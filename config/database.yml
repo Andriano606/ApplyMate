@@ -22,7 +22,9 @@ default: &default
   gssencmode: disable
   # For details on connection pooling, see Rails configuration guide
   # https://guides.rubyonrails.org/configuring.html#database-pooling
-  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  # The apply worker (SQ_ROLE=apply) needs >= 2 * APPLY_SLOTS + 2 (one run + one heartbeat ticker connection
+  # per thread); Apply::Operation::AssertQueueTopology fails the boot below that. 8 covers APPLY_SLOTS = 3.
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 8 } %>
 
 development:
   primary:

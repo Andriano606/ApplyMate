@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <title>Frontend Developer: send launcher</title>
+  <style>.modal { display: none; } .modal.in { display: block; }</style>
+</head>
+<body>
+  <!-- A landing page whose application form sits in a Bootstrap modal behind a launcher named with a SEND verb
+       ("Надіслати резюме", type=button, data-toggle=modal, outside any form): the Navigator must be able to click it. -->
+  <h1>Frontend Developer</h1>
+  <button type="button" id="send-launcher" data-toggle="modal" data-target="#cv-modal"
+          onclick="document.getElementById('cv-modal').classList.add('in')">Надіслати резюме</button>
+  <div class="modal" role="dialog" id="cv-modal">
+    <form><input type="email" id="cv-email" aria-label="Email"><button type="submit">Надіслати</button></form>
+  </div>
+</body>
+</html>

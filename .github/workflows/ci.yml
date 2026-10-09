@@ -174,3 +174,116 @@ jobs:
           # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           # REDIS_URL: redis://localhost:6379/0
         run: bundle exec cucumber
+
+  # :browser specs drive the real Driver::Playwright against browserd (Camoufox). The image is
+  # BUILT here from docker/browserd (not pulled as a `services:` container): a service needs a
+  # registry image and would not verify the Dockerfile, so a broken Dockerfile fails this job and
+  # no manual registry push is a CI dependency. The `test` job has no BROWSERD_URL, so
+  # spec/support/browser_tag.rb excludes :browser there.
+  browser_specs:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
+
+      # Vacancy indexes itself on save (Elasticsearch::Model::Callbacks) and the apply specs
+      # create vacancies, so ES is needed even for :browser examples.
+      elasticsearch:
+        image: elasticsearch:8.13.0
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\|\"status\":\"yellow\"'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+
+    steps:
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libvips42t64 || \
+            sudo apt-get install -y --no-install-recommends libvips42
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build browserd image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/browserd
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: apply_mate_browserd:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Same flags as the docker-compose.yml `browserd-test` service (except the default ports).
+      # EGRESS_ALLOW_RANGES=host.docker.internal opens exactly that one private address (resolved to
+      # a /32 at start) so Firefox reaches the FixtureSite rspec serves on the runner; it is test-only
+      # and never set on the dev `browserd` or staging.
+      - name: Start browserd
+        run: |
+          docker run -d --name browserd --init --cap-add NET_ADMIN --shm-size 1g \
+            --tmpfs /tmp:size=1g --pids-limit 2048 \
+            --add-host host.docker.internal:host-gateway \
+            -p 127.0.0.1:9300-9303:9300-9303 \
+            -e BROWSERD_TOKEN=ci-token-0123456789 -e MAX_BROWSERS=1 -e HEADLESS=true \
+            -e BROWSERD_OS=windows -e BROWSERD_ADVERTISE_HOST=localhost \
+            -e EGRESS_ALLOW_RANGES=host.docker.internal \
+            apply_mate_browserd:ci
+          for i in $(seq 1 30); do
+            curl -fsS localhost:9300/health && exit 0
+            sleep 2
+          done
+          echo "::error::browserd did not become healthy within 60 s"
+          exit 1
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
+
+      - name: Install JS dependencies and build assets
+        run: bun install --frozen-lockfile && bun run build:css && bun run build && bin/rails assets:precompile
+        env:
+          RAILS_ENV: test
+
+      - name: Prepare database
+        env:
+          RAILS_ENV: test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432
+        run: bin/rails db:create db:migrate
+
+      - name: Run :browser specs
+        env:
+          RAILS_ENV: test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432
+          ELASTICSEARCH_URL: http://localhost:9200
+          BROWSERD_URL: http://localhost:9300
+          BROWSERD_TOKEN: ci-token-0123456789
+          FIXTURE_SITE_HOST: host.docker.internal
+        run: bundle exec rspec --tag browser
+
+      - name: browserd logs
+        if: always()
+        run: docker logs browserd || true

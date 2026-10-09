@@ -107,6 +107,56 @@ RSpec.describe ApplyMate::Client::ImpersonateHttp do
     end
   end
 
+  describe 'resolve: (PublicAddressGuard pinning)' do
+    def resolution(host: 'jobs.example.com', port: 443, ip: '203.0.113.7')
+      ApplyMate::Net::Operation::ResolvePublicAddress::Resolution.new(url: "https://#{host}/", host:, port:, ip:)
+    end
+
+    def flag_value(flag)
+      @captured[@captured.index(flag) + 1]
+    end
+
+    it 'pins the checked address with --resolve host:port:ip, bypasses env proxies and does not follow redirects' do
+      stub_curl(code: 302)
+      described_class.new.get('https://jobs.example.com/apply', follow_redirects: false, resolve: resolution)
+
+      expect(flag_value('--resolve')).to eq('jobs.example.com:443:203.0.113.7')
+      expect(flag_value('--noproxy')).to eq('*')
+      expect(@captured).not_to include('-L')
+      expect(@captured.last).to eq('https://jobs.example.com/apply')
+    end
+
+    it 'uses the explicit port and brackets an IPv6 address' do
+      stub_curl
+      described_class.new.get('http://jobs.example.com:8080/x', follow_redirects: false,
+                                                                 resolve: resolution(port: 8080, ip: '2001:db8::7'))
+
+      expect(flag_value('--resolve')).to eq('jobs.example.com:8080:[2001:db8::7]')
+    end
+
+    it 'pins a POST and never follows its redirects' do
+      stub_curl
+      described_class.new.post('https://jobs.example.com/api', body: '{}', resolve: resolution)
+
+      expect(flag_value('--resolve')).to eq('jobs.example.com:443:203.0.113.7')
+      expect(@captured).not_to include('-L')
+    end
+
+    it 'refuses pins it cannot honour, before running curl' do
+      stub_curl
+      client = described_class.new
+
+      expect { client.get('https://jobs.example.com/', resolve: resolution) }.to raise_error(ArgumentError, /redirects/)
+      expect { client.get('https://other.example.com/', follow_redirects: false, resolve: resolution) }
+        .to raise_error(ArgumentError, /not other.example.com/)
+      expect { client.get('https://jobs.example.com/', follow_redirects: false, resolve: resolution(ip: nil)) }
+        .to raise_error(ArgumentError, /no checked address/)
+      expect { described_class.new(proxy: 'http://10.0.0.1:8080').get('https://jobs.example.com/', follow_redirects: false, resolve: resolution) }
+        .to raise_error(ArgumentError, /proxy/)
+      expect(Open3).not_to have_received(:capture3)
+    end
+  end
+
   describe '#post_multipart' do
     it 'builds a multipart body, sets the boundary content type and does not follow redirects' do
       stub_curl(code: 302)

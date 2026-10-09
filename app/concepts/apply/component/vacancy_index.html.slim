@@ -8,4 +8,4 @@
   - else
     .space-y-4
       - @applies.each_with_index do |apply, index|
-        = render Apply::Component::VacancyApplyCard.new(apply:, open: index.zero?)
+        = render Apply::Component::VacancyApplyCard.new(apply:, open: index.zero?, user: @user)

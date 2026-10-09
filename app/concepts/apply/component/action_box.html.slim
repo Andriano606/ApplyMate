@@ -24,14 +24,20 @@
           p.text-sm.font-semibold.text-green-800.dark:text-green-300 = I18n.t('apply.action_box.completed')
           p.mt-1.text-xs.text-green-700.dark:text-green-400
             = I18n.l(@apply.created_at, format: :short)
-      = link(url: new_apply_path, variant: :outline, class: 'w-full gap-2', data: { turbo_stream: true }) do
-        = icon(:send, size: 4)
-        = I18n.t('apply.action_box.apply_again')
+      = render Apply::Component::Actions.new(apply: @apply)
 
-    - when :failed
+    - when :attention
       = render Apply::Component::StatusPill.new(apply: @apply)
-      p.text-xs.leading-relaxed.text-gray-500.dark:text-gray-400 = I18n.t('apply.action_box.failed_hint')
-      = link(url: new_apply_path, variant: :primary, class: 'w-full justify-center gap-2', \
-          data: { turbo_stream: true }) do
-        = icon(:refresh, size: 4)
-        = I18n.t('apply.action_box.retry')
+      - if @apply.needs_review?
+        p.text-xs.leading-relaxed.text-gray-500.dark:text-gray-400 = I18n.t('apply.failure_hint.review')
+        = link(url: review_anchor, variant: :primary, class: 'w-full gap-2', \
+            data: { turbo: false, action: Vacancy::Component::Show::ANCHOR_JUMP }) do
+          = icon(:arrow_right, size: 4)
+          = I18n.t('apply.action_box.review')
+      - else
+        = render Apply::Component::FailureNotice.new(apply: @apply, user: @user)
+      = render Apply::Component::Actions.new(apply: @apply)
+
+    - when :cancelled
+      = render Apply::Component::StatusPill.new(apply: @apply)
+      = render Apply::Component::Actions.new(apply: @apply)

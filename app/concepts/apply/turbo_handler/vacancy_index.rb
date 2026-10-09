@@ -31,7 +31,7 @@ class Apply::TurboHandler::VacancyIndex < ApplyMate::TurboHandler::Base
   # open: mirrors Apply::Component::VacancyIndex, which opens the newest card.
   def self.broadcast_card(apply, open:)
     html = ApplicationController.renderer.render_to_string(
-      Apply::Component::VacancyApplyCard.new(apply:, open:),
+      Apply::Component::VacancyApplyCard.new(apply:, open:, user: apply.user),
       layout: false
     )
     Turbo::StreamsChannel.broadcast_action_to(

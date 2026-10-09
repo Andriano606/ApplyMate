@@ -1,45 +1,30 @@
 # frozen_string_literal: true
 
+# A pipeline step, run by Apply::Operation::Engine::Run (the Runner) for each `add_step` of a handler.
+#
+# Every step declares its stage (`stage :fetch_details`): the Runner writes it to applies.stage while the step
+# runs and uses it as the apply_steps key. The step does its work in `run!(apply:, handler:, ctx:, **options)`
+# and signals an outcome by raising Apply::Operation::Engine::Halt (or any exception, mapped by the Runner).
+# Lifecycle state, failure, step rows and broadcasts belong to the Runner, never to the step.
 class Apply::Operation::Base < ApplyMate::Operation::Base
-  def start_status
-    raise NotImplementedError, "#{self.class} must define start_status"
-  end
-
-  def error_status
-    raise NotImplementedError, "#{self.class} must define error_status"
-  end
-
-  def success_status
-    nil
-  end
-
-  def perform!(apply:, handler: nil, **options)
-    skip_authorize
-    self.model = apply
-
-    return if apply.error.present?
-
-    apply.update!(status: start_status)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
-
-    run!(apply:, handler:, **options)
-
-    if success_status
-      apply.update!(status: success_status)
-      Apply::TurboHandler::StatusUpdate.broadcast(apply)
+  class << self
+    def stage(key = nil)
+      @stage = key if key
+      @stage || raise(NotImplementedError, "#{name} must declare stage")
     end
-  rescue StandardError => e
-    apply.update!(status: error_status, error: e.message)
-    Apply::TurboHandler::StatusUpdate.broadcast(apply)
-    raise e
+  end
+
+  def perform!(ctx:, handler: nil, **options)
+    skip_authorize
+    self.model = ctx.apply
+    run!(apply: ctx.apply, handler:, ctx:, **options)
   ensure
     run_cleanup
   end
 
   private
 
-  # The status and error are already stored when cleanup runs; a failing cleanup (browser quit, live-update
-  # broadcast) must neither fail a finished step nor replace the step's own exception.
+  # A failing cleanup (browser quit) must neither fail a finished step nor replace the step's own exception.
   def run_cleanup
     cleanup
   rescue StandardError => e
@@ -48,6 +33,13 @@ class Apply::Operation::Base < ApplyMate::Operation::Base
 
   def run!(apply:, handler:, **)
     raise NotImplementedError, "#{self.class} must define run!"
+  end
+
+  # Stops the run with a Halt code (Apply::Operation::Engine::Halt::CODES); the Runner records it. `detail` is
+  # admin-only and redacted before it is stored; `definitive: true` only with deterministic proof that a claimed
+  # submit was not accepted (see .ai/docs/apply_engine.md, "Claim rule").
+  def halt!(code, detail: nil, definitive: false)
+    raise Apply::Operation::Engine::Halt.new(code, detail:, definitive:)
   end
 
   def cleanup; end

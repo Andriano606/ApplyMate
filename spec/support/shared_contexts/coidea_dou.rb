@@ -11,7 +11,7 @@ RSpec.shared_context 'coidea dou' do
 
   # ── DB records ────────────────────────────────────────────────────────────────
   let(:user) do
-    User.create!(email: 'dev@example.com', name: 'Jane Doe',
+    User.create!(email: unique_email('dev'), name: 'Jane Doe',
                  provider: 'google_oauth2', uid: 'uid-coidea-test')
   end
 
@@ -37,11 +37,9 @@ RSpec.shared_context 'coidea dou' do
                           model: 'gemini-2.5-flash', api_key: 'test-api-key')
   end
 
+  # queued (the default state), so engine_context / the Runner can start it.
   let(:apply) do
-    Apply.create!(
-      user:, vacancy:, source_profile:, user_profile:, ai_integration:,
-      status: :generating_cv
-    )
+    Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:)
   end
 
   # Canonical filled inputs for this vacancy (post-FillForm state).
@@ -74,14 +72,5 @@ RSpec.shared_context 'coidea dou' do
     allow(VacancyCv::TurboHandler::Index).to receive(:broadcast_row)
     allow(VacancyQuestion::TurboHandler::Index).to receive(:broadcast)
     allow_any_instance_of(Grover).to receive(:to_pdf).and_return('%PDF-1.4 fake-pdf-content')
-  end
-
-  # ── Helper ────────────────────────────────────────────────────────────────────
-  def gemini_json_response(text)
-    {
-      status:  200,
-      body:    { candidates: [ { content: { parts: [ { text: } ] } } ] }.to_json,
-      headers: { 'Content-Type' => 'application/json' }
-    }
   end
 end

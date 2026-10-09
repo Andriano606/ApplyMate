@@ -32,10 +32,19 @@ RSpec.describe VacancyCv::Component::CvContent, type: :component do
     it 'offers the download once the CV is attached' do
       expect(render_card(apply).text).to include(I18n.t('vacancy_cv.download'))
     end
+
+    it 'serves the CV through the artifacts route, never a blob path' do
+      html = render_card(apply)
+
+      expect(html.at_css('a[download], a[href*="/artifacts/"]')['href'])
+        .to eq("/artifacts/apply/#{apply.hashid}/cv?disposition=attachment")
+      expect(html.at_css('iframe')['src']).to eq("/artifacts/apply/#{apply.hashid}/cv?disposition=inline#toolbar=0")
+      expect(html.to_s).not_to include('/rails/active_storage')
+    end
   end
 
   context 'with an apply still generating its CV' do
-    let(:apply) { create(:apply, user:, vacancy:, user_profile:, status: :generating_cv) }
+    let(:apply) { create(:apply, :running, user:, vacancy:, user_profile:) }
 
     it 'shows the loading state instead of the download' do
       text = render_card(apply).text
@@ -55,6 +64,8 @@ RSpec.describe VacancyCv::Component::CvContent, type: :component do
       expect(html.text).to include('Backend profile', I18n.t('vacancy_cv.download'))
       expect(html.text).not_to include(I18n.t('vacancy_cv.from_apply'))
       expect(html.css('a[href^="#apply_"]')).to be_empty
+      expect(html.at_css('iframe')['src']).to start_with("/artifacts/vacancy_cv/#{vacancy_cv.hashid}/cv")
+      expect(html.to_s).not_to include('/rails/active_storage')
     end
   end
 end

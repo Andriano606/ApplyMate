@@ -1,3 +1,7 @@
 = header(**header_opts)
 
+nav.mb-4.flex.gap-1.overflow-x-auto.border-b.border-gray-200.dark:border-gray-700 *data_test_id('apply-filter-tabs')
+  - filter_tabs.each do |tab|
+    = helpers.link_to tab[:label], tab[:url], class: tab_class(tab[:active]), data: { turbo_frame: '_top' }
+
 = render Apply::Component::Table.new(applies: @applies)

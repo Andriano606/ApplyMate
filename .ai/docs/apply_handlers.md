@@ -18,29 +18,166 @@ Resolved once in `Apply::Job::Apply`:
 
 ```ruby
 class Apply::Job::Apply < ApplicationJob
+  queue_as :apply
+  # the longest run any AI integration gets (54 min with GeminiScraping) + 15 min: 69 min, see apply_engine.md
+  CONCURRENCY_SLACK = 15.minutes
+  limits_concurrency to: 1, key: ->(apply_id) { "apply:#{apply_id}" },
+                     duration: Apply::Operation::Engine::StartContext.max_run_seconds.seconds + CONCURRENCY_SLACK
+
   def perform(apply_id)
     apply = Apply.find(apply_id)
     Apply::Handler::Base.for(apply).call
+  rescue ActiveRecord::RecordNotFound
+    nil
+  rescue ApplyMate::Client::Browser::PoolBusy
+    raise
+  rescue StandardError => e
+    Apply::Operation::Engine::Lifecycle::HaltUnowned.call(apply_id:, code: :unexpected_error, detail: e.class.name)
+    raise
   end
 end
 ```
 
+`limits_concurrency` guards against a duplicate run of the same Apply; the number of concurrent browsers is capped by the apply worker's threads (`APPLY_SLOTS`). Run ownership, states and failure recording are described in `.ai/docs/apply_engine.md`.
+
+A step must never rescue `ApplyMate::Client::Browser::PoolBusy` (nor `StandardError` around a `Session.open`): the Runner turns it into `waiting_capacity` and the job's `retry_on` retries it (`apply_engine.md`, exit table). Swallowing it would turn "no free browser" into a failed step.
+
 ## Pipeline DSL
 
-Handlers declare steps with `add_step`. Each step maps to an `Apply::Operation::Base` subclass:
+Handlers declare steps with `add_step`. Each step is an `Apply::Operation::Base` subclass that declares its `stage`:
 
 ```ruby
 add_step OperationClass
-add_step OperationClass, execute_condition: ->(apply) { apply.some_condition? }
+add_step OperationClass, if: ->(ctx) { ctx.apply.some_condition? }
 add_step OperationClass, prompt_class: SomePrompt, schema_class: SomeSchema
 ```
 
-- `execute_condition:` — lambda called with `apply`; step is skipped if it returns falsy
+- Each `add_step` becomes an `Apply::Handler::Base::Step` (`operation`, `condition`, `options`, `scope`, `position`); `steps` keeps the declaration order
+- `Step#key` (the `apply_steps.key`, unique per attempt) is `[stage, 'replay' if options[:replay], scope].compact.join(':')`: `fetch_details` (scope-less), `navigate:survey`, `navigate:replay:submit`
+- `if:` — lambda called with the run's `Apply::Operation::Engine::Context` (`ctx.apply`, `ctx.attempt`); the step is skipped (no `apply_steps` row) if it returns falsy
 - Extra keyword arguments (`prompt_class:`, `schema_class:`, etc.) are forwarded as `**options` into the operation's `run!` method
 
-`call` iterates steps in order; if a step sets `apply.error`, subsequent steps are skipped (handled by `Apply::Operation::Base#perform!`).
+### Session scopes and `engine!`
+
+```ruby
+session_scope(:survey, if: ->(ctx) { ctx.survey_needed? }) do
+  add_step Apply::Operation::Stage::ReachForm
+  add_step Apply::Operation::Stage::DiscoverFields
+end
+```
+
+Steps in the block share one browser lease and run as an atomic unit (the Runner skips the unit only when all its
+steps can be restored from one earlier attempt, otherwise re-runs all of them; details in `apply_engine.md`,
+"Runner"). `if:` is evaluated once before the lease is opened (falsy: no rows); scopes do not nest. The scope named
+`:submit` opens its Session with `humanize: true`. `scope_conditions` holds `{ name => lambda or nil }`.
+
+`engine!(if: nil)` declares the engine pipeline: `DetectPlatform`, `FetchSchema`, scope `:survey` (`ReachForm`,
+`DiscoverFields`; only while `ctx.survey_needed?`), `AnswerFields`, `Ai::GeneratePdfCv` (same prompt/schema options
+as the internal pipeline), `ReviewGate`, `AcquireHostSlot`, scope `:submit` (`ReachForm replay: true`,
+`DiscoverFields reconcile: true`, `FillFields`, `Submit`, `Verify`). `if:` (the handler's routing guard; Handler::Dou
+passes `ctx.apply.external?`) is put on every step and AND-ed into every scope condition; nothing depends on the
+platform: a platform no adapter knows stays `generic` and is reached by the AI Navigator inside `ReachForm`. Recipe
+learning arrives in phase 6.
+
+## The Runner wraps the steps
+
+`Apply::Handler::Base#call` hands the handler to the Runner (`Apply::Operation::Engine::Run`), which owns the run:
+it starts it (`StartContext`: state `running`, `attempt + 1`, fresh `run_token`), runs the heartbeat, and for each
+applicable step writes `applies.stage`, creates one `apply_steps` row, broadcasts, and calls
+`operation.call(ctx:, handler:, **options)`. The outcome is recorded once, by the Runner:
+
+- every step succeeded → `Lifecycle::Finish`: `completed`, `submitted_at`, `submitted_via: 'engine'`, `stage: nil`;
+- a step raised `Apply::Operation::Engine::Halt` → `Lifecycle::RecordHalt` with the halt's state (and the claim
+  rule, below); any other exception is mapped to a code (`invalid_ai_output`, `invalid_record`, `unexpected_error`).
+
+States, codes, fencing and timing: `.ai/docs/apply_engine.md`.
+
+## Step contract
+
+```ruby
+class Apply::Operation::FetchDetails < Apply::Operation::Base
+  stage :fetch_details # applies.stage while it runs; the apply_steps key
+
+  private
+
+  def run!(apply:, handler:, ctx:, **)
+    # ...
+    halt!(:no_application_path, detail: 'why, for admins') if something_missing
+  end
+
+  def cleanup; end # always runs (tempfiles; browser sessions close in their own block); its own errors are logged, never raised
+end
+```
+
+- `stage` is mandatory: `Step#key` raises `NotImplementedError` for an operation without one.
+- `Apply::Operation::Base#perform!(ctx:, handler: nil, **options)` calls `skip_authorize`, sets `model = ctx.apply`
+  and calls `run!(apply: ctx.apply, handler:, ctx:, **options)`; declare only the keywords you use and keep `**`.
+- `run!` may persist step data (`apply.update!(form_data: …)`, `apply.cv.attach`, `vacancy.update!`). It never
+  writes `state` / `stage` / `failure` and never broadcasts `Apply::TurboHandler::StatusUpdate`.
+- To stop the run with a specific outcome call `halt!(code, detail:, definitive: false)` (raises
+  `Apply::Operation::Engine::Halt`; unknown codes raise `ArgumentError`). `detail` is admin-only and redacted before
+  it is stored; users see `apply.failure.<code>` only.
+- `cleanup` runs inside the step, i.e. **before** the Runner records the outcome: at that moment the apply is still
+  `running` in this step's stage (see `GeneratePdfCv` below).
+
+## Stages and Halt codes of the current steps
+
+| Step | `stage` | Halts |
+|---|---|---|
+| `CheckApplyable` | `check_applyable` | no reply button → `applyble: false`, `no_application_path` (detail `no reply button`) |
+| `FetchApplyType` | `fetch_apply_type` | scraper returns `nil` → `applyble: false`, `no_application_path` |
+| `FetchDetails` | `fetch_details` | — |
+| `FetchInternalForm` | `fetch_form` | blank vacancy page → `not_a_form` (detail `empty vacancy page`) |
+| `Ai::FillForm` | `fill_form` | AI returned an empty payload → `invalid_ai_output` |
+| `Ai::GeneratePdfCv` | `generate_cv` | — (must equal the stage `Apply.with_cv_or_generating_cv` lists as a CV placeholder) |
+| `SendApply::Http` | `submit` | see "Submit and the claim" |
+| `Stage::DetectPlatform` | `detect` | `no_application_path`, `already_applied`, HTTP gates (`manual_apply_required` / `google_forms`, `external_messenger`, `login_required`, `bot_wall`, `private_address`) |
+| `Stage::FetchSchema` | `schema` | — |
+| `Stage::ReachForm` | `navigate` (`navigate:survey`, `navigate:replay:submit`) | `not_a_form`, `already_applied`, rendered gates (`manual_apply_required` / `captcha`, `login_required`, `bot_wall`, `closed_posting`, `email_code`, ...), the Navigator's `stuck` / `budget_exhausted` / `deadline` / `invalid_ai_output` / give-up codes |
+| `Stage::DiscoverFields` | `discover` (`discover:survey`, `discover:submit`) | after_goto gates, `not_a_form` (Generic inventory fails R2) |
+| `Stage::AnswerFields` | `answer` | `invalid_ai_output` (Runner mapping) |
+| `Stage::ReviewGate` | `review` | `review` → `needs_review` |
+| `Stage::AcquireHostSlot` | `throttle` | raises `Engine::Throttled` → `waiting_capacity` |
+| `Stage::FillFields` | `fill` (`fill:submit`) | `required_field_unfillable`, `review`, `wizard_too_long`, `no_widget_driver`, `target_obstructed` |
+| `Stage::Submit` | `submit` (`submit:submit`) | `deadline`, before-submit gates, `target_not_found`; after the claim → `submit_unverified` |
+| `Stage::Verify` | `verify` (`verify:submit`) | `validation_rejected`, `outcome_unknown` |
+
+The engine stages (`Apply::Operation::Stage::*`) with their scopes and input digests: `apply_engine.md`, "Stages".
+
+Exceptions without a `halt!` keep their Runner mapping: `FormExtractor`'s "No form found" is `unexpected_error`,
+an AI `EmptyResponse` / `InvalidResponse` is `invalid_ai_output`.
+
+`Ai::GeneratePdfCv` broadcasts `VacancyCv::TurboHandler::Index.broadcast` when it starts (the placeholder appears) and
+`broadcast_row(apply, leaving: !apply.cv.attached?)` in `cleanup`: the placeholder becomes the CV, or — when the step
+failed — is removed explicitly, because the Runner clears `applies.stage` only after the cleanup.
+
+## Submit and the claim
+
+Both submit steps (`SendApply::Http` on the internal path, `Stage::Submit` in the engine's `:submit` scope) take the
+claim with `Apply::Operation::Engine::ClaimSubmit.call(ctx:)` after everything that can fail without side effects and
+immediately before the irreversible action. After the claim every halt lands in `submit_unverified` (claim rule,
+`apply_engine.md`), except `session_expired` / `validation_rejected` raised with `definitive: true`, which release
+the claim. `Stage::Submit` (trial click, `ClassifyAdvance`, claim, click) and `Stage::Verify` (deterministic signals,
+AI corroboration only next to one of them): `apply_engine.md`, "Submit and Verify".
+
+**`SendApply::Http`** — cookies, headers and `handler.build_payload(apply)` (CV download) first, then the claim, then
+`client.post_multipart`:
+
+| Response | Outcome |
+|---|---|
+| 2xx, or 301/302/303 elsewhere | returns → `completed` |
+| `nil` | `outcome_unknown` (`no response`) → `submit_unverified` |
+| redirect matching `/login`, `/signin`, `/auth` | `session_expired`, `definitive: true` → claim released, `needs_human` ("refresh your session") |
+| redirect to the vacancy page without `applied` in the query | `outcome_unknown` (detail: location) → `submit_unverified` |
+| any other status | `outcome_unknown` (`HTTP <status>`) → `submit_unverified` |
+
+An AI verdict alone never releases a claim (design §11.4). A claimed apply is not startable again (`StartContext`
+only starts `queued` / `waiting_capacity` / stale `running`), so a second run never submits twice; the user resolves
+`submit_unverified` through MarkOutcome.
 
 ## Djinni Handler
+
+Djinni has only the in-platform apply flow (`fetch_apply_type` always returns `internal`):
 
 ```ruby
 class Apply::Handler::Djinni < Apply::Handler::Base
@@ -48,60 +185,70 @@ class Apply::Handler::Djinni < Apply::Handler::Base
   add_step Apply::Operation::FetchApplyType
   add_step Apply::Operation::FetchDetails
   add_step Apply::Operation::FetchInternalForm
-  add_step Apply::Operation::Ai::FillForm,
-           prompt_class: Apply::Ai::Prompt::FillForm,
-           schema_class: Apply::Ai::ResponseSchema::FillForm
-  add_step Apply::Operation::Ai::GeneratePdfCv,
-           prompt_class: Apply::Ai::Prompt::GenerateCv,
-           schema_class: Apply::Ai::ResponseSchema::GenerateCv
+  add_step Apply::Operation::Ai::FillForm, prompt_class: Apply::Ai::Prompt::FillForm, schema_class: Apply::Ai::ResponseSchema::FillForm
+  add_step Apply::Operation::Ai::GeneratePdfCv, prompt_class: Apply::Ai::Prompt::GenerateCv, schema_class: Apply::Ai::ResponseSchema::GenerateCv
   add_step Apply::Operation::SendApply::Http
 end
 ```
 
 ## DOU Handler
 
-DOU supports both internal (in-platform) and external (company site via browser) apply flows, distinguished by `apply.apply_type`:
+DOU supports both internal (in-platform) and external (company site) apply flows, distinguished by
+`apply.apply_type`. Every external apply runs the engine, whatever the platform: a known one through its adapter,
+anything else as `generic` through the AI Navigator, with whatever AI integration the user chose. The internal apply
+keeps the HTTP steps until phase 4:
 
 ```ruby
 class Apply::Handler::Dou < Apply::Handler::Base
-  add_step Apply::Operation::FetchApplyType   # also sets apply.applyble
-  add_step Apply::Operation::FetchDetails
-  add_step Apply::Operation::Ai::FetchExternalForm,
-           execute_condition: ->(apply) { apply.external? }
-  add_step Apply::Operation::FetchInternalForm,
-           execute_condition: ->(apply) { apply.internal? }
-  add_step Apply::Operation::Ai::FillForm,
-           prompt_class: Apply::Ai::Prompt::FillForm,
-           schema_class: Apply::Ai::ResponseSchema::FillForm
-  add_step Apply::Operation::Ai::GeneratePdfCv,
-           prompt_class: Apply::Ai::Prompt::GenerateCv,
-           schema_class: Apply::Ai::ResponseSchema::GenerateCv
-  add_step Apply::Operation::SendApply::Browser,
-           execute_condition: ->(apply) { apply.external? }
-  add_step Apply::Operation::SendApply::Http,
-           execute_condition: ->(apply) { apply.internal? }
+  add_step Apply::Operation::CheckApplyable
+  add_step Apply::Operation::FetchApplyType
+  engine! if: ->(ctx) { ctx.apply.external? }
+  add_step Apply::Operation::FetchInternalForm, if: ->(ctx) { ctx.apply.internal? }
+  add_step Apply::Operation::Ai::FillForm, if: ->(ctx) { ctx.apply.internal? },
+                                           prompt_class: Apply::Ai::Prompt::FillForm,
+                                           schema_class: Apply::Ai::ResponseSchema::FillForm
+  add_step Apply::Operation::Ai::GeneratePdfCv, if: ->(ctx) { ctx.apply.internal? },
+                                                prompt_class: Apply::Ai::Prompt::GenerateCv,
+                                                schema_class: Apply::Ai::ResponseSchema::GenerateCv
+  add_step Apply::Operation::SendApply::Http, if: ->(ctx) { ctx.apply.internal? }
 end
 ```
 
+| Apply | Step keys of one attempt |
+|---|---|
+| external (Ashby, Generic, any platform) | `check_applyable fetch_apply_type detect schema [navigate:survey discover:survey] answer generate_cv review throttle navigate:replay:submit discover:submit fill:submit submit:submit verify:submit` (the `:survey` scope only while `ctx.survey_needed?`: skipped when the schema and canonical URL already give the fields) |
+| internal | `check_applyable fetch_apply_type fetch_form fill_form generate_cv submit` |
+
+- `generate_cv` is declared by `engine!` and by the internal list; the conditions exclude each other (one CV per
+  attempt; `apply_steps` is unique on `(apply_id, attempt, key)`). `dou_spec.rb` "step conditions" checks both apply
+  types.
+- Routing details, the engine stage table and the read-only smoke task (`apply:smoke`): `apply_engine.md`
+  ("Handler::Dou routing", "Stages", "Navigator (Generic)", "Smoke survey").
+
 ## CheckApplyable vs FetchApplyType
 
-`FetchApplyType` always sets `apply.applyble` as a side effect (true on success, false + raise when nil). For scrapers where `fetch_apply_type` makes an HTTP request (DOU), adding `CheckApplyable` before it wastes a redundant request to the same URL — omit it.
+Both handlers run `CheckApplyable` first and `FetchApplyType` second:
 
-Only include `CheckApplyable` when the scraper's `fetch_apply_type` is lightweight and does not actually verify applicability (e.g. Djinni's implementation always returns `{ type: 'internal' }` without an HTTP call, so a separate HTTP check is needed).
+- `CheckApplyable` calls `scraper.fetch_applyble(url, session_id:)` and stores `apply.applyble`; when the page has no reply button it stores `applyble: false` and halts with `no_application_path` (→ `unsupported`).
+- `FetchApplyType` calls `scraper.fetch_apply_type(url, session_id:)`, stores `apply_type` (and `applyble: true`), and copies an `external_url` onto the vacancy; a `nil` result stores `applyble: false` and halts with `no_application_path`.
+
+On DOU both scraper methods GET the same vacancy page (two requests through `ImpersonateHttp`, each with `session_headers(session_id)`), and the external/internal steps are gated on the type `FetchApplyType` stored. On Djinni `fetch_apply_type` makes no request, so `CheckApplyable` is the only check that the reply button exists.
 
 ## Handler::Base shared helpers
 
 These are public methods available to operations via `handler:`:
 
-| Method | Purpose |
-|--------|---------|
-| `cv_filename` | Returns the PDF filename derived from the user profile name |
-| `build_payload(apply)` | Builds the multipart form payload from `filled_form_data`, attaches CV file if present |
+| Method                 | Purpose                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| `cv_filename`          | Returns the PDF filename derived from the user profile name                         |
+| `build_payload(apply)` | Builds the multipart form payload from `filled_inputs`, attaches CV file if present |
+
+Source-specific values an operation needs come from the scraper or the source, not from the handler: `scraper.session_headers(session_id)` is the authenticated Cookie header (`FetchInternalForm`, and the scrapers' own `fetch_applyble` / `fetch_apply_type`), `scraper.form_selector` picks the apply form, and `Source#session_cookie_name` names the session cookie in `SendApply::Http`'s cookie jar (the profile's session wins over an anonymous captured one).
 
 ## Adding a new source
 
 1. Create `app/concepts/apply/handler/my_site.rb` inheriting `Apply::Handler::Base`
-2. Declare the pipeline with `add_step` — add `execute_condition:` for conditional steps
+2. Declare the pipeline with `add_step` — add `if:` for conditional steps
 3. Pass `prompt_class:` / `schema_class:` inline on any AI steps
 4. Add the scraper class to `Source::SCRAPERS` (see `.ai/docs/scrapers.md`)
 5. No changes needed to the job or any shared operation

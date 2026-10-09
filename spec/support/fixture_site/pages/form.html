@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply: Ruby Developer</title>
+    <style>
+      body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; }
+      label { display: block; margin-top: 0.75rem; }
+      .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .dropzone { border: 2px dashed #888; padding: 1.5rem; text-align: center; cursor: pointer; }
+      .toggle input { display: none; }
+      .toggle { display: inline-block; padding: 0.25rem 0.75rem; border: 1px solid #333; }
+    </style>
+  </head>
+  <body>
+    <h1>Apply for Ruby Developer</h1>
+    <form id="apply" action="/submit" method="post" enctype="multipart/form-data">
+      <label for="full_name">Full name</label>
+      <input id="full_name" name="full_name" type="text" placeholder="Jane Doe" maxlength="40" />
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" data-qa="email-input" />
+
+      <label for="cover">Cover letter</label>
+      <textarea id="cover" name="cover" rows="4"></textarea>
+
+      <label for="experience">Experience</label>
+      <select id="experience" name="experience">
+        <option value="">Choose</option>
+        <option value="junior">1-2 years</option>
+        <option value="senior">5+ years</option>
+      </select>
+
+      <label><input id="consent" name="consent" type="checkbox" value="1" /> I agree to the privacy policy</label>
+
+      <fieldset>
+        <legend>Ready to relocate?</legend>
+        <label><input id="relocate_yes" name="relocate" type="radio" value="yes" /> Yes</label>
+        <label><input id="relocate_no" name="relocate" type="radio" value="no" /> No</label>
+      </fieldset>
+
+      <div class="toggle" id="remote-root" role="group" aria-label="Remote work">
+        <input id="remote" name="remote" type="checkbox" value="1" /><span>Remote OK</span>
+      </div>
+
+      <label class="dropzone" for="cv">Drop your CV here or click to browse</label>
+      <input id="cv" name="cv" type="file" class="visually-hidden" />
+
+      <button type="submit" class="primary">Submit application</button>
+    </form>
+
+    <form id="newsletter" action="/newsletter" method="post">
+      <label for="newsletter_email">Newsletter</label>
+      <input id="newsletter_email" name="newsletter_email" type="email" />
+      <button type="submit">Subscribe</button>
+    </form>
+  </body>
+</html>

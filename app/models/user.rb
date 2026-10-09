@@ -20,6 +20,10 @@ class User < ApplicationRecord
     attachable.variant :thumb, resize_to_fill: [ 64, 64 ], format: :webp
   end
 
+  # Default never (design §18); with auto_consent (default true) read by Answer::ReviewReasons / ResolveConsent. No
+  # settings UI yet (apply_engine.md, "Deviations from the design (phase 3a)"): change from the console.
+  enum :review_policy, { always: 0, unknown_platforms: 1, never: 2 }, prefix: true
+
   validates :email, presence: true
   validates :name, presence: true
   validates :provider, presence: true

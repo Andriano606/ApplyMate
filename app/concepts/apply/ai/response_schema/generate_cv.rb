@@ -1,6 +1,16 @@
 # frozen_string_literal: true
 
 class Apply::Ai::ResponseSchema::GenerateCv < ApplyMate::Ai::ResponseSchema::Base
+  # The PDF render launches a Chromium in the calling process, so it runs under ApplyMate::Client::LocalChrome (one
+  # local Chrome per process, shared with GeminiScraping). Longest wait for the slot: one full GeminiScraping call plus
+  # one other render (RENDER_TIMEOUT_MS); then LocalChrome::Busy (the apply Runner: Halt(:capacity), transient).
+  RENDER_TIMEOUT_MS = 60_000
+  RENDER_SLOT_WAIT = ApplyMate::Ai::Client::GeminiScraping::CALL_SECONDS + (RENDER_TIMEOUT_MS / 1000)
+
+  def self.kind
+    :cv
+  end
+
   def self.format_instructions
     <<~INSTRUCTIONS
       STRICT RULES FOR OUTPUT:
@@ -42,13 +52,18 @@ class Apply::Ai::ResponseSchema::GenerateCv < ApplyMate::Ai::ResponseSchema::Bas
       </html>
     HTML
 
-    grover = Grover.new(styled_html)
-    grover.to_pdf({
-                    format: 'A4',
-                    print_background: true,
-                    margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
-                    launch_args: [ '--no-sandbox', '--disable-setuid-sandbox' ]
-                  })
+    ApplyMate::Client::LocalChrome.hold(wait: RENDER_SLOT_WAIT) do
+      Grover.new(styled_html).to_pdf({
+                                       format: 'A4',
+                                       print_background: true,
+                                       margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
+                                       launch_args: [ '--no-sandbox', '--disable-setuid-sandbox' ],
+                                       # bounds the Puppeteer render so a hung Chrome cannot hold the slot (design §9.5)
+                                       timeout: RENDER_TIMEOUT_MS
+                                     })
+    end
+  rescue ApplyMate::Client::LocalChrome::Busy
+    raise # transient capacity, not a parse failure
   rescue StandardError => e
     Rails.logger.error("GenerateCv schema parse error: #{e.message}")
     raise "Failed to parse AI GenerateCv response: #{e.message}"

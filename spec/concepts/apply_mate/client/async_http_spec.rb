@@ -223,13 +223,14 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
 
     it 'includes plain string fields with Content-Disposition' do
       server.queue(status: 200, body: '')
-      client.post_multipart(server.url, payload: { 'name' => 'Jane', 'email' => 'jane@example.com' })
+      email = unique_email('jane')
+      client.post_multipart(server.url, payload: { 'name' => 'Jane', 'email' => email })
 
       body = server.requests.last[:body]
       expect(body).to include('Content-Disposition: form-data; name="name"')
       expect(body).to include("\r\n\r\nJane\r\n")
       expect(body).to include('Content-Disposition: form-data; name="email"')
-      expect(body).to include("\r\n\r\njane@example.com\r\n")
+      expect(body).to include("\r\n\r\n#{email}\r\n")
     end
 
     it 'includes Faraday::Multipart::FilePart-style file parts' do
