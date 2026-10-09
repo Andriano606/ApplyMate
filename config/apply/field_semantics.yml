@@ -105,13 +105,14 @@ semantics:
     - ^(ваша )?фамилия$
   full_name:
     - ^(your |legal |applicant'?s? )?(full )?name$
-    - ^(first|given) (and|&) (last|family) names?$
+    # "First and last name", "First name, last name", "First / last name": `and` / `&` / `,` / `/` between the parts.
+    - ^(first|given)( name)? ?(and|&|,|/) ?(last|family|sur) ?names?$
     - ^(ваше |ваш )?(піб|фио)$
     - ^(ваше )?повне ім['’ʼ]я$
-    - ^ім['’ʼ]я (та|і) прізвище$
+    - ^ім['’ʼ]я ?(та|і|,|/) ?прізвище$
     - ^прізвище,? ім['’ʼ]я( (та|і) по батькові)?$
     - ^(ваше )?полное имя$
-    - ^имя и фамилия$
+    - ^имя ?(и|,|/) ?фамилия$
     - ^фамилия,? имя( (и )?отчество)?$
   email:
     - ^(your |work |personal |contact )?e-?mail( address)?$

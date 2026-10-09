@@ -36,6 +36,8 @@
 #              Answer::Classify.generic_name?) yields to the question. A checkbox keeps its own name (Widget::NativeCheck
 #              clicks its label by that text); a generic one ("Acknowledge/Confirm") gets the question as its
 #              description, which Answer::Classify then reads
+#   description the aria-describedby text, else that generic checkbox's question, else the field root's help text
+#              (snapshot.js `help`: Ashby's question-description block beside the label, no aria-describedby)
 #   required   the DOM's flag (required / aria-required / a `*` mark), else implied (REQUIRED_LEXICON incl. a `*` / `✱`
 #              left in the label / placeholder, CORE_SEMANTICS; `cv` only for a file field whose label names the CV,
 #              Answer::Classify.cv_file?), never when OPTIONAL_LEXICON says "optional")
@@ -176,13 +178,14 @@ class Apply::Operation::Engine::BuildFieldInventory < ApplyMate::Operation::Base
     label = schema&.label || dom_label(first, kind) || placeholder_label(placeholder)
     options = schema&.options.presence || dom_options(first, members, dom_kind)
     target = target_of(first, kind)
-    description = schema&.description || first['described_by'].presence || generic_question(first, label)
+    description = schema&.description || first['described_by'].presence || generic_question(first, label) || first['help'].presence
     field = Apply::Field.new(
       id:, kind:, label:, description:, placeholder:,
       required: schema ? schema.required == true : members.any? { |member| member['required'] },
       multiple: schema&.multiple == true || first.dig('attrs', 'multiple') == true || Apply::Field::MULTI_KINDS.include?(kind),
       max_length: first.dig('attrs', 'maxlength').to_i.positive? ? first.dig('attrs', 'maxlength').to_i : nil,
-      accept: first.dig('attrs', 'accept').presence, autocomplete: first.dig('attrs', 'autocomplete').presence, options:,
+      accept: first.dig('attrs', 'accept').presence, autocomplete: first.dig('attrs', 'autocomplete').presence,
+      prefix: first['prefix'].presence, options:,
       semantic: first['password'] ? 'password' : nil,
       widget: nil, target:,
       signature: Apply::Field.signature_for(label: label.presence || placeholder || description, kind:,

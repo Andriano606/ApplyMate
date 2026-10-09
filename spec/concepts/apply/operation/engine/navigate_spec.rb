@@ -192,6 +192,18 @@ RSpec.describe Apply::Operation::Engine::Navigate do
       expect(session.calls_of(:click).size).to eq(1) # the repeat was skipped, never performed again
     end
 
+    # preply.com: Ashby's app in iframe#ashby_embed_iframe still booting (only its server shell, no app DOM).
+    it 'tells the AI about a loaded-but-empty frame and lets it wait past STUCK_AFTER, still bounded' do
+      session.show(build_snapshot(frames: [ { url: job }, { url: 'https://jobs.ashbyhq.com/acme/1?embed=js' } ],
+                                  elements: [ snapshot_element(role: 'link', name: 'Cookie Policy', href: '/cookies') ]))
+      ai_answers(continue(action('wait', max_ms: 100)))
+
+      expect(halt_of).to have_attributes(code: :stuck)
+      expect(prompts.first).to include('FRAME f1 in f0 iframe', Apply::Ai::Prompt::Navigate::EMPTY_FRAME_NOTE)
+      expect(prompts.size).to eq(described_class::STUCK_AFTER + described_class::MAX_IDLE_REPEATS - 1)
+      expect(prompts.last).not_to include('was skipped: it is FORBIDDEN')
+    end
+
     it 'rejects a hallucinated ref without touching the page and tells the AI next turn' do
       ai_answers(continue(action('click', ref: 'f9:e99')), give_up('no_application_path'))
 
@@ -199,6 +211,17 @@ RSpec.describe Apply::Operation::Engine::Navigate do
       expect(session.calls_of(:click)).to be_empty
       expect(ctx.scratch.trace.find { |entry| entry['event'] == 'action_rejected' }).to include('ref' => 'f9:e99', 'reason' => 'unknown_ref')
       expect(prompts.last).to include('click(f9:e99) was rejected: unknown_ref')
+    end
+
+    # preply.com: the Navigator answered {type: 'scroll', ref: 'f0'} (a page scroll) on the Ashby iframe's frame ref.
+    it 'rejects a frame ref with a hint, and the rejected turns are no stuck strikes' do
+      scroll = continue(action('scroll', ref: 'f0'))
+      ai_answers(scroll, scroll, scroll, give_up('no_application_path'))
+
+      expect(halt_of).to have_attributes(code: :no_application_path)
+      expect(session.calls_of(:scroll_into_view)).to be_empty
+      expect(prompts.second).to include('scroll(f0) was rejected: frame_ref (fN names a frame, not an element')
+      expect(prompts.size).to eq(4)
     end
 
     it 'halts budget_exhausted on turn 13 after exactly 12 AI requests while the page keeps changing' do
@@ -277,6 +300,60 @@ RSpec.describe Apply::Operation::Engine::Navigate do
       expect(prompts.second).to include('form_reached was rejected (too_few_fields)')
       expect(ops.map { |op| op['op'] }).to eq(%w[click wait_for])
       expect(ctx.form_root).to eq(ApplyMate::Client::Browser::Target.css(form_css))
+    end
+
+    # Greenhouse's hosted job page (job-boards.eu.greenhouse.io): the whole application form is server-rendered on
+    # load - names, email, two visually-hidden file inputs (<label class="visually-hidden" for="resume">Attach</label>)
+    # and a "Submit application" button inside <form id="application-form">.
+    def greenhouse_page(regions: [ form_css ])
+      build_snapshot(frames: [ { url: job, outline: [ 'h1 Senior Ruby developer' ] } ], elements: [
+        snapshot_element(role: 'link', name: 'Back to jobs', href: '/acme'),
+        snapshot_element(name: 'First Name', required: true, css: "#{form_css} > div:nth-of-type(1) > input", regions:),
+        snapshot_element(name: 'Last Name', required: true, css: "#{form_css} > div:nth-of-type(2) > input", regions:),
+        snapshot_element(name: 'Email', type: 'email', required: true, css: "#{form_css} > div:nth-of-type(3) > input", regions:),
+        snapshot_element(name: 'Attach', question: 'Resume/CV', type: 'file', required: true, self_visible: false,
+                         css: "#{form_css} > div:nth-of-type(4) > input", regions:),
+        snapshot_element(name: 'Attach', question: 'Cover Letter', type: 'file', self_visible: false,
+                         css: "#{form_css} > div:nth-of-type(5) > input", regions:),
+        snapshot_element(role: 'button', name: 'Submit application', submit_like: true, css: "#{form_css} > button", regions:),
+        snapshot_element(name: 'Newsletter e-mail', type: 'email', css: 'body > footer > form > input')
+      ])
+    end
+
+    it 'claims a form rendered on load (upload + identity fields + submit) without asking the AI' do
+      session.show(greenhouse_page)
+      ai_answers(give_up('not_a_form'))
+
+      expect(navigate).to eq([ { 'op' => 'wait_for', 'root' => form_css, 'frame_path' => [], 'min_fields' => 3 } ])
+      expect(ctx.form_root).to eq(ApplyMate::Client::Browser::Target.css(form_css))
+      expect(events).to include('navigator_evident_form')
+      expect(ctx.scratch.trace.find { |entry| entry['event'] == 'form_claim' }).to include('accepted' => true, 'reason' => 'file_input')
+      expect(a_request(:post, gemini)).not_to have_been_made
+      expect(apply.reload.ai_calls).to eq(0)
+    end
+
+    it 'asks the AI, without a rejection error in its prompt, when the deterministic claim does not hold' do
+      session.show(greenhouse_page(regions: []))
+      ai_answers(give_up('not_a_form'))
+
+      expect(halt_of).to have_attributes(code: :not_a_form)
+      expect(ctx.scratch.trace.find { |entry| entry['event'] == 'form_claim' }).to include('accepted' => false)
+      expect(prompts.size).to eq(1)
+      expect(prompts.first).not_to include('form_reached was rejected')
+    end
+
+    it 'leaves the page to the AI when the adopted platform has its own readiness and it does not hold' do
+      ctx.adopt_match!(Apply::Operation::Engine::Detect::Match.new(
+        key: 'ashby', confidence: 0.95, captures: { 'slug' => 'acme' }, frame_path: nil, from_alias: false, probable: nil
+      ))
+      allow(Apply::Operation::Engine::WaitReady).to receive(:call)
+        .and_return(instance_double(ApplyMate::Operation::Result, model: nil))
+      session.show(greenhouse_page)
+      ai_answers(give_up('not_a_form'))
+
+      expect(halt_of).to have_attributes(code: :not_a_form)
+      expect(events).not_to include('navigator_evident_form')
+      expect(prompts.size).to eq(1)
     end
 
     it 'rejects a claim whose scope_ref is not on the page' do

@@ -7,6 +7,7 @@ class Apply::Field < Data.define(
   :kind,          # one of KINDS
   :label, :description, :placeholder, :required, :multiple, :max_length, :accept,
   :autocomplete,  # the control's autocomplete attribute (snapshot), an Answer::Classify input | nil
+  :prefix,        # fixed letterless text shown before a text control ("+380", "$"; snapshot.js prefix) | nil
   :options,       # [{ 'label' =>, 'value' => }] | 'dynamic' | nil
   :semantic,      # one of SEMANTICS
   :widget,        # driver key chosen at discovery

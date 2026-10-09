@@ -124,6 +124,16 @@ RSpec.describe Apply::Operation::Engine::BuildFieldInventory do
       end
     end
 
+    # Hurma's phone as a snapshot from before snapshot.js skipped letterless captions: `<span>+380</span><input type=tel>`
+    # under "Phone number *" was named "+380".
+    context 'with a control named only by a letterless affix' do
+      let(:elements) { [ element('#phone', '+380', type: 'tel', question: 'Phone number', required: true, prefix: '+380') ] }
+
+      it 'labels it by its question and carries the affix as its prefix' do
+        expect(fields.map { |field| [ field.label, field.kind, field.prefix ] }).to eq([ [ 'Phone number', 'tel', '+380' ] ])
+      end
+    end
+
     context 'with placeholder-only controls (no label, no question)' do
       let(:elements) do
         [

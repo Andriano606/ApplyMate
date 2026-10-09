@@ -2,7 +2,7 @@
 // the selected option text, the contenteditable text, a combobox chip (react-select singleValue / multiValue, chip
 // classes) inside the field root, the file names, or the input value. `invalid` = aria-invalid or :invalid;
 // `error_text` = alert / live-region / aria-describedby text inside the field root; `pressed` = aria-pressed or
-// aria-checked as written.
+// aria-checked as written; `expanded` = aria-expanded="true" (a combobox whose menu is still open).
 (el) => {
   const tag = el.tagName.toLowerCase();
   const type = (el.getAttribute('type') || '').toLowerCase();
@@ -94,6 +94,7 @@
     invalid,
     error_text: errorText || null,
     pressed,
+    expanded: attr('aria-expanded') === 'true',
     min: attr('min') ?? attr('aria-valuemin'),
     max: attr('max') ?? attr('aria-valuemax'),
     step: attr('step'),

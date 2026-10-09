@@ -11,7 +11,7 @@
 #   DONE   the ops performed so far; TABS the open tabs
 #   FRAME fN [in fParent <hop>] <url>, then untrusted(TITLE, OUTLINE, ALERTS, element lines):
 #     [fN:eM] role "name" state <filled>|<empty> options → href    (* in front: not in the previous snapshot)
-#   FIELDS visible fillable units · hidden file inputs · password fields; CAPTCHA kinds; FORBIDDEN; ERRORS
+#   FIELDS visible fillable units · file inputs (any visibility) · password fields; CAPTCHA kinds; FORBIDDEN; ERRORS
 #
 # Values are ALWAYS masked (<filled> / <empty> from the probe's `filled`; the element's attrs value is never read).
 # Only visible elements are listed. The whole text stays within SNAPSHOT_CHAR_BUDGET: elements outside the viewport
@@ -24,6 +24,8 @@ class Apply::Ai::Prompt::Navigate < ApplyMate::Ai::Prompt::Base
   MAX_OUTLINE = 20
   MAX_OUTLINE_LINE = 120
   MAX_ERRORS = 5
+  # What a rendered child frame with nothing in it yet says instead of being left out (#loading_frame_block).
+  EMPTY_FRAME_NOTE = '(an embedded page with no interactive elements yet: it may still be loading)'
 
   SYSTEM_TEMPLATE = <<~TEXT
     You drive a web browser for a job seeker. Goal: reach the application form of the vacancy "%<title>s" and stop
@@ -37,7 +39,8 @@ class Apply::Ai::Prompt::Navigate < ApplyMate::Ai::Prompt::Base
     Actions (at most 3 per turn; an action that changes the page must be the last one):
     - click(ref): a link, button, tab or menu item. Never an element marked submit or password.
     - press(ref, key): key is one of ArrowDown, Enter, Escape, Tab.
-    - scroll(ref): bring an element into view (lazy sections).
+    - scroll(ref): bring an element into view (lazy sections). Every element is listed already, in view or not; a
+      frame fN is not a ref, so there is no page scroll.
     - navigate(ref): open the href of a link element in this tab.
     - switch_tab(index): continue in another open tab (TABS).
     - wait(max_ms): wait up to 5000 ms for the page to change.
@@ -148,7 +151,14 @@ class Apply::Ai::Prompt::Navigate < ApplyMate::Ai::Prompt::Base
   end
 
   def visible_elements
-    @snapshot.elements.select { |element| element['visible'] && !element['file_trigger'] }
+    @snapshot.elements.select { |element| element['visible'] && !element['file_trigger'] && !field_part?(element) }
+  end
+
+  # A nameless button inside a field (its root has a question: a combobox's arrow toggle, a clear icon) is a piece of
+  # that field, never a step towards the form; listed, it only gets copied into a claim's field_refs.
+  def field_part?(element)
+    element['name'].blank? && element['question'].present? && element['group'].blank? &&
+      (element['tag'] == 'button' || element['role'] == 'button')
   end
 
   # The frame blocks for `shown`; `omitted` elements are counted in a note.
@@ -177,7 +187,7 @@ class Apply::Ai::Prompt::Navigate < ApplyMate::Ai::Prompt::Base
 
   def frame_block(frame, elements)
     outline = Array(frame['outline']).first(MAX_OUTLINE)
-    return if elements.empty? && outline.empty?
+    return loading_frame_block(frame) if elements.empty? && outline.empty?
 
     content = []
     content << "TITLE: #{clean(frame['title'], MAX_OUTLINE_LINE)}" if frame['title'].present?
@@ -187,6 +197,16 @@ class Apply::Ai::Prompt::Navigate < ApplyMate::Ai::Prompt::Base
     content.concat(elements.map { |element| element_line(element, new: new?(element)) })
     content.unshift("URL: #{page_url(frame['url'])}") if frame['url'].present?
     "#{frame_header(frame)}\n#{untrusted(content.join("\n"))}"
+  end
+
+  # A rendered, readable child frame with nothing in it yet (an embedded ATS app still booting behind its server
+  # shell): said, so the Navigator waits for it instead of judging the page from the top frame alone. Nil for the top
+  # frame and for frames that do not render (SnapshotAll 'visible').
+  def loading_frame_block(frame)
+    return if frame['parent'].nil? || frame['visible'] == false || !frame['readable']
+
+    url = frame['url'].present? ? "URL: #{page_url(frame['url'])}\n" : ''
+    "#{frame_header(frame)}\n#{untrusted("#{url}#{EMPTY_FRAME_NOTE}")}"
   end
 
   # The frame's URL is page-controlled (an iframe src), so it is rendered inside the untrusted block (frame_block).
@@ -215,14 +235,16 @@ class Apply::Ai::Prompt::Navigate < ApplyMate::Ai::Prompt::Base
     controls = @snapshot.elements.select { |element| Apply::Operation::Engine::BuildFieldInventory.control?(element) }
     visible = controls.select { |element| element['visible'] && element['type'] != 'file' }
                       .uniq { |element| element['group_key'].presence || element['ref'] }.size
-    hidden_files = controls.count { |element| element['type'] == 'file' && !element['self_visible'] }
+    # Every file input, visible or not: a visible one is no `visible` unit, a hidden one is never listed.
+    files = controls.count { |element| element['type'] == 'file' }
     passwords = @snapshot.frames.sum { |frame| frame['password_fields'].to_i }
-    "FIELDS visible #{visible} · hidden file inputs #{hidden_files} · password #{passwords}"
+    "FIELDS visible #{visible} · file inputs #{files} · password #{passwords}"
   end
 
+  # Each kind once, with the frames that report it ("hcaptcha_invisible(f0 f2)"): one widget is one signal.
   def captcha_line
-    kinds = @snapshot.frames.flat_map { |frame| Array(frame['captcha']).map { |kind| "#{kind}(#{frame['ref']})" } }
-    kinds.join(', ').presence || 'none'
+    frames = @snapshot.frames.flat_map { |frame| Array(frame['captcha']).map { |kind| [ kind, frame['ref'] ] } }
+    frames.group_by(&:first).map { |kind, found| "#{kind}(#{found.map(&:last).uniq.join(' ')})" }.join(', ').presence || 'none'
   end
 
   def forbidden_line

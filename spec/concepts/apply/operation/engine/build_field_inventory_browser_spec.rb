@@ -2,178 +2,58 @@
 
 require 'rails_helper'
 
-# The REAL snapshot.js + readiness.js + BuildFieldInventory on FixtureSite markup recorded from live Generic forms:
-# generic/js_validated.html (a Vuetify, Hurma-like form: JS-only validation, placeholder-only fields, an auto-grow
-# sizer textarea, a type=button "Send application", a clipped CV input) and generic/closed.html (a PeopleForce-like
-# closed posting with a language switcher outside any form) and generic/hostile.html (PeopleForce hidden twins and an
-# Alpine select, Lever's CSS-hidden label text and hCaptcha, Greenhouse's "Attach" upload label, an Ashby autofill
-# dropzone, CleverStaff's following consent text and nested buttons, a MacPaw label with an inline link), plus
-# generic/send_launcher.html and generic/forms.html for ExecuteAction's no-submit guard against real scopes.
+# The REAL snapshot.js + BuildFieldInventory on generic/wrapped_fields.html: Hurma's Vuetify inputs 7 levels below the
+# item holding their title and "*", its submit in a <footer> inside the <form>, and Ashby's question-description blocks
+# beside the label (no aria-describedby).
 RSpec.describe Apply::Operation::Engine::BuildFieldInventory, :browser do
   let(:ctx) { engine_context(create(:apply)) }
+  let(:url) { FixtureSite.url('/generic/wrapped_fields.html') }
 
   before { ctx.adopt_match!(Apply::Operation::Engine::Detect::Match.generic) }
 
-  context 'with a JS-validated Vuetify form' do
-    it 'leaves out the sizer, keys placeholder-only fields apart and implies the required identity / CV fields' do
-      on_fixture_form(ctx, FixtureSite.url('/generic/js_validated.html'), form_root: '#apply') do |_session, fields|
-        by_placeholder = fields.index_by(&:placeholder)
+  def element(snapshot, id)
+    snapshot.elements.find { |el| el.dig('attrs', 'id') == id } || raise("no element ##{id}")
+  end
 
-        expect(fields.map(&:kind)).to eq(%w[text text text text textarea file])
-        expect(fields.map(&:signature).uniq.size).to eq(fields.size)
-        expect(fields.map(&:ordinal)).to all(eq(0))
-        expect(by_placeholder['Електронна пошта'].description).to eq('Ми надішлемо підтвердження')
-        expect(fields.select(&:required).map { |field| field.placeholder || field.kind })
-          .to contain_exactly("Ім'я та прізвище", 'Електронна пошта', 'Посилання на портфоліо *', 'file')
-      end
-    end
-
-    it 'marks the type=button "Send application" submit_like and counts the clipped CV input as rendered' do
-      on_fixture_form(ctx, FixtureSite.url('/generic/js_validated.html'), form_root: '#apply') do |session, _fields|
-        send = session.snapshot_all.elements.find { |element| element['name'] == 'Send application' }
-        readiness = session.probe(:readiness, ApplyMate::Client::Browser::Target.css('#apply'), { 'min' => 1 })
-
-        expect(send).to include('submit_like' => true)
-        expect(readiness['fields']).to eq(6) # 5 visible text controls + the clipped file input, never the sizer
-      end
+  it 'finds the question and its required mark of an input wrapped 7 levels deep, and reads its semantic' do
+    on_fixture_form(ctx, url, form_root: '#response-form') do |_session, fields|
+      name = fixture_field(fields, 'First name, last name')
+      expect(name).to have_attributes(required: true)
+      expect(Apply::Operation::Answer::Classify.call(field: name, platform: nil).model).to eq('full_name')
+      expect(fixture_field(fields, 'Email')).to have_attributes(required: true)
     end
   end
 
-  context 'with markup recorded from hostile live forms' do
-    let(:url) { FixtureSite.url('/generic/hostile.html') }
+  # Hurma: `<span class="country-code">+380</span><input type="tel">` under "Phone number *". The letterless span is an
+  # affix, not the label; it is carried as the field's prefix so the phone is typed without its country code.
+  it 'labels a tel input by its question, not by the dial-code span before it, and reports the span as its prefix' do
+    on_fixture_form(ctx, url, form_root: '#response-form') do |session, fields|
+      phone = element(session.snapshot_all, 'phone')
+      expect(phone).to include('name' => 'Phone number', 'question' => 'Phone number', 'prefix' => '+380')
 
-    def by_id(snapshot, id)
-      snapshot.elements.find { |element| element.dig('attrs', 'id') == id } || raise("no element ##{id}")
-    end
-
-    it 'inventories only rendered, answerable controls, labelled by what a person reads' do
-      on_fixture_form(ctx, url, form_root: '#apply') do |_session, fields|
-        by_label = fields.index_by(&:label)
-
-        expect(fields.map(&:label)).to eq([ 'Номер телефону', 'Супровідний лист', 'Бажана базова компенсація', 'Current location',
-                                            'Resume/CV', 'Cover Letter', "Ім'я",
-                                            'Я даю дозвіл на обробку своїх персональних даних для цієї та інших вакансій',
-                                            'I agree to the Privacy Policy.' ])
-        expect(by_label['Номер телефону']).to have_attributes(kind: 'tel', required: true)
-        expect(by_label['Супровідний лист']).to have_attributes(kind: 'rich_text')
-        expect(by_label['Resume/CV']).to have_attributes(kind: 'file', required: true)
-        expect(by_label['Cover Letter']).to have_attributes(kind: 'file', required: false)
-        expect(Apply::Operation::Answer::Classify.call(field: by_label['Cover Letter']).model).to eq('cover_letter')
-        expect(Apply::Operation::Answer::Classify.call(field: by_label['Current location']).model).to eq('location')
-        expect(Apply::Operation::Answer::Classify.call(field: fields[7]).model).to eq('consent_required')
-      end
-    end
-
-    it 'reports the hidden twins, the captcha field and the readonly select as such' do
-      on_fixture_form(ctx, url, form_root: '#apply') do |session, _fields|
-        snapshot = session.snapshot_all
-
-        expect(by_id(snapshot, 'career_application_form_phone_numbers')).to include('visible' => false)
-        expect(by_id(snapshot, 'g-recaptcha-response')).to include('captcha_artifact' => true, 'visible' => false)
-        expect(by_id(snapshot, 'career_application_form[phone_numbers][]')).to include('name' => 'Номер телефону', 'required' => true)
-        expect(by_id(snapshot, 'currency')).to include('group' => 'combobox', 'name' => '')
-        expect(by_id(snapshot, 'first-name')['strategies']).to include({ 'role' => 'textbox', 'name' => "Ім'я" })
-        expect(by_id(snapshot, 'resume-chooser')).to include('required' => false, 'chooser' => false)
-        expect(by_id(snapshot, 'hcaptchaSubmitBtn')).to include('name' => '')
-        expect(by_id(snapshot, 'close')).to include('name' => 'close')
-        expect(snapshot.frames.first['captcha']).to include('hcaptcha_invisible', 'recaptcha_invisible')
-      end
-    end
-
-    it 'never names the footer locale switcher by the "powered by" credit link before it' do
-      on_fixture_form(ctx, url, form_root: '#apply') do |session, _fields|
-        expect(by_id(session.snapshot_all, 'career_locale')).to include('name' => '', 'search_like' => true)
-      end
-    end
-
-    it 'lists one element per clickable thing (nested role=button host / link around a button)' do
-      on_fixture_form(ctx, url, form_root: '#apply') do |session, _fields|
-        elements = session.snapshot_all.elements
-
-        launchers = elements.select { |element| element['name'] == 'Відгукнутися' && element['scope'].nil? }
-        expect(launchers.map { |element| element.dig('attrs', 'id') }).to eq([ 'launcher' ])
-        expect(elements.select { |element| element['name'] == 'Apply for this Job' }.map { |element| element['tag'] }).to eq([ 'a' ])
-      end
+      field = fixture_field(fields, 'Phone number')
+      expect(field).to have_attributes(kind: 'tel', prefix: '+380', required: true)
+      expect(Apply::Operation::Answer::CoerceValue.call(field: field.with(semantic: 'phone'), value: '+380 67 123 45 67').model)
+        .to eq('671234567')
     end
   end
 
-  context 'with send controls the Navigator must never click (hostile.html)' do
-    let(:url) { FixtureSite.url('/generic/hostile.html') }
-
-    def element_by_id(snapshot, id)
-      snapshot.elements.find { |element| element.dig('attrs', 'id') == id } || raise("no element ##{id}")
-    end
-
-    def click(snapshot, element)
-      Apply::Operation::Engine::ExecuteAction.call(ctx:, action: { 'type' => 'click', 'ref' => element['ref'] }, snapshot:)
-    end
-
-    it 'scopes the dialog button apart from the page launcher and refuses both send controls by name' do
-      on_fixture_form(ctx, url, form_root: '#apply') do |session, _fields|
-        snapshot = session.snapshot_all
-        lone_send = element_by_id(snapshot, 'lone-send')
-        modal_send = element_by_id(snapshot, 'modal-send')
-        launcher = element_by_id(snapshot, 'launcher')
-
-        expect(lone_send).to include('scope' => nil)
-        # type=button with a respond verb: never submit_like, refused by its name inside the dialog with a field
-        expect(modal_send).to include('submit_like' => false, 'scope' => 'dialog#respond-modal')
-        expect(modal_send['fingerprint']).to eq('button|відгукнутися|f0|dialog#respond-modal')
-        expect(launcher['fingerprint']).to eq('button|відгукнутися|f0')
-        expect(click(snapshot, lone_send)[:rejected]).to eq('submit_like')
-        expect(click(snapshot, modal_send)[:rejected]).to eq('submit_like')
-      end
+  it 'carries the help text beside the label into the description' do
+    on_fixture_form(ctx, url, form_root: '#response-form') do |_session, fields|
+      expect(fixture_field(fields, 'How did you get to know Preply?').description)
+        .to eq('Share with us the one source that led you to apply to Preply')
+      expect(fixture_field(fields, 'LinkedIn').description).to start_with('Drop your LinkedIn profile link here.')
+      expect(fixture_field(fields, 'Email').description).to be_nil
     end
   end
 
-  context 'with launchers the Navigator must be able to click' do
-    def element_by_id(snapshot, id)
-      snapshot.elements.find { |element| element.dig('attrs', 'id') == id } || raise("no element ##{id}")
-    end
-
-    def click(snapshot, element)
-      Apply::Operation::Engine::ExecuteAction.call(ctx:, action: { 'type' => 'click', 'ref' => element['ref'] }, snapshot:)
-    end
-
-    it 'clicks a send-verb launcher outside any form and sees the modal form open (send_launcher.html)' do
-      in_fixture_scope(ctx) do |session|
-        session.goto(FixtureSite.url('/generic/send_launcher.html'))
-        snapshot = session.snapshot_all
-        launcher = element_by_id(snapshot, 'send-launcher')
-        result = click(snapshot, launcher)
-
-        expect(launcher).to include('scope' => nil, 'submit_like' => false)
-        expect(result[:rejected]).to be_nil
-        expect(result[:page_changed]).to be(true)
-        expect(element_by_id(result[:snapshot], 'cv-email')).to include('visible' => true, 'scope' => 'dialog#cv-modal')
-      end
-    end
-
-    it 'scopes id-less forms apart and keeps a "Resend code" out of the send lexicon (forms.html)' do
-      in_fixture_scope(ctx) do |session|
-        session.goto(FixtureSite.url('/generic/forms.html'))
-        snapshot = session.snapshot_all
-        apply = element_by_id(snapshot, 'form-apply')
-
-        expect(element_by_id(snapshot, 'newsletter-email')['scope']).to eq('form@1')
-        expect(apply['scope']).to eq('form@2')
-        expect(element_by_id(snapshot, 'resend')).to include('submit_like' => false, 'scope' => 'form@3')
-        expect(element_by_id(snapshot, 'final')).to include('submit_like' => true, 'scope' => 'form@3')
-        expect(click(snapshot, apply)[:rejected]).to be_nil
-      end
-    end
-  end
-
-  context 'with a closed posting whose language switcher holds a value' do
-    it 'halts closed_posting: the filled switcher is not a form to apply with' do
-      in_fixture_scope(ctx) do |session|
-        session.goto(FixtureSite.url('/generic/closed.html'))
-        snapshot = session.snapshot_all
-
-        expect { Apply::Gate::ClosedPosting.new.call(ctx, snapshot:) }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
-          expect(halt).to have_attributes(code: :closed_posting, detail: 'Закрита вакансія')
-        }
-      end
+  it "treats the form's own <footer> as the form: its submit is submit_like, its checkbox a field; the page footer stays chrome" do
+    on_fixture_form(ctx, url, form_root: '#response-form') do |session, fields|
+      snapshot = session.snapshot_all
+      expect(element(snapshot, 'send')).to include('search_like' => false, 'submit_like' => true)
+      expect(element(snapshot, 'footer-consent')).to include('search_like' => false)
+      expect(fields.map(&:label)).to include('I consent to the processing of my personal data')
+      expect(element(snapshot, 'newsletter-email')).to include('search_like' => true)
     end
   end
 end

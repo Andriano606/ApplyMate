@@ -12,7 +12,14 @@
   if (!options || !options.submitText)
     throw new Error('snapshot.js: options.submitText is required');
   const SUBMIT_TEXT = new RegExp(options.submitText, 'i');
+  // The apply / respond verbs (SnapshotAll::APPLY_TEXT): submit_like only inside a dialog / form scope that holds a
+  // fillable control (scopeHasFields), where they name the final button; elsewhere they are the page's launcher.
+  if (!options.applyText) throw new Error('snapshot.js: options.applyText is required');
+  const APPLY_TEXT = new RegExp(options.applyText, 'i');
   const MAX_ELEMENTS = 800;
+  // fieldRootOf: how far up a control's field root reaches; past FIELD_ROOT_DEPTH only to find the field's question.
+  const FIELD_ROOT_DEPTH = 6;
+  const FIELD_ROOT_MAX_DEPTH = 12;
   const MAX_OPTIONS = 200;
   const CANDIDATE_ROLES = new Set([
     'button',
@@ -92,6 +99,8 @@
       .replace(/(^|\s)[*✱]+(?=\s)/g, '$1')
       .replace(/\s+/g, ' ')
       .trim();
+  // A name / caption says something only with a letter: "+380", "$", "1." are affixes or numbering.
+  const LETTER = /\p{L}/u;
   // A captcha's response field (g-recaptcha-response, h-captcha-response, cf-turnstile-response): never a question,
   // and the evidence of an invisible captcha the page has not framed yet.
   const CAPTCHA_RESPONSE = /^(g-recaptcha|h-captcha|cf-turnstile)-response/i;
@@ -285,14 +294,29 @@
         return node;
     }
     if (!isField) return null;
+    // The widest ancestor up to FIELD_ROOT_DEPTH levels up that holds no other field. When that one carries no
+    // question, a framework that wraps its input deeper (Vuetify: 7 levels below the item holding the title and its
+    // "*") climbs on while the ancestor still holds no other field, up to FIELD_ROOT_MAX_DEPTH, and takes the first one
+    // that carries a question; none -> the FIELD_ROOT_DEPTH one.
+    const climbable = (node) =>
+      node && node !== doc.body && node.localName !== 'form';
     let top = null;
+    let node = el.parentElement;
     for (
-      let node = el.parentElement, depth = 0;
-      node && depth < 6 && node !== doc.body && node.localName !== 'form';
+      let depth = 0;
+      depth < FIELD_ROOT_DEPTH && climbable(node);
       node = node.parentElement, depth += 1
     ) {
-      if (!soleGroup(node, el)) break;
+      if (!soleGroup(node, el)) return top;
       top = node;
+    }
+    if (!top || questionElementOf(top)) return top;
+    for (
+      let depth = FIELD_ROOT_DEPTH;
+      depth < FIELD_ROOT_MAX_DEPTH && climbable(node) && soleGroup(node, el);
+      node = node.parentElement, depth += 1
+    ) {
+      if (questionElementOf(node)) return node;
     }
     return top;
   };
@@ -362,13 +386,14 @@
   // to ..."), never crossing another control or leaving the field root. Required marks stripped. Text before the
   // control that holds a link is navigation ("Powered by <a>PeopleForce</a>" beside a footer locale select), not a
   // caption; a link inside the text AFTER a checkbox is the consent wording itself ("I agree to the <a>Policy</a>").
+  // A letterless text ("+380", "$") is the value's affix (prefixOf), never a caption: the scan passes over it.
   const nearbyText = (el, fieldRoot, following) => {
     const controls = `${FIELD_CONTROLS}, button`;
     const scan = (start, step, stop) => {
       for (let sibling = start; sibling; sibling = step(sibling)) {
         if (sibling.matches(stop) || sibling.querySelector(stop)) return '';
         const text = stripMark(textOf(sibling));
-        if (text && text.length <= 150) return text;
+        if (text && text.length <= 150 && LETTER.test(text)) return text;
       }
       return '';
     };
@@ -390,6 +415,61 @@
           following ? controls : `${controls}, a[href]`,
         );
       if (text) return text;
+    }
+    return '';
+  };
+  // The fixed letterless text just before a text input inside its field (Hurma's `<span>+380</span><input type=tel>`,
+  // a "$" before a salary): an affix of the value, not its name. Only the nearest rendered text counts (a lettered one
+  // ends the search), never crossing another control or leaving the field root.
+  const AFFIX_TYPES = new Set(['text', 'tel', 'number', 'email', 'url']);
+  const prefixOf = (el, fieldRoot) => {
+    if (el.localName !== 'input' || !AFFIX_TYPES.has(typeOf(el))) return '';
+    const controls = `${FIELD_CONTROLS}, button`;
+    for (
+      let node = el, depth = 0;
+      node && depth < 2 && node !== doc.body && node !== fieldRoot;
+      node = node.parentElement, depth += 1
+    ) {
+      for (
+        let sibling = node.previousElementSibling;
+        sibling;
+        sibling = sibling.previousElementSibling
+      ) {
+        if (sibling.matches(controls) || sibling.querySelector(controls))
+          return '';
+        const text = seen(sibling) ? textOf(sibling) : '';
+        if (text) return text.length <= 8 && !LETTER.test(text) ? text : '';
+      }
+    }
+    return '';
+  };
+  // A field's help text: the first rendered text block after its question / label element inside the field root (up to
+  // 3 levels up from it), before any control - not a label, not an error / live message, not the question again.
+  const HELP_SKIP =
+    'label, legend, [role=alert], [aria-live], [class*=error], [class*=invalid]';
+  const helpTextOf = (fieldRoot, anchors, question) => {
+    if (!fieldRoot) return '';
+    const controls = `${FIELD_CONTROLS}, button, [role=button]`;
+    for (const anchor of anchors) {
+      if (!anchor || anchor === fieldRoot || !fieldRoot.contains(anchor))
+        continue;
+      for (
+        let node = anchor, depth = 0;
+        node && node !== fieldRoot && depth < 3;
+        node = node.parentElement, depth += 1
+      ) {
+        for (
+          let sibling = node.nextElementSibling;
+          sibling;
+          sibling = sibling.nextElementSibling
+        ) {
+          if (sibling.matches(controls) || sibling.querySelector(controls))
+            return '';
+          if (sibling.matches(HELP_SKIP) || !seen(sibling)) continue;
+          const text = clean(sibling.innerText || sibling.textContent, 300);
+          if (text && stripMark(text) !== question) return text;
+        }
+      }
     }
     return '';
   };
@@ -647,6 +727,29 @@
     return label;
   };
 
+  // The dialog / form `el` acts in (scopeOf's container) holds a fillable control other than `el` itself.
+  const scopeHasFields = (el) => {
+    const container = el.closest(SCOPE_DIALOG) || el.form || el.closest('form');
+    if (!container) return false;
+    return Array.from(container.querySelectorAll(FIELD_CONTROLS)).some(
+      (control) => control !== el && (typeOf(control) === 'file' || seen(control)),
+    );
+  };
+  // Inside page chrome (a <header> / <footer> / <nav> that is no tablist) - unless that chrome sits inside the
+  // element's own form / dialog (Vuetify's `<form>...<footer class="v-footer"><button type=submit>`, a modal's footer
+  // with its consent checkbox): then it is the form's own footer. A newsletter <form> inside the page footer stays chrome.
+  const inChrome = (el) => {
+    const chrome = el.closest('header, footer, nav:not([role=tablist])');
+    if (!chrome) return false;
+    const container = el.closest(SCOPE_DIALOG) || el.form || el.closest('form');
+    return !(container && container !== chrome && container.contains(chrome));
+  };
+  // An <a> whose href leads somewhere (not "#", not javascript:): a GET, never a form submission.
+  const navigatingLink = (el) => {
+    const href = (el.getAttribute('href') || '').trim();
+    return el.localName === 'a' && !!href && !href.startsWith('#') && !/^javascript:/i.test(href);
+  };
+
   // The regions `el` (or its field root) sits inside; an invalid selector never matches.
   const regionsOf = (el, fieldRoot) =>
     regions.filter((selector) => {
@@ -754,10 +857,9 @@
     const chooser = choosesFile(el, name, fieldRoot, buttonish, selfVisible);
     const fileTrigger = fileTriggerOf(el, name, buttonish, chooser);
     // Site chrome; a nav that is a tablist (Ashby's Overview | Application) is page content.
-    const searchLike =
-      type === 'search' ||
-      role === 'searchbox' ||
-      !!el.closest('[role=search], header, footer, nav:not([role=tablist])');
+    const searchRole =
+      type === 'search' || role === 'searchbox' || !!el.closest('[role=search]');
+    const searchLike = searchRole || inChrome(el);
     const filled = !isField
       ? null
       : type === 'checkbox' || type === 'radio'
@@ -822,6 +924,10 @@
         // aria-describedby text: a field named only by its placeholder is told apart by it (Field signature).
         described_by:
           clean(byIds(el, 'aria-describedby').map(textOf).join(' ')) || null,
+        // The field's help text without aria-describedby (Ashby's question-description block beside the label).
+        help: helpTextOf(fieldRoot, [questionEl, labelEl], question) || null,
+        // Fixed letterless text before a text input ("+380"): Answer::CoerceValue types a phone without that dial code.
+        prefix: prefixOf(el, fieldRoot) || null,
         filled,
         group,
         group_key: null,
@@ -833,10 +939,14 @@
           !group &&
           !fileTrigger &&
           !fieldRoot &&
-          !searchLike &&
-          (isSubmitType(el) ||
+          (!searchLike || (isSubmitType(el) && !searchRole)) &&
+          (((isSubmitType(el) ||
             SUBMIT_TEXT.test(`${name} ${el.getAttribute('class') || ''}`)) &&
-          fieldsNearby(el),
+            fieldsNearby(el)) ||
+            (
+              APPLY_TEXT.test(name) &&
+              !navigatingLink(el) &&
+              scopeHasFields(el))),
         chooser,
         file_trigger: fileTrigger,
         typeahead: !group && typeaheadLike(el, role),
@@ -950,52 +1060,64 @@
     .filter(Boolean)
     .slice(0, 10);
 
-  const captcha = [];
-  const addCaptcha = (kind) => captcha.includes(kind) || captcha.push(kind);
-  for (const frame of doc.querySelectorAll('iframe')) {
-    const src = frame.src || '';
-    if (/recaptcha\/(api2|enterprise)\/anchor/.test(src))
-      addCaptcha(
+  // Captcha vendors' frames, by src: [pattern, kind of a frame with that src (null: not a captcha signal)]. A frame
+  // that is itself one of them (an hCaptcha enclave / challenge, a reCAPTCHA anchor) is the widget its parent already
+  // reported by this rule: it scans nothing, or its own internals (hCaptcha's recaptchacompat g-recaptcha-response
+  // shim, its nested challenge iframe) would report the one captcha again, as another vendor.
+  const tall = (frame) =>
+    seen(frame) && frame.getBoundingClientRect().height > 30;
+  const CAPTCHA_FRAMES = [
+    [
+      /recaptcha\/(api2|enterprise)\/anchor/,
+      (frame, src) =>
         /[?&]size=invisible/.test(src) || !seen(frame)
           ? 'recaptcha_invisible'
           : 'recaptcha',
-      );
-    else if (/recaptcha\/(api2|enterprise)\/bframe/.test(src) && seen(frame))
-      addCaptcha('recaptcha_challenge');
-    else if (/hcaptcha/.test(src))
-      addCaptcha(
-        seen(frame) && frame.getBoundingClientRect().height > 30
-          ? 'hcaptcha'
-          : 'hcaptcha_invisible',
-      );
-    else if (/challenges\.cloudflare\.com/.test(src))
-      addCaptcha(
-        seen(frame) && frame.getBoundingClientRect().height > 30
-          ? 'turnstile'
-          : 'turnstile_invisible',
-      );
-    else if (/captcha-delivery\.com/.test(src)) addCaptcha('datadome');
-  }
-  if (doc.querySelector('.grecaptcha-badge')) addCaptcha('recaptcha_invisible');
-  // An invisible captcha the page frames only on submit (Lever's hCaptcha): its widget div, response field or script.
-  const unframed = [
-    ['hcaptcha', '.h-captcha[data-sitekey], script[src*="hcaptcha.com"]'],
-    ['recaptcha', '.g-recaptcha[data-sitekey], script[src*="recaptcha/"]'],
-    ['turnstile', '.cf-turnstile[data-sitekey]'],
+    ],
+    [
+      /recaptcha\/(api2|enterprise)\/bframe/,
+      (frame) => (seen(frame) ? 'recaptcha_challenge' : null),
+    ],
+    [/hcaptcha/, (frame) => (tall(frame) ? 'hcaptcha' : 'hcaptcha_invisible')],
+    [
+      /challenges\.cloudflare\.com/,
+      (frame) => (tall(frame) ? 'turnstile' : 'turnstile_invisible'),
+    ],
+    [/captcha-delivery\.com/, () => 'datadome'],
   ];
-  for (const [kind, selector] of unframed) {
-    if (captcha.some((found) => found.startsWith(kind))) continue;
-    const response = Array.from(doc.querySelectorAll('input, textarea')).some(
-      (field) =>
-        CAPTCHA_RESPONSE.test(field.getAttribute('name') || field.id || '') &&
-        (field.getAttribute('name') || field.id)
-          .toLowerCase()
-          .startsWith(
-            kind === 'hcaptcha' ? 'h-' : kind === 'recaptcha' ? 'g-' : 'cf-',
-          ),
-    );
-    if (response || doc.querySelector(selector))
-      addCaptcha(`${kind}_invisible`);
+  const captchaFrame = (src) =>
+    CAPTCHA_FRAMES.find(([pattern]) => pattern.test(src));
+  const captcha = [];
+  const addCaptcha = (kind) =>
+    !kind || captcha.includes(kind) || captcha.push(kind);
+  if (!captchaFrame(location.href)) {
+    for (const frame of doc.querySelectorAll('iframe')) {
+      const src = frame.src || '';
+      const rule = captchaFrame(src);
+      if (rule) addCaptcha(rule[1](frame, src));
+    }
+    if (doc.querySelector('.grecaptcha-badge'))
+      addCaptcha('recaptcha_invisible');
+    // An invisible captcha the page frames only on submit (Lever's hCaptcha): its widget div, response field or script.
+    const unframed = [
+      ['hcaptcha', '.h-captcha[data-sitekey], script[src*="hcaptcha.com"]'],
+      ['recaptcha', '.g-recaptcha[data-sitekey], script[src*="recaptcha/"]'],
+      ['turnstile', '.cf-turnstile[data-sitekey]'],
+    ];
+    for (const [kind, selector] of unframed) {
+      if (captcha.some((found) => found.startsWith(kind))) continue;
+      const response = Array.from(doc.querySelectorAll('input, textarea')).some(
+        (field) =>
+          CAPTCHA_RESPONSE.test(field.getAttribute('name') || field.id || '') &&
+          (field.getAttribute('name') || field.id)
+            .toLowerCase()
+            .startsWith(
+              kind === 'hcaptcha' ? 'h-' : kind === 'recaptcha' ? 'g-' : 'cf-',
+            ),
+      );
+      if (response || doc.querySelector(selector))
+        addCaptcha(`${kind}_invisible`);
+    }
   }
 
   return {

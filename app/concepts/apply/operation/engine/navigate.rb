@@ -11,6 +11,12 @@
 #   hand over   the match switched to a known platform -> return (ReachForm continues with the adapter); a platform
 #               with deterministic readiness whose form is ready within READY_TIMEOUT -> ctx.form_root, return
 #   guard       the same (url, snapshot digest) for the STUCK_AFTER-th time -> Halt(:stuck)
+#   evident     before any AI call, once per snapshot digest, only without a platform readiness (no platform or an
+#               :ai_only one - an adopted platform's own WaitReady is its only deterministic claim): a <form> on the page
+#               whose elements pass the stricter
+#               AssessFormLikeness#evident rule (file input + identity fields + a visible submit) is claimed without the
+#               AI (traced `navigator_evident_form`, then the same form_reached path below); accepted -> return, no AI
+#               call spent; rejected -> its error is dropped and the AI decides this turn as usual
 #   decide      Engine::CallAi(Prompt::Navigate, ResponseSchema::Navigate; any integration: native JSON schema or text
 #               mode, a slow one gets a longer deadline, see tick); an invalid or empty
 #               answer is asked again once with the error (a counted call); MAX_INVALID_IN_A_ROW in a row ->
@@ -57,6 +63,11 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
   MAX_SECONDS = 180
   MAX_ACTIONS_PER_TURN = Apply::Ai::ResponseSchema::Navigate::MAX_ACTIONS
   STUCK_AFTER = 3
+  # Extra identical observations allowed after turns that touched nothing in the browser (only waits and rejected
+  # actions): an embedded app still loading in its iframe needs waits, not strikes. Bounded: the stuck guard trips at
+  # STUCK_AFTER + MAX_IDLE_REPEATS identical observations whatever the turns did, and MAX_TURNS / the deadline hold.
+  MAX_IDLE_REPEATS = 3
+  WAIT_SIGNATURE = 'page wait'
   MAX_INVALID_IN_A_ROW = 2
   # Seconds a platform with deterministic readiness gets per turn to show its form.
   READY_TIMEOUT = 2
@@ -65,6 +76,11 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
   INVALID_OUTPUT = [ ApplyMate::Ai::ResponseSchema::Json::InvalidResponse, ApplyMate::Ai::Client::Base::EmptyResponse ].freeze
   # give_up codes whose Halt is not the code itself.
   GIVE_UP_HALTS = { 'captcha_challenge' => [ :manual_apply_required, :captcha ] }.freeze
+  # What a rejection reason tells the AI beyond its code (ExecuteAction's codes; the rest speak for themselves).
+  REJECTION_HINTS = {
+    'frame_ref' => 'fN names a frame, not an element: actions take an element ref [fN:eM], and every element of a frame ' \
+                   'is listed already, in view or not'
+  }.freeze
   # A scope_ref with one of these roles is the form container itself; anything else is an element inside it.
   CONTAINER_ROLES = %w[dialog].freeze
   FORM_SEGMENT = /\Aform(:|\z)/
@@ -76,9 +92,12 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
     @turn = 0
     @deadline = now + [ MAX_SECONDS + ctx.ai_allowance(Apply::Operation::Engine::Context::SCOPE_AI_CALLS), ctx.remaining ].min
     @seen = Hash.new(0)
+    @idle_seen = Hash.new(0)
+    @idle = false
     @forbidden = []
     @recipe = []
     @errors = []
+    @evident_tried = Set.new
     @start_key = ctx.match&.key
     @ai_calls = ctx.apply.ai_calls.to_i
     @event = :after_action
@@ -98,6 +117,8 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
       return @recipe if handed_over? || deterministic_ready?
 
       guard!(snapshot)
+      return @recipe if evident_form?(snapshot)
+
       decision = decide(snapshot)
       @previous = snapshot.elements.pluck('fingerprint')
       case decision.status
@@ -144,8 +165,7 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
   end
 
   def deterministic_ready?
-    platform = ctx.platform
-    return false if platform.nil? || platform.ai_only?
+    return false unless platform_readiness?
 
     root = Apply::Operation::Engine::WaitReady.call(ctx:, timeout: ctx.clamp(READY_TIMEOUT)).model
     return false if root.nil?
@@ -156,11 +176,19 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
     true
   end
 
+  # The adopted platform tells its own form deterministically (readiness other than :ai_only): its WaitReady is then
+  # the only deterministic claim, the evident heuristic never overrides it.
+  def platform_readiness?
+    platform = ctx.platform
+    !platform.nil? && !platform.ai_only?
+  end
+
   def guard!(snapshot)
     url = session.current_url
     key = [ url, snapshot.digest ]
-    @seen[key] += 1
-    return if @seen[key] < STUCK_AFTER
+    (@idle ? @idle_seen : @seen)[key] += 1
+    @idle = false
+    return if @seen[key] < STUCK_AFTER && @seen[key] + @idle_seen[key] < STUCK_AFTER + MAX_IDLE_REPEATS
 
     raise Apply::Operation::Engine::Halt.new(:stuck, detail: "same page #{STUCK_AFTER} times: #{url}".truncate(300))
   end
@@ -217,16 +245,19 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
   def perform(actions, snapshot)
     fresh = nil
     performed = []
+    skipped = false
     actions.first(MAX_ACTIONS_PER_TURN).each do |action|
       signature = signature_of(action, snapshot)
       if @forbidden.include?(signature)
         @errors << "#{describe(action)} was skipped: it is FORBIDDEN (it changed nothing before)."
+        skipped = true
         next
       end
 
       run = Apply::Operation::Engine::ExecuteAction.call(ctx:, action:, snapshot:)
       if run[:rejected]
-        @errors << "#{describe(action)} was rejected: #{run[:rejected]}."
+        hint = REJECTION_HINTS[run[:rejected]]
+        @errors << "#{describe(action)} was rejected: #{run[:rejected]}#{" (#{hint})" if hint}."
         @last_action = { action:, outcome: "rejected (#{run[:rejected]})" }
         next
       end
@@ -241,7 +272,10 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
       @event = :after_goto if run[:navigated]
       return fresh
     end
-    @forbidden |= performed
+    # A wait never becomes FORBIDDEN (a frame still loading needs another); a turn of waits and rejections only is
+    # idle for the stuck guard. A FORBIDDEN skip is not: the AI repeating a known no-op is what stuck is for.
+    @forbidden |= performed - [ WAIT_SIGNATURE ]
+    @idle = !skipped && performed.all?(WAIT_SIGNATURE)
     fresh
   end
 
@@ -250,7 +284,7 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
     type = action['type'].to_s
     verb = type == 'press' ? "press:#{action['key']}" : type
     return "tab:#{action['index']} #{verb}" if type == 'switch_tab'
-    return "page #{verb}" if type == 'wait'
+    return WAIT_SIGNATURE if type == 'wait'
 
     element = snapshot.elements.find { |candidate| candidate['ref'] == action['ref'] }
     "#{element ? element['fingerprint'] : action['ref']} #{verb}"
@@ -261,6 +295,50 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
   end
 
   # ---------- form_reached ----------
+
+  # A form already on the page claimed without the AI (see the header: evident). Tried once per snapshot digest, so a
+  # rejected deterministic claim never repeats; it costs no turn and leaves no error for the AI's prompt. Never for a
+  # platform with its own readiness: a <form> without its schema keys is not its form (deterministic_ready? said no).
+  def evident_form?(snapshot)
+    return false if platform_readiness? || !@evident_tried.add?(snapshot.digest)
+
+    form = evident_claim(snapshot)
+    return false if form.nil?
+
+    ctx.trace(:navigator_evident_form, turn: @turn, scope_ref: form['scope_ref'], fields: form['field_refs'].size)
+    errors = @errors.dup
+    accepted = accept_form?(form, snapshot)
+    @errors = errors unless accepted
+    accepted
+  end
+
+  # { scope_ref, field_refs, submit_ref } of the first <form> (a submit button's enclosing form, the same FORM_SEGMENT
+  # #common_ancestor widens to) whose own elements pass AssessFormLikeness#evident; nil when none does. A submit
+  # outside any <form> is never claimed here: without a form boundary the claim could take in a newsletter box.
+  def evident_claim(snapshot)
+    likeness = Apply::Operation::Engine::AssessFormLikeness
+    inventory = Apply::Operation::Engine::BuildFieldInventory
+    submits = snapshot.elements.select { |element| element['submit_like'] && element['visible'] }
+    submits.uniq { |submit| [ submit['target'].frame_path, form_path(submit) ] }.each do |submit|
+      form = form_path(submit) or next
+      frame_path = submit['target'].frame_path
+      members = snapshot.elements.select do |element|
+        element['target'].frame_path == frame_path && css_path(element).to_s.start_with?("#{form} > ")
+      end
+      next unless likeness.call(elements: members).model.evident
+
+      fields = members.select { |element| element['visible'] && inventory.control?(element) }
+      return { 'scope_ref' => submit['ref'], 'field_refs' => fields.pluck('ref'), 'submit_ref' => submit['ref'] }
+    end
+    nil
+  end
+
+  # The css path of the <form> enclosing the element (the deepest form segment of its path), or nil.
+  def form_path(element)
+    chain = css_path(element).to_s.split(' > ')
+    at = chain.rindex { |segment| FORM_SEGMENT.match?(segment) }
+    chain[0..at].join(' > ') if at
+  end
 
   def accept_form?(form, snapshot)
     root = root_of(form, snapshot)

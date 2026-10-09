@@ -34,12 +34,14 @@ class Apply::Operation::Engine::ClassifyAdvance < ApplyMate::Operation::Base
 
   # \p{L}* after "наступн": the stem of наступний / наступна / наступне (\b alone would need the bare stem).
   NEXT_LEXICON = /\A\s*(?:next|continue|далі|продовжити|наступн\p{L}*|далее|weiter)\b/i
-  # The snapshot's submit lexicon (the one source, SnapshotAll::SUBMIT_TEXT) plus the apply / respond verbs: buttons
-  # already inside the form, where "Apply" / "Відгукнутися" / "Откликнуться" is a final button.
-  FINAL_LEXICON = Regexp.union(ApplyMate::Client::Browser::Operation::SnapshotAll::SUBMIT_TEXT, /apply|відгукн|откликн/i)
+  # The snapshot's submit lexicon (the one source, SnapshotAll::SUBMIT_TEXT) plus its apply / respond verbs
+  # (SnapshotAll::APPLY_TEXT): buttons already inside the form, where "Apply" / "Відгукнутися" / "Откликнуться" is a final button.
+  FINAL_LEXICON = Regexp.union(ApplyMate::Client::Browser::Operation::SnapshotAll::SUBMIT_TEXT,
+                               ApplyMate::Client::Browser::Operation::SnapshotAll::APPLY_TEXT)
   STEP_INDICATOR = %r{\b(?:step|крок|шаг|page|сторінка)\s*(\d+)\s*(?:of|з|из|/|від)\s*(\d+)}i
   PROGRESSBAR = %r{\Aprogressbar (\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)\z}
   BUTTON_INPUT_TYPES = %w[submit button image].freeze
+  SCOPED_TAGS = %w[button a].freeze
 
   def perform!(ctx:, snapshot: nil, **)
     skip_authorize
@@ -62,7 +64,23 @@ class Apply::Operation::Engine::ClassifyAdvance < ApplyMate::Operation::Base
     name = button['name'].to_s
     kind = next_name?(name) && more_pages? ? :next : :final
     ctx.trace(:advance, kind: kind.to_s, name:, evidence:)
-    Advance.new(kind:, target: button['target'], name:)
+    Advance.new(kind:, target: scoped_target(button), name:)
+  end
+
+  # The button's target with `{ css: "<root> <tag>", has_text: name }` first: the snapshot's own strategies are the
+  # page-wide { role, name } (ambiguous with a same-named page launcher and a role=button host such as CleverStaff's
+  # <button-component role=button> around the native <button>) and an absolute nth-of-type path that breaks when a
+  # modal is inserted at another body index. The native tag under the dialog container dialog_finals found (anchor.js
+  # `container`, e.g. div[role=dialog]) is unique where the others are not; Locate falls through to the snapshot's
+  # strategies when it is not. A button inside the form root keeps the snapshot's target (the form's own scope already
+  # tells it apart). Only for <button> / <a> with a name (has_text reads text, not an input's value) and a
+  # single-selector container.
+  def scoped_target(button)
+    target = button['target']
+    root = @scope_css
+    return target if root.blank? || root.include?(',') || SCOPED_TAGS.exclude?(button['tag']) || button['name'].blank?
+
+    target.with(strategies: [ { 'css' => "#{root} #{button['tag']}", 'has_text' => button['name'] }, *target.strategies ])
   end
 
   def pick(candidates)
@@ -84,6 +102,8 @@ class Apply::Operation::Engine::ClassifyAdvance < ApplyMate::Operation::Base
   def dialog_finals
     container = ctx.session.probe(:anchor, ctx.form_root).to_h['container']
     return [] if container.blank?
+
+    @scope_css = container
 
     excluded = Array(ctx.platform&.excluded_regions)
     snapshot = ctx.session.snapshot_all(markers: Apply::Platform::Registry.dom_markers, regions: [ container, *excluded ])

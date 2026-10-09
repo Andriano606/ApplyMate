@@ -547,6 +547,7 @@ backlog. A row that raises is reported and skipped.
 | `kind` | one of `Apply::Field::KINDS` (`text email tel url number textarea rich_text select multiselect combobox autocomplete radio_group option_group checkbox checkbox_group file date range hidden`) |
 | `label`, `description`, `placeholder`, `required`, `multiple`, `max_length`, `accept` | form metadata |
 | `autocomplete` | the control's `autocomplete` attribute from the snapshot (`BuildFieldInventory`; `nil` for schema-only fields), read by `Answer::Classify` |
+| `prefix` | snapshot.js `prefix`: the fixed letterless text just before a text input (Hurma's `<span>+380</span><input type=tel>`, a `$`); `nil` for schema-only fields. `Answer::CoerceValue` types an international value after a dial-code prefix (`DIAL_CODE` `+` 1-4 digits) without that code (`+380 67 123 45 67` → `671234567`); a national value or another country's code stays as given |
 | `options` | `[{ 'label', 'value' }]`, `'dynamic'` (loaded on open) or `nil` |
 | `semantic` | one of `Apply::Field::SEMANTICS` (`full_name ... demographic legal_status password other`); `demographic`, `legal_status` and `password` never reach AI |
 | `widget` | driver key chosen at discovery |
@@ -960,7 +961,7 @@ ONE state-guarded `UPDATE ... WHERE id AND state = needs_review` writes `answers
 `MAX_FRAMES = 20` including cross-origin iframes and open shadow roots. Each element hash carries `ref`, `tag`, `type`,
 `role`, `name` (accessible name), `question`, `group` / `group_key` / `options` (radio / option groups, comboboxes),
 `attrs` (`id name type autocomplete placeholder accept multiple maxlength value data-field-path`), `chip`, `href`,
-`required`, `filled`, `visible`,
+`required`, `filled`, `visible`, `prefix` (fixed letterless text just before a text input, e.g. `+380`; never part of `name`),
 `disabled`, `password`, `search_like`, `submit_like`, `scope` (`dialog` / `form` [`#id`] or null), `regions` (which of the requested `regions` selectors contain it),
 `root_strategies` (the field root) and `target` (an `ApplyMate::Client::Browser::Target` with its `frame_path`).
 
@@ -1085,12 +1086,27 @@ One turn:
    `navigator_handover`, return (ReachForm runs that adapter's paths once). A platform with deterministic readiness
    (not `ai_only?`) whose form is ready within `READY_TIMEOUT = 2` s → `ctx.form_root` / `form_url`, return.
 4. **guard** — `@seen[[current_url, snapshot.digest]] += 1`; the `STUCK_AFTER = 3`rd visit of one state →
-   `Halt(:stuck, detail: url)`.
+   `Halt(:stuck, detail: url)`. An observation after an **idle** turn (only `wait`s and rejected actions performed, no
+   FORBIDDEN skip) goes to `@idle_seen` instead: it trips stuck only when `@seen + @idle_seen` reaches
+   `STUCK_AFTER + MAX_IDLE_REPEATS` (3 + 3), so an embedded app still booting in its iframe gets waits, not strikes.
+   A `wait` (`WAIT_SIGNATURE = 'page wait'`) never becomes FORBIDDEN.
+   **evident** — before any AI call, once per `snapshot.digest` (`@evident_tried`), and only when the adopted platform
+   has no deterministic readiness (`Navigate#platform_readiness?` false: no platform or an `ai_only?` one; a platform's
+   own WaitReady in step 3 is its only deterministic claim, so a `<form>` lacking its schema keys is left to the AI):
+   for each visible `submit_like`
+   element inside a `<form>` (`Navigate#form_path`, the deepest `FORM_SEGMENT` of its css path), the elements under that
+   form in its frame → `AssessFormLikeness(...).evident`; the first that passes is claimed without the AI (trace
+   `navigator_evident_form`; `scope_ref` = `submit_ref` = the submit, `field_refs` = its visible controls) through the
+   same form_reached path (7). Accepted → return, no AI call spent (a form rendered on load survives an AI outage);
+   rejected → the claim's error is dropped and step 5 runs this turn. A submit outside any `<form>` is never claimed here.
 5. **decide** — `Engine::CallAi(prompt: Prompt::Navigate, schema: ResponseSchema::Navigate, requires: %i[json_schema],
    system: prompt.system)` → `Navigate::Decision = Data.define(:status, :reason, :actions, :form, :give_up_code)`.
    `InvalidResponse` / `EmptyResponse` (incl. a schema-valid but unusable answer, see the schema) → asked again with
    the error in `errors:` (a counted call); `MAX_INVALID_IN_A_ROW = 2` in a row → `Halt(:invalid_ai_output)`.
-   Traced `navigator_turn` / `navigator_invalid`.
+   Traced `navigator_turn` / `navigator_invalid`. The prompt lists visible elements except `file_trigger`s and
+   nameless buttons inside a field (`Prompt::Navigate#field_part?`: name blank, `question` set, no `group` - a
+   combobox's arrow toggle). A rejected action goes into the next prompt's errors with `REJECTION_HINTS` text when
+   its code has one (`frame_ref`: actions take element refs `fN:eM`; there is no page scroll).
 6. **give_up** → `Halt(give_up_code)` (trace `navigator_give_up`), except `captcha_challenge` →
    `Halt(:manual_apply_required, detail: :captcha)` (§18, `GIVE_UP_HALTS`). A missing code is invalid output.
 7. **form_reached** → the claimed root: a `dialog` scope (`CONTAINER_ROLES`) is the root itself (its `css` path);
@@ -1130,7 +1146,7 @@ row, `CallAi`'s caps, the scope deadline (`Context#scope_deadline`: 8 min, 20 mi
 | turns | `Navigate::MAX_TURNS = 12` | `Halt(:budget_exhausted)` on turn 13 (12 AI turns at most) |
 | time | `Navigate::MAX_SECONDS = 180` s + `ctx.ai_allowance(Context::SCOPE_AI_CALLS = 4)`, clamped to `ctx.remaining` | `Halt(:deadline)` |
 | actions per answer | `MAX_ACTIONS_PER_TURN = ResponseSchema::Navigate::MAX_ACTIONS = 3` | schema `maxItems` + `first(3)` |
-| same state | `STUCK_AFTER = 3` | `Halt(:stuck)` |
+| same state | `STUCK_AFTER = 3` (`+ MAX_IDLE_REPEATS = 3` after idle wait / rejected turns) | `Halt(:stuck)` |
 | invalid answers in a row | `MAX_INVALID_IN_A_ROW = 2` | `Halt(:invalid_ai_output)` |
 | AI calls | `CallAi::MAX_AI_CALLS_PER_ATTEMPT = 30`, `MAX_AI_CALLS_PER_APPLY = 90` | `Halt(:ai_budget_exhausted)` / `Halt(:ai_lifetime_cap)` (SQL-side counter) |
 | one AI call | `Request::TIMEOUTS[:navigate] = 60` s clamped by `CallAi`; `CallAi::TRANSIENT_RETRIES = 2` deadline-clamped retries of `Unavailable` | `capacity` / `ai_quota_exhausted` |
@@ -1157,6 +1173,7 @@ action, the AI's own when rejected). A rejection never touches the session, neve
 |---|---|
 | type not in `allowed` / the vocabulary | `action_not_allowed` |
 | `click` / `press` / `scroll` / `navigate` ref not in the snapshot (hallucinated) | `unknown_ref` |
+| `click` / `press` / `scroll` / `navigate` on a frame's ref (`f0`: a page-level scroll) | `frame_ref` |
 | `click` / `press` on a `submit_like` / `password` element | `submit_like` / `password` |
 | `click` / `press` on what sends the application by NAME (`sends_application?`, never on an `<a>` whose href navigates: not `#`, not `javascript:`): a `ClassifyAdvance::FINAL_LEXICON` verb (send / submit / apply / respond) on an element with a `scope` (dialog / form, unique per container) that holds another visible fillable control, or a `SnapshotAll::SUBMIT_TEXT` verb outside any scope on a frame with another visible formless fillable control (an SPA form without a `<form>`). A launcher on the page itself ("Apply now", a `data-toggle=modal` "Надіслати резюме") stays clickable | `submit_like` |
 | `click` / `press` on a file input's chooser link / button (snapshot.js `file_trigger`; it only opens the OS file dialog) | `file_trigger` |
@@ -1175,7 +1192,8 @@ host → `Halt(:login_required)`) and its `switch_tab` op appended.
 **R2 — `Engine::AssessFormLikeness.call(elements:, root: nil)`** (design §6.4 `Engine::FormLikeness`; ONE implementation
 for the Navigator's claim, `Recipe::Interpret#verify_form!` after a terminal `wait_for`, and `Stage::DiscoverFields` for
 an `ai_only` platform). model = `AssessFormLikeness::Verdict = Data.define(:accepted, :reason, :fillable,
-:file_inputs)`. `root:` keeps only elements whose `regions` include it. Any `password` element → rejected `password`.
+:file_inputs, :evident)`; `evident` (the Navigator's pre-AI claim) = a file input AND ≥ `MIN_FILLABLE` visible units
+with an identity field AND a visible `submit_like` element (false on a visible password). `root:` keeps only elements whose `regions` include it. Any `password` element → rejected `password`.
 Counted: controls by `BuildFieldInventory.control?` (the inventory's own predicate: no `search_like` — snapshot.js marks
 `type=search`, `role=search`, `header`, `footer`, `nav:not([role=tablist])` — no `disabled`), visible, one unit per
 `group_key`. A file input (visible or hidden) → accepted `file_input`; fewer than `MIN_FILLABLE = 3` units →
@@ -1226,9 +1244,11 @@ survey, nothing when reconciling):
   so is an optional snapshot field with no label, no description and no or only a generic placeholder ("Type here...").
   Label: a group's question, else the control's name, else the question, else the placeholder without its trailing
   `*` / `✱` (`placeholder_label`; never a generic one nor a date mask); a generic name (`Classify.generic_name?`:
-  `generic_names` + `affirm`, e.g. "Attach") yields to the question. A checkbox keeps its name (`Widget::NativeCheck`
+  `generic_names` + `affirm`, e.g. "Attach", or a name with no letter: "+380", "$") yields to the question. A checkbox keeps its name (`Widget::NativeCheck`
   clicks its label by that text); a generic one ("Acknowledge/Confirm") gets the question as `description`, which
-  `Answer::Classify` reads only for such a label. Implied required:
+  `Answer::Classify` reads only for such a label. Description: schema, else `described_by` (aria-describedby), else
+  that generic checkbox's question, else snapshot.js `help` (the field root's help block beside the label: Ashby's
+  `ashby-application-form-question-description`). Implied required:
   `REQUIRED_LEXICON` (a required word, or a `*` / `✱` left in the label / placeholder: Hurma / Vuetify validate in JS
   only), or a `CORE_SEMANTICS` classification (`full_name first_name last_name email phone cv`), where `cv` counts only
   when the label names the CV (`Classify.cv_file?`, `cv_file`); never when `OPTIONAL_LEXICON` matches ("Phone
@@ -1252,9 +1272,14 @@ survey, nothing when reconciling):
 - **Target**: the element's target; groups get the field root as `root` (`:required` visibility is judged on it), file
   inputs keep the hidden input as target with the dropzone as root.
 - **Options**: a select's / group's own; a `combobox` still `'dynamic'` is opened to read them
-  (`Engine::ReadComboboxOptions`: `dom_mark`, click, `ArrowDown`, `wait_for_listbox(timeout: ctx.clamp(WAIT = 2))`, then
-  `CLOSERS` (Escape, Tab, one more click) until no option is open, each given `CLOSE_WAIT = 0.5` s; labels as values, ≤ `MAX_OPTIONS = 100`;
-  nil on nothing / `TargetNotFound` / `Obstructed`) for the first `MAX_PROBED_COMBOBOXES = 6` comboboxes per inventory;
+  (`Engine::ReadComboboxOptions`: `dom_mark`, click (`Engine::ClickControl`, shared with `Widget::AriaCombobox`: a target
+   with `root` (not self-visible) whose probe `click_box` finds no box >= 4 px is clicked through its nearest ancestor
+   with one, `{ ...strategy, 'ancestor' => n }`, react-select's DummyInput; keys and read-back stay on the input),
+   `ArrowDown`, `wait_for_listbox(timeout: ctx.clamp(WAIT = 2))`, then
+  `CLOSERS` (Escape, Tab, one more click) until no option is open, each given `CLOSE_WAIT = 0.5` s; labels as values; the list is closed whenever options showed
+  or `probe(:read_value)['expanded']` is still true (an async geocoder opens an EMPTY menu); nil on nothing / more than
+  `MAX_OPTIONS = 100` labels (a long country / city list is never stored cut: CoerceValue / MatchOption treat an Array
+  as complete, so it stays `'dynamic'` and AriaCombobox type-filters at fill time) / `TargetNotFound` / `Obstructed`) for the first `MAX_PROBED_COMBOBOXES = 6` comboboxes per inventory;
   an `autocomplete` (options depend on the typed text), a probe that opened nothing and those past the cap stay
   `'dynamic'`. The signature is computed before the probe, so ids never depend on it.
 - **Identity**: `signature = Apply::Field.signature_for(label:, kind:, option_labels:)`, `ordinal` = position among equal
@@ -1415,13 +1440,15 @@ claim untouched:
      `container`: `dialog`, `role=dialog|alertdialog`, `aria-modal`, `.modal`), one more `snapshot_all(regions:
      [container, *excluded_regions])`, and its visible, enabled `submit_like` / `FINAL_LEXICON` buttons in the root's
      frame (an Angular uib-modal keeps `type=button "Відгукнутися"` in `.modal-footer`, a sibling of `.modal-body >
-     form`). No container → none.
+     form`). No container → none. The Advance target of such a button gets `{ css: "<container> <tag>", has_text:
+      name }` first (`<button>` / `<a>` only): the snapshot's `{ role, name }` also matches a `role=button` host and the
+      page launcher, and its absolute nth-of-type path breaks when the modal sits at another body index.
    - One candidate → it. Several → the one `NEXT_LEXICON` names when there is evidence of a further page, else the one
      `FINAL_LEXICON` names, else `Halt(:target_not_found, detail: "submit buttons in the form: n")`.
    - `kind = :next` ONLY when the chosen name matches `NEXT_LEXICON = /\A\s*(?:next|continue|далі|продовжити|
      наступн\p{L}*|далее|weiter)\b/i` AND there is evidence of a further page; anything else is `:final` and goes
      through the claim (a click that might submit is never taken as a Next). `FINAL_LEXICON =
-     SUBMIT_TEXT ∪ /apply|відгукн|откликн/i`.
+     SUBMIT_TEXT ∪ SnapshotAll::APPLY_TEXT`.
    - Evidence (looked up only when some form button carries a `NEXT_LEXICON` name): `STEP_INDICATOR =
      %r{\b(?:step|крок|шаг|page|сторінка)\s*(\d+)\s*(?:of|з|из|/|від)\s*(\d+)}i` with `0 < k < n` in the form
      root frame's outline or in `FormElements.visible_text(ctx)` (the root's visible text, the same reader

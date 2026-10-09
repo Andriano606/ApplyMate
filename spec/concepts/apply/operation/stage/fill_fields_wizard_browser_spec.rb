@@ -111,7 +111,7 @@ RSpec.describe Apply::Operation::Stage::FillFields, :browser do
       on_fixture_form(ctx, url, form_root: 'form#apply', scope: :submit) do |session, fields|
         cover = Apply::Field.new(
           id: cover_id, kind: 'textarea', label: 'Cover letter', description: nil, placeholder: nil, required: true,
-          multiple: false, max_length: nil, accept: nil, autocomplete: nil, options: nil, semantic: nil,
+          multiple: false, max_length: nil, accept: nil, autocomplete: nil, prefix: nil, options: nil, semantic: nil,
           widget: 'text', target: ApplyMate::Client::Browser::Target.css('#cover'),
           signature: Apply::Field.signature_for(label: 'Cover letter', kind: 'textarea', option_labels: nil),
           ordinal: 0, default_value: nil, condition: nil, source: 'snapshot', page: 2

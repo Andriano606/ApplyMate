@@ -27,7 +27,7 @@ RSpec.describe Apply::Job::Apply, type: :job do
         %w[check_applyable fetch_apply_type detect schema navigate:survey discover:survey answer generate_cv review
            throttle navigate:replay:submit discover:submit fill:submit submit:submit verify:submit]
       )
-      expect(gemini_prompt_kinds).to eq(%i[navigate answers cv verify])
+      expect(gemini_prompt_kinds).to eq(%i[answers cv verify]) # the landing form is claimed without a Navigate call
 
       expect { perform_enqueued_jobs { described_class.perform_now(apply.id) } }
         .not_to(change { [ ApplyStep.where(apply_id: apply.id).count, apply.reload.attributes, gemini_prompts.size ] })

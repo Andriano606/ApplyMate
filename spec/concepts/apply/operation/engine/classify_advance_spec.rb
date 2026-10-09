@@ -46,7 +46,10 @@ RSpec.describe Apply::Operation::Engine::ClassifyAdvance do
     end
 
     it "takes the dialog's final button, read with the container as a region" do
-      expect(classify).to have_attributes(kind: :final, name: 'Відгукнутися', target: snapshot.elements[2]['target'])
+      own = snapshot.elements[2]['target']
+      scoped = { 'css' => "#{dialog} button", 'has_text' => 'Відгукнутися' } # unique where { role, name } is not
+      expect(classify).to have_attributes(kind: :final, name: 'Відгукнутися',
+                                          target: own.with(strategies: [ scoped, *own.strategies ]))
       expect(session.calls_of(:snapshot_all).last.sole).to include(regions: [ dialog ])
     end
   end

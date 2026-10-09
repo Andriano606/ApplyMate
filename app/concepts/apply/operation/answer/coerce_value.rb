@@ -6,10 +6,14 @@
 #                  (a field with dynamic or unknown options takes the text as given)
 #   checkbox       true / false from yes / true / 1 / так ...
 #   number, range  a number
-#   anything else  text, cut to max_length
+#   anything else  text, cut to max_length; after a fixed dial-code prefix ("+380") an international phone is typed
+#                  without that code (#after_prefix)
 # A required field that ends up blank (or an unticked checkbox) is an error too. result[:error] = the reason, nil when
 # the value is fine.
 class Apply::Operation::Answer::CoerceValue < ApplyMate::Operation::Base
+  DIAL_CODE = /\A\+(\d{1,4})\z/
+  INTERNATIONAL = /\A\s*(?:\+|00)/
+
   def perform!(field:, value:, **)
     skip_authorize
     @field = field
@@ -60,8 +64,19 @@ class Apply::Operation::Answer::CoerceValue < ApplyMate::Operation::Base
   end
 
   def text(value)
-    text = (value.is_a?(Array) ? value.join(', ') : value.to_s).strip
+    text = after_prefix((value.is_a?(Array) ? value.join(', ') : value.to_s).strip)
     field.max_length.to_i.positive? ? text[0, field.max_length.to_i].rstrip : text
+  end
+
+  # A value typed after a fixed dial-code prefix ("+380" before the input) is the national part only:
+  # "+380 67 123 45 67" -> "671234567", else the code is typed twice. Only an international value ("+" / "00") whose
+  # digits start with the prefix's code loses it; any other value (national, another country's) stays as given.
+  def after_prefix(text)
+    code = field.prefix.to_s.delete(' ()-')[DIAL_CODE, 1]
+    return text unless code && text.match?(INTERNATIONAL)
+
+    digits = text.sub(INTERNATIONAL, '').gsub(/\D/, '')
+    digits.start_with?(code) && digits.length > code.length ? digits.delete_prefix(code) : text
   end
 
   def reject(message)

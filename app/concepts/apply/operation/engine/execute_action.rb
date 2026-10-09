@@ -6,7 +6,8 @@
 #
 # Validation (a rejected action touches the session not at all, never raises):
 #   type not in `allowed`                                     -> 'action_not_allowed'
-#   click / press / scroll / navigate: ref not in the snapshot -> 'unknown_ref' (a hallucinated ref)
+#   click / press / scroll / navigate: ref not in the snapshot -> 'unknown_ref' (a hallucinated ref); a frame's
+#          ref (`f0`: a page-level scroll) -> 'frame_ref' (the actions take element refs only)
 #   click / press on a submit_like or password element        -> 'submit_like' / 'password'
 #   click / press on a file input's chooser link / button      -> 'file_trigger' (snapshot.js file_trigger: it only
 #          opens the OS file dialog; the file field is uploaded by Widget::FileInput)
@@ -68,7 +69,7 @@ class Apply::Operation::Engine::ExecuteAction < ApplyMate::Operation::Base
   def rejection(allowed)
     type = action['type'].to_s
     return 'action_not_allowed' unless allowed.include?(type) && ALL_TYPES.include?(type)
-    return 'unknown_ref' if REF_TYPES.include?(type) && element.nil?
+    return ref_rejection if REF_TYPES.include?(type) && element.nil?
 
     case type
     when 'click' then target_rejection
@@ -76,6 +77,10 @@ class Apply::Operation::Engine::ExecuteAction < ApplyMate::Operation::Base
     when 'navigate' then navigate_rejection
     when 'switch_tab' then tab_rejection
     end
+  end
+
+  def ref_rejection
+    @snapshot.frames.any? { |frame| frame['ref'] == action['ref'] } ? 'frame_ref' : 'unknown_ref'
   end
 
   def target_rejection

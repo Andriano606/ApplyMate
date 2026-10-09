@@ -303,6 +303,23 @@ RSpec.describe ApplyMate::Client::Browser::Session do
       end
     end
 
+    it 'reports one invisible hCaptcha and hides the controls of frames below a hidden iframe (Lever enclave)' do
+      open_session do |session|
+        session.goto(FixtureSite.url('/generic/captcha_frames.html'))
+        snapshot = session.wait_until(timeout: 10) do
+          current = session.snapshot_all
+          current if current.elements.any? { |el| el['name'] == 'Verify Answers' }
+        end
+
+        expect(snapshot.frames.map { |frame| frame.values_at('ref', 'visible', 'captcha') })
+          .to eq([ [ 'f0', true, [ 'hcaptcha_invisible' ] ], [ 'f1', false, [] ], [ 'f2', false, [] ] ])
+        challenge = snapshot.elements.select { |el| el['frame'] == 'f2' }
+        expect(challenge.map { |el| el['name'] }).to include('Verify Answers', 'About hCaptcha & Accessibility Options')
+        expect(challenge.map { |el| el.values_at('visible', 'self_visible', 'in_viewport') }.uniq).to eq([ [ false, false, false ] ])
+        expect(snapshot.elements.find { |el| el['name'] == 'Full name' }).to include('visible' => true)
+      end
+    end
+
     describe 'phase 3a primitives (Ashby and widget fixtures)' do
       let(:schema_keys) do
         JSON.parse(FixtureSite::ASHBY_POSTING_JSON.read)

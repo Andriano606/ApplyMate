@@ -12,7 +12,8 @@
 #   )
 #   FakeSession.new(html: '', final_url: url, snapshot:)
 #
-# frames: main frame first; url, element_id (the <iframe>'s id: an iframe#id hop), parent (frame index), title,
+# frames: main frame first; url, element_id (the <iframe>'s id: an iframe#id hop), host_visible (default true: the
+# <iframe> renders), parent (frame index), title,
 # outline, alerts, captcha, password_fields (default: visible password elements of the frame).
 # snapshot_element: one probe element with every key snapshot.js returns, sensible defaults for `role` / `type`
 # (tag, filled), overridable by keyword (any probe key, e.g. submit_like: true, in_viewport: false, group_key: 'g').
@@ -86,7 +87,7 @@ module SnapshotBuilder
     }
     detect = { 'script_srcs' => [], 'iframe_srcs' => [], 'dom_markers' => {} }
     { index:, url:, name: '', parent_index: frame.fetch(:parent, index.zero? ? nil : 0), element_id: frame[:element_id],
-      value: { 'snapshot' => snapshot, 'detect' => detect } }
+      host_visible: frame.fetch(:host_visible, true), value: { 'snapshot' => snapshot, 'detect' => detect } }
   end
 end
 

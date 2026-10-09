@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>React-select comboboxes (recorded from a Greenhouse hosted job page)</title>
+  <style>
+    .select__menu { border: 1px solid #ccc; max-height: 200px; overflow: auto; }
+    .select__option { padding: 4px; cursor: pointer; }
+    .singleDropdown__control { display: flex; min-height: 38px; border: 1px solid #ccc; width: 300px; }
+    .singleDropdown__value-container { display: grid; flex: 1; align-items: center; padding: 2px 8px; }
+    .singleDropdown__placeholder { grid-area: 1 / 1 / 2 / 3; color: #888; }
+    /* react-select's DummyInput (isSearchable=false), verbatim: no box a pointer can hit. */
+    .css-1hac4vs-dummyInput { background: 0; border: 0; caret-color: transparent; font-size: inherit;
+      grid-area: 1 / 1 / 2 / 3; outline: 0; padding: 0; width: 1px; color: transparent; left: -100px; opacity: 0;
+      position: relative; transform: scale(.01); }
+  </style>
+</head>
+<body>
+  <h1>Senior Ruby developer</h1>
+  <!-- Greenhouse (job-boards.eu.greenhouse.io): react-select inputs (role=combobox, aria-haspopup=true). The phone
+       country list has 244 entries ('United States +1' .. 'Zimbabwe +263'); "Location (City)" is an async geocoder
+       whose menu opens EMPTY until something is typed and stays aria-expanded="true". -->
+  <form id="application-form">
+    <div class="field">
+      <label for="first_name">First Name</label>
+      <input id="first_name" type="text" required>
+    </div>
+    <div class="field select" data-options="countries">
+      <label id="country-label" for="country">Country</label>
+      <div class="select__control">
+        <div class="select__single-value"></div>
+        <input id="country" role="combobox" aria-autocomplete="list" aria-haspopup="true" aria-expanded="false"
+               aria-labelledby="country-label" aria-controls="react-select-country-listbox" autocomplete="off">
+      </div>
+    </div>
+    <div class="field select" data-options="none">
+      <label id="location-label" for="candidate-location">Location (City)</label>
+      <div class="select__control">
+        <div class="select__single-value"></div>
+        <input id="candidate-location" role="combobox" aria-autocomplete="list" aria-haspopup="true" aria-expanded="false"
+               aria-labelledby="location-label" aria-controls="react-select-candidate-location-listbox" autocomplete="off">
+      </div>
+    </div>
+    <!-- macpaw.com/careers (Next.js, react-select with isSearchable=false): the combobox is a readonly DummyInput,
+         1px wide, opacity 0, scale(.01), 100px left of its control; the menu opens on the CONTROL's mousedown. -->
+    <div class="field">
+      <label>Level of English</label>
+      <div class="singleDropdown__control css-13cymwt-control" data-testid="dropdown-control">
+        <div class="singleDropdown__value-container">
+          <div class="singleDropdown__placeholder" id="react-select-english-placeholder">Select...</div>
+          <input id="react-select-english-input" inputmode="none" aria-readonly="true" readonly role="combobox"
+                 aria-haspopup="true" aria-expanded="false" aria-describedby="react-select-english-placeholder"
+                 aria-label="Level of English" class="css-1hac4vs-dummyInput" tabindex="0" value="">
+        </div>
+      </div>
+    </div>
+    <button type="button" id="btn-submit">Submit application</button>
+  </form>
+  <script>
+    const COUNTRIES = ['United States +1', ...Array.from({ length: 241 }, (_, i) => `Country ${i + 1} +${i + 1}`),
+                       'Ukraine +380', 'Zimbabwe +263'];
+    document.querySelectorAll('.field.select').forEach((field) => {
+      const input = field.querySelector('input');
+      const value = field.querySelector('.select__single-value');
+      const all = field.dataset.options === 'countries' ? COUNTRIES : [];
+      const close = () => {
+        field.querySelector('[role=listbox]')?.remove();
+        input.setAttribute('aria-expanded', 'false');
+      };
+      const open = () => {
+        close();
+        const menu = document.createElement('div');
+        menu.setAttribute('role', 'listbox');
+        menu.id = input.getAttribute('aria-controls');
+        menu.className = 'select__menu';
+        const typed = input.value.toLowerCase();
+        all.filter((label) => label.toLowerCase().includes(typed)).forEach((label) => {
+          const option = document.createElement('div');
+          option.setAttribute('role', 'option');
+          option.className = 'select__option';
+          option.textContent = label;
+          option.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            value.textContent = label;
+            input.value = '';
+            close();
+          });
+          menu.appendChild(option);
+        });
+        field.appendChild(menu);
+        input.setAttribute('aria-expanded', 'true');
+      };
+      input.addEventListener('mousedown', open);
+      input.addEventListener('input', open);
+      input.addEventListener('blur', close);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') open();
+        if (event.key === 'Escape') close();
+      });
+    });
+    // react-select's onControlMouseDown: the menu toggles on the control, the dummy input only takes focus.
+    (() => {
+      const control = document.querySelector('[data-testid=dropdown-control]');
+      const input = document.getElementById('react-select-english-input');
+      const placeholder = document.getElementById('react-select-english-placeholder');
+      const close = () => {
+        document.getElementById('react-select-english-listbox')?.remove();
+        input.setAttribute('aria-expanded', 'false');
+      };
+      const open = () => {
+        if (document.getElementById('react-select-english-listbox')) return;
+        const menu = document.createElement('div');
+        menu.setAttribute('role', 'listbox');
+        menu.id = 'react-select-english-listbox';
+        menu.className = 'select__menu';
+        ['Beginner', 'Intermediate', 'Upper-Intermediate', 'Advanced'].forEach((label) => {
+          const option = document.createElement('div');
+          option.setAttribute('role', 'option');
+          option.className = 'select__option';
+          option.textContent = label;
+          option.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            // react-select swaps the placeholder for a singleValue div holding the pick.
+            placeholder.className = 'singleDropdown__single-value css-1dimb5e-singleValue';
+            placeholder.textContent = label;
+            close();
+          });
+          menu.appendChild(option);
+        });
+        control.parentElement.appendChild(menu);
+        input.setAttribute('aria-expanded', 'true');
+      };
+      control.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        input.focus();
+        if (document.getElementById('react-select-english-listbox')) close(); else open();
+      });
+      input.addEventListener('blur', close);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') open();
+        if (event.key === 'Escape') close();
+      });
+    })();
+  </script>
+</body>
+</html>

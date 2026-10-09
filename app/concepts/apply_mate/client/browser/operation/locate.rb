@@ -68,7 +68,15 @@ class ApplyMate::Client::Browser::Operation::Locate < ApplyMate::Operation::Base
     [ nil, ambiguous ]
   end
 
+  # `ancestor` (Engine::ClickControl): the n-th ancestor of what the rest of the strategy matches (xpath ancestor axis
+  # counts from the nearest), so a control without a box of its own is clicked through its container.
   def build(scope, strategy)
+    locator = build_own(scope, strategy)
+    depth = strategy['ancestor'].to_i
+    locator && depth.positive? ? locator.locator("xpath=ancestor::*[#{depth}]") : locator
+  end
+
+  def build_own(scope, strategy)
     if strategy['css'].present?
       css(scope, strategy)
     elsif strategy['role'].present?

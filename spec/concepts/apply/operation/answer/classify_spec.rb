@@ -8,7 +8,9 @@ RSpec.describe Apply::Operation::Answer::Classify do
   end
 
   {
-    'full_name' => [ 'Full name', "Повне ім'я", 'ПІБ', 'Name', 'Name *', 'Your name:', 'Ваше фио', "Ім'я та прізвище" ],
+    'full_name' => [ 'Full name', "Повне ім'я", 'ПІБ', 'Name', 'Name *', 'Your name:', 'Ваше фио', "Ім'я та прізвище",
+                     'First name, last name', 'First / last name', 'Given name and family name', "Ім'я, прізвище",
+                     "Ім'я / прізвище", 'Имя, фамилия' ],
     'first_name' => [ 'First name', 'Given name', "Ім'я", 'Імʼя', 'Имя', 'First name *' ],
     'last_name' => [ 'Last name', 'Surname', 'Прізвище', 'Фамилия' ],
     'email' => [ 'Work email', 'E-mail', 'Email address', 'Електронна пошта', 'Ваша почта' ],
@@ -117,7 +119,7 @@ RSpec.describe Apply::Operation::Answer::Classify do
   end
 
   it 'recognises names that say nothing about the question (generic_name?)' do
-    expect([ 'Attach', 'Upload file', 'Acknowledge/Confirm', 'Type here...', 'Yes' ]).to all(satisfy { |name| described_class.generic_name?(name) })
+    expect([ 'Attach', 'Upload file', 'Acknowledge/Confirm', 'Type here...', 'Yes', '+380', '$' ]).to all(satisfy { |name| described_class.generic_name?(name) })
     expect([ 'Resume', 'Attach your CV', nil ]).to all(satisfy { |name| !described_class.generic_name?(name) })
   end
 

@@ -114,16 +114,20 @@ class ApplyMate::Client::Browser::Driver::Playwright
   end
 
   # `js` (a function of `arg`) in each of the first MAX_FRAMES frames:
-  # [{ index:, url:, name:, parent_index:, element_id:, value: }]. element_id = id attribute of the <iframe> element
-  # that holds the frame (read from the parent side, so it works for cross-origin frames); value nil when that frame
-  # cannot be evaluated (detached mid-call, navigating).
+  # [{ index:, url:, name:, parent_index:, element_id:, host_visible:, value: }]. element_id = id attribute of the
+  # <iframe> element that holds the frame and host_visible = whether Playwright sees that element (a box, not
+  # visibility:hidden / display:none), both read from the parent side, so they work for cross-origin frames; the main
+  # frame and a host that cannot be read count as visible. A frame only renders when its whole iframe chain does:
+  # Operation::SnapshotAll combines host_visible down the chain. value nil when that frame cannot be evaluated
+  # (detached mid-call, navigating).
   def evaluate_all_frames(js, arg = nil)
     check_deadline!
     all = frames.first(MAX_FRAMES)
     all.each_with_index.map do |frame, index|
       parent = frame.parent_frame
-      { index:, url: frame.url, name: frame.name, parent_index: parent && all.index(parent),
-        element_id: parent && frame_element_id(frame), value: evaluate_in(frame, js, arg) }
+      host = parent ? frame_host(frame) : { element_id: nil, host_visible: true }
+      { index:, url: frame.url, name: frame.name, parent_index: parent && all.index(parent), **host,
+        value: evaluate_in(frame, js, arg) }
     end
   end
 
@@ -271,11 +275,11 @@ class ApplyMate::Client::Browser::Driver::Playwright
     nil
   end
 
-  def frame_element_id(frame)
+  def frame_host(frame)
     handle = guard { frame.frame_element }
-    guard { handle.get_attribute('id') }.presence
+    { element_id: guard { handle.get_attribute('id') }.presence, host_visible: guard { handle.visible? } }
   rescue ::Playwright::Error
-    nil
+    { element_id: nil, host_visible: true }
   ensure
     dispose(handle)
   end

@@ -53,8 +53,10 @@ class Apply::Operation::Answer::Classify < ApplyMate::Operation::Base
   end
 
   # A name that says nothing about the question: every `/`-separated part is an upload verb or an affirm word
-  # ("Attach", "Upload file", "Acknowledge/Confirm").
+  # ("Attach", "Upload file", "Acknowledge/Confirm"), or it has no letter at all (a "+380" dial code, "$", "1.").
   def self.generic_name?(name)
+    return true if name.present? && !name.to_s.match?(/\p{L}/)
+
     parts = name.to_s.squish.downcase.sub(TRAILER, '').split(%r{\s*/\s*})
     parts.any? && parts.all? { |part| GENERIC_NAMES.include?(part) }
   end

@@ -284,7 +284,7 @@ class FakeSession
   def read_value(target)
     scripted = @read_values.fetch(first_css(target)) { @filled[target] }
     probe = { 'tag' => 'input', 'value' => nil, 'checked' => @checked.fetch(target, nil), 'files' => [], 'text' => '',
-              'displayed' => nil, 'invalid' => false, 'error_text' => nil, 'pressed' => nil }
+              'displayed' => nil, 'invalid' => false, 'error_text' => nil, 'pressed' => nil, 'expanded' => nil }
     return probe.merge(scripted.stringify_keys) if scripted.is_a?(Hash)
 
     probe.merge('value' => scripted, 'displayed' => scripted)

@@ -47,6 +47,16 @@ RSpec.describe Apply::Operation::Answer::CoerceValue do
     expect(coerce('lots', kind: 'number')[:error]).to be_present
   end
 
+  it 'types only the national part of an international phone after a fixed dial-code prefix' do
+    expect(coerce('+380 67 123 45 67', kind: 'tel', prefix: '+380').model).to eq('671234567')
+    expect(coerce('00380671234567', kind: 'tel', prefix: '+380').model).to eq('671234567')
+    expect(coerce('+38 (067) 123-45-67', kind: 'tel', prefix: '+380').model).to eq('671234567')
+    expect(coerce('+48 600 100 200', kind: 'tel', prefix: '+380').model).to eq('+48 600 100 200')
+    expect(coerce('067 123 45 67', kind: 'tel', prefix: '+380').model).to eq('067 123 45 67')
+    expect(coerce('+380671234567', kind: 'tel', prefix: '$').model).to eq('+380671234567')
+    expect(coerce('+380671234567', kind: 'tel').model).to eq('+380671234567')
+  end
+
   it 'truncates text to max_length' do
     expect(coerce('abcdefgh', max_length: 5).model).to eq('abcde')
   end

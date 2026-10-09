@@ -52,8 +52,8 @@ RSpec.describe Apply::Handler::Dou do
         detect = reloaded.apply_steps.find_by!(key: 'detect')
         expect(detect.result.dig('evidence', 'hops')).to eq([ HoneytechDou::DOU_REDIRECT, HoneytechDou::PEOPLEFORCE_URL ])
         expect(session.open_options.first).to include(humanize: false)
-        expect(gemini_prompt_kinds.first).to eq(:navigate)
-        expect(gemini_prompt_kinds.count(:navigate)).to eq(1) # the form is on the landing page: one form_reached turn
+        # the form is on the landing page (upload + identity fields + submit): Navigate claims it without the AI
+        expect(gemini_prompt_kinds).not_to include(:navigate)
         expect(reloaded.navigation.pluck('op')).to eq(%w[goto wait_for])
         expect(reloaded.navigation.first).to eq('op' => 'goto', 'url_template' => '{landing_url}')
         expect(reloaded.navigation.last).to include('root' => HoneytechDou::PEOPLEFORCE_FORM)
@@ -80,8 +80,8 @@ RSpec.describe Apply::Handler::Dou do
         expect(claimed_at_click).to contain_exactly(be_present)
         expect(reloaded.submit_claimed_at).to be <= reloaded.submitted_at
         expect(reloaded.cv).to be_attached
-        expect(gemini_prompt_kinds).to eq(%i[navigate answers cv verify])
-        expect(reloaded.ai_calls).to eq(3) # Navigate, AnswerFields, VerifySubmit go through CallAi; the CV does not
+        expect(gemini_prompt_kinds).to eq(%i[answers cv verify])
+        expect(reloaded.ai_calls).to eq(2) # AnswerFields, VerifySubmit go through CallAi; the CV does not; no Navigate turn
       end
 
       it 'opens the survey lease, then a separate humanized submit lease, each landing on the redirect walk\'s final URL' do
@@ -120,8 +120,8 @@ RSpec.describe Apply::Handler::Dou do
           expect(reloaded).to have_attributes(state: 'completed', platform: 'generic')
           expect(reloaded.apply_steps.chronological.map { |step| [ step.key, step.state ] })
             .to eq(engine_keys.map { |key| [ key, 'succeeded' ] })
-          expect(gemini_prompt_kinds).to eq(%i[navigate answers cv verify])
-          expect(scraping_client).to have_received(:complete).exactly(4).times
+          expect(gemini_prompt_kinds).to eq(%i[answers cv verify])
+          expect(scraping_client).to have_received(:complete).exactly(3).times
           expect(a_request(:post, /generativelanguage/)).not_to have_been_made
         end
       end

@@ -50,14 +50,16 @@ RSpec.describe ApplyMate::Client::Browser::Operation::SnapshotAll do
     snapshot
 
     expect(driver).to have_received(:evaluate_all_frames)
-      .with(include('document.documentElement'), { 'markers' => markers, 'regions' => [], 'submitText' => described_class::SUBMIT_TEXT.source })
+      .with(include('document.documentElement'), { 'markers' => markers, 'regions' => [], 'submitText' => described_class::SUBMIT_TEXT.source,
+                                    'applyText' => described_class::APPLY_TEXT.source })
   end
 
   it 'passes the regions to snapshot.js' do
     described_class.call(driver:, markers:, regions: [ '#form' ])
 
     expect(driver).to have_received(:evaluate_all_frames)
-      .with(anything, { 'markers' => markers, 'regions' => [ '#form' ], 'submitText' => described_class::SUBMIT_TEXT.source })
+      .with(anything, { 'markers' => markers, 'regions' => [ '#form' ], 'submitText' => described_class::SUBMIT_TEXT.source,
+                                    'applyText' => described_class::APPLY_TEXT.source })
   end
 
   it 'gives every element a ref, its frame and a role|name|frame fingerprint' do
@@ -107,6 +109,30 @@ RSpec.describe ApplyMate::Client::Browser::Operation::SnapshotAll do
       [ 'f4', nil, [ { 'url_contains' => 'https://ads.example/slot' } ], false ] # parent unknown: flat hop, not f0's path
     ])
     expect(snapshot.frames.first).to include('title' => 'title 0', 'outline' => [ 'h1 page 0' ])
+  end
+
+  context 'with a hidden iframe whose nested frame computes its controls visible (Lever hCaptcha enclave)' do
+    let(:verify) { probe_element(0, 'button', 'Verify Answers', type: nil).merge('in_viewport' => true) }
+    let(:frames) do
+      [
+        frame(0, 'https://jobs.lever.co/acme/1/apply', parent: nil, elements: [ name_input ]),
+        frame(1, 'https://newassets.hcaptcha.com/captcha/v1/x/static/hcaptcha-enclave.html', parent: 0, elements: [])
+          .merge(host_visible: false),
+        frame(2, 'https://newassets.hcaptcha.com/captcha/v1/x/static/hcaptcha.html', parent: 1, elements: [ verify ])
+          .merge(host_visible: true),
+        frame(3, 'https://ads.example/slot', parent: nil, elements: [ accept_button ]).merge(host_visible: true)
+      ].tap { |raw| raw[2][:value]['snapshot']['password_fields'] = 1 }
+    end
+
+    it 'hides every element below the hidden iframe, nested frames included, and keeps the rest as computed' do
+      by_ref = snapshot.elements.index_by { |element| element['ref'] }
+
+      expect(by_ref['f2:e0']).to include('visible' => false, 'self_visible' => false, 'in_viewport' => false)
+      expect(by_ref['f0:e0']).to include('visible' => true, 'self_visible' => true)
+      expect(by_ref['f3:e0']).to include('visible' => true)
+      expect(snapshot.frames.map { |entry| entry.values_at('ref', 'visible', 'password_fields') })
+        .to eq([ [ 'f0', true, 0 ], [ 'f1', false, 0 ], [ 'f2', false, 0 ], [ 'f3', true, 0 ] ])
+    end
   end
 
   it 'builds Targets that keep the field root only for controls nobody sees themselves' do

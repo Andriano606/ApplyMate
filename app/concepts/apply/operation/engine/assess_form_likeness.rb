@@ -19,9 +19,14 @@
 #   rejected 'no_identity_field'  enough fields, none of them asks who the candidate is
 #   rejected 'too_few_fields'     fewer than MIN_FILLABLE (an email-only newsletter / subscription box)
 #
-# model = Verdict(accepted, reason, fillable (visible fillable units), file_inputs).
+# `evident` is the stricter rule Engine::Navigate applies to a page BEFORE it asks the AI (a form rendered on load needs
+# no navigation, so an AI outage must not halt it): a file input AND >= MIN_FILLABLE visible units with an identity
+# field AND a visible submit button (snapshot.js submit_like) among the elements. A contact form has no upload, an
+# upload-only landing widget has no identity fields: either still goes to the AI.
+#
+# model = Verdict(accepted, reason, fillable (visible fillable units), file_inputs, evident).
 class Apply::Operation::Engine::AssessFormLikeness < ApplyMate::Operation::Base
-  Verdict = Data.define(:accepted, :reason, :fillable, :file_inputs)
+  Verdict = Data.define(:accepted, :reason, :fillable, :file_inputs, :evident)
 
   MIN_FILLABLE = 3
   IDENTITY_SEMANTICS = %w[full_name first_name email].freeze
@@ -30,13 +35,13 @@ class Apply::Operation::Engine::AssessFormLikeness < ApplyMate::Operation::Base
   def perform!(elements:, root: nil, **)
     skip_authorize
     elements = elements.select { |element| Array(element['regions']).include?(root) } if root
-    return self.model = verdict(false, 'password', 0, 0) if elements.any? { |element| element['password'] && element['visible'] }
+    return self.model = verdict(false, 'password', 0, 0, false) if elements.any? { |element| element['password'] && element['visible'] }
 
     controls = elements.select { |element| Apply::Operation::Engine::BuildFieldInventory.control?(element) }
     files = controls.count { |element| element['type'] == 'file' }
     units = controls.select { |element| element['visible'] && element['type'] != 'file' }
                     .uniq { |element| element['group_key'].presence || element['ref'] }
-    self.model = verdict(*decide(files, units), units.size, files)
+    self.model = verdict(*decide(files, units), units.size, files, evident?(elements, files, units))
   end
 
   private
@@ -49,6 +54,11 @@ class Apply::Operation::Engine::AssessFormLikeness < ApplyMate::Operation::Base
     [ false, 'no_identity_field' ]
   end
 
+  def evident?(elements, files, units)
+    files.positive? && units.size >= MIN_FILLABLE && elements.any? { |element| element['submit_like'] && element['visible'] } &&
+      units.any? { |element| identity?(element) }
+  end
+
   def identity?(element)
     kind = Apply::Operation::Engine::BuildFieldInventory::INPUT_KINDS.fetch(element['type'].to_s, 'text')
     field = Apply::Field.new(**BLANK_FIELD.merge(kind:, label: element['name'].presence || element['question'],
@@ -57,7 +67,7 @@ class Apply::Operation::Engine::AssessFormLikeness < ApplyMate::Operation::Base
     IDENTITY_SEMANTICS.include?(Apply::Operation::Answer::Classify.call(field:, platform: nil).model)
   end
 
-  def verdict(accepted, reason, fillable, file_inputs)
-    Verdict.new(accepted:, reason:, fillable:, file_inputs:)
+  def verdict(accepted, reason, fillable, file_inputs, evident)
+    Verdict.new(accepted:, reason:, fillable:, file_inputs:, evident:)
   end
 end

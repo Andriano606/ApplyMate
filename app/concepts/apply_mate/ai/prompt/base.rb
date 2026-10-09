@@ -16,8 +16,9 @@ class ApplyMate::Ai::Prompt::Base
   MAX_KIND = 24
   KIND_TOKEN = /\A[a-z][a-z0-9_-]*\z/
   STATE_WORDS = %w[selected expanded pressed disabled required].freeze
-  # Element flags shown as state words too: the validator refuses submit / password targets, search marks site chrome.
-  FLAG_WORDS = { 'submit_like' => 'submit', 'password' => 'password', 'search_like' => 'search' }.freeze
+  # Element flags shown as state words too: the validator refuses submit / password targets, search marks site chrome,
+  # typeahead marks a text input whose answer is picked from the suggestions its script shows (snapshot.js typeahead).
+  FLAG_WORDS = { 'submit_like' => 'submit', 'password' => 'password', 'search_like' => 'search', 'typeahead' => 'typeahead' }.freeze
 
   def self.call(...)
     new(...).call
@@ -52,15 +53,23 @@ class ApplyMate::Ai::Prompt::Base
   #   *[fN:eM] role[:type] "name" state words <filled>|<empty> options: a | b → href
   # `new: true` puts "*" in front (not on the previous page / new since the last write). Values are never shown:
   # <filled> / <empty> come from the probe's `filled`, never from the element's attrs. Page text: the caller wraps the
-  # lines in #untrusted.
+  # lines in #untrusted. The name is the element's own, or its field root's question when the own one says nothing
+  # (Answer::Classify.generic_name?: Greenhouse's two `<label class="visually-hidden" for="resume">Attach</label>`
+  # uploads read "Resume/CV" and "Cover Letter").
   def element_line(element, new:)
+    name = shown_name(element)
     parts = [ "#{new ? '*' : ' '}[#{element['ref']}] #{kind_of(element)}" ]
-    parts << %("#{clean(element['name'], MAX_NAME).gsub('"', '\"')}") if element['name'].present?
+    parts << %("#{clean(name, MAX_NAME).gsub('"', '\"')}") if name.present?
     parts.concat(state_words(element))
     parts << (element['filled'] ? '<filled>' : '<empty>') unless element['filled'].nil?
     parts << options_text(element['options']) if element['options'].is_a?(Array) && element['options'].any?
     parts << "→ #{clean(element['href'], MAX_HREF)}" if element['href'].present?
     parts.join(' ')
+  end
+
+  def shown_name(element)
+    question = element['question']
+    question.present? && Apply::Operation::Answer::Classify.generic_name?(element['name']) ? question : element['name']
   end
 
   # A custom select the probe recognised (`group: combobox`: a readonly input or a div trigger that opens a list) is a

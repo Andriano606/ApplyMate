@@ -47,6 +47,7 @@ RSpec.describe Apply::Operation::Engine::ExecuteAction do
   describe 'rejections (no session action, traced action_rejected)' do
     {
       'a hallucinated ref' => [ { 'type' => 'click', 'ref' => 'f9:e99' }, 'unknown_ref' ],
+      'a page-level scroll on a frame ref (preply: scroll f0)' => [ { 'type' => 'scroll', 'ref' => 'f0' }, 'frame_ref' ],
       'a click on a submit_like button' => [ { 'type' => 'click', 'ref' => 'f0:e4' }, 'submit_like' ],
       'a click on a div button named "Send application" (not submit_like)' => [ { 'type' => 'click', 'ref' => 'f0:e7' }, 'submit_like' ],
       'a press on a div button named "Send application"' => [ { 'type' => 'press', 'ref' => 'f0:e7', 'key' => 'Enter' }, 'submit_like' ],

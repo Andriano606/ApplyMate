@@ -172,11 +172,13 @@ forbidden:, heal_hint:, last_action:, errors: [])` is one turn of the Generic Na
   frame `FRAME fN (top) <url>` / `FRAME fN in fParent <hop> <url>` followed by ONE `untrusted(...)` block with
   `TITLE`, `OUTLINE`, `ALERTS` and the element lines `[fN:eM] role[:type] "name" <state words> <filled>|<empty>
   options: … → href` (`*` in front: the fingerprint was not in `previous`; state words `selected expanded pressed
-  disabled required` plus the flags `submit`, `password`, `search`), then `FIELDS visible n · hidden file inputs n ·
-  password n`, `CAPTCHA kind(fN)`, `FORBIDDEN (repeated without effect): type(ref)` and `ERROR <text>` lines (the
+  disabled required` plus the flags `submit`, `password`, `search`, `typeahead`; the name is the field root's
+  `question` when the own name is generic per `Answer::Classify.generic_name?`, e.g. an upload labelled "Attach"), then
+  `FIELDS visible n · file inputs n (any visibility) ·
+  password n`, `CAPTCHA kind(fN fM)` (each kind once, with every frame reporting it), `FORBIDDEN (repeated without effect): type(ref)` and `ERROR <text>` lines (the
   previous answer's rejection / invalidity, shown once, at most `MAX_ERRORS = 5`).
 - Values are **always masked** from the probe's `filled`; `attrs.value` is never read. Only `visible` elements are
-  listed (hidden file inputs are counted in FIELDS).
+  listed (every file input, hidden or not, is counted in FIELDS).
 - `SNAPSHOT_CHAR_BUDGET = 12_000`: elements with `in_viewport: false` are dropped first, then unnamed ones, then the
   list is cut in page order with a `(n more elements not shown: page too long)` note. Option lists above
   `MAX_OPTIONS_SHOWN = 30` always collapse to `options: <count>`. Names / hrefs / URLs are truncated

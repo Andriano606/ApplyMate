@@ -320,7 +320,7 @@ the same way:
 | `Engine::RecoverField` | `snapshot_all(regions:)`; its click / press through the recipe ops |
 | `Engine::AwaitInput` (`Gate::EmailCode`) | `snapshot_all(markers:)`, `click`, `press`, `settle(:submit)`; the code is typed by the `Text` widget |
 | `Recipe::Interpret`, recipe ops (`apply/recipe/op/*`: `Goto`/`Unwrap`, `Click`, `Press`, `Scroll`, `SwitchTab`, `WaitFor`) | `pages`, `probe(:opens_tab)`, `goto`, `click`, `press`, `scroll_into_view`, `settle(:click / :key)`, `wait_until`, `switch_to`, `settle_content`, `ready?`, `current_url` |
-| `Engine::FormElements`, `Engine::BuildFieldInventory` | `snapshot_all(markers:, regions:)`, `probe(:read_value)` (default values) |
+| `Engine::FormElements`, `Engine::BuildFieldInventory` | `snapshot_all(markers:, regions:)`, `probe(:read_value)` (default values; `expanded` in `ReadComboboxOptions`) |
 | `Engine::GuardAction`, `Engine::SetFieldValue` | `snapshot_all`, `settle(kind)` |
 | Widgets (`apply/widget/*`) | `fill`, `type`, `press`, `click`, `select`, `set_checked`, `upload`, `present?`, `dom_mark`, `wait_for_listbox`, `probe(:read_value)`, `probe(:snapshot)` |
 | `Stage::FillFields` (wizard Next) | `click`, `settle(:click)`, `snapshot_all` |
@@ -338,7 +338,7 @@ frame's `document.documentElement` (first `Driver::Playwright::MAX_FRAMES = 20` 
 
 | Part | Shape |
 |---|---|
-| `frames` | `[{ 'ref' => 'f<i>', 'index', 'url', 'title', 'parent' => nil \| 'f<j>', 'frame_path', 'outline', 'alerts', 'captcha', 'password_fields', 'truncated', 'readable' }]`; `readable: false` when the frame could not be evaluated (no elements) |
+| `frames` | `[{ 'ref' => 'f<i>', 'index', 'url', 'title', 'parent' => nil \| 'f<j>', 'frame_path', 'visible', 'outline', 'alerts', 'captcha', 'password_fields', 'truncated', 'readable' }]`; `readable: false` when the frame could not be evaluated (no elements) |
 | `elements` | every probe element plus `'ref' => 'f<i>:e<j>'`, `'frame' => 'f<i>'`, `'fingerprint' => "role\|name\|f<i>"` (role or tag, name downcased; then `\|<scope>` when the probe reports a `scope`: `dialog` / `form`, `#id` added for a stable container id, else `@n` for the n-th container of that kind, so a modal's button never inherits a page launcher's identity or FORBIDDEN entry; the n-th repeat of one such key in a frame gets `#<n>`, the first stays plain) and `'target'` (a `Target`) |
 | `evidence` | `{ frame_urls:, script_srcs:, iframe_srcs:, dom_markers: { marker => count summed over frames } }` |
 | `digest` | SHA1 of the fingerprints joined in order |
@@ -349,6 +349,15 @@ origins), else `{ 'url_contains' => <frame url> }`. A child whose parent is not 
 flat `url_contains` hop (never the main frame's path). An element's `Target` = that frame path + the probe's `strategies`
 + `readonly`; `root` (the probe's `root_strategies`) is set only for radios, checkboxes, file inputs and any element
 that is `visible` through its label/root/dropzone but not `self_visible` (Locate then judges `:required` on the root).
+
+Frame visibility: `Driver#evaluate_all_frames` also reports `host_visible` per child frame (Playwright's
+`ElementHandle#visible?` on the `<iframe>` element, read from the parent side; the main frame and an unreadable host
+count as visible). A frame renders only when every iframe on its chain does (`SnapshotAll#rendered_frames` ANDs it
+down the parents); the frame entry's `visible` says so. Every element of a frame that does not render is reported
+`visible` / `self_visible` / `in_viewport` false (`SnapshotAll::HIDDEN_FRAME_STATE`) and the frame's
+`password_fields` 0, whatever its own document computed: Lever's hCaptcha enclave is a full-page iframe with
+`visibility: hidden` whose nested challenge frame's "Verify Answers" / language combobox compute themselves visible,
+and must never reach the Navigator or its `FIELDS visible` count.
 
 **`Operation::Goto`** (port of `gotoSmart`): `ResolvePublicAddress` (raises `UnsafeUrlError` before any navigation)
 → `driver.navigate(url)` (`waitUntil: 'domcontentloaded'`, `NAVIGATE_TIMEOUT_MS = 30_000`) →
@@ -378,7 +387,7 @@ frame_path: [])` builds a one-strategy target.
 | Part | Shape |
 |---|---|
 | `frame_path` hop | `{ 'selector' => 'iframe#x' }` → `frame_locator` chain; `{ 'url_contains' => '…' }` / `{ 'name' => '…' }` → first of `page.frames` (flat: searches the whole page) |
-| strategy | `{ 'css', 'has_text'?, 'nth'? }` → `locator(css).filter(hasText:).nth(n)`; `{ 'role', 'name'? }` → `get_by_role`; `{ 'label' }` → `get_by_label`; `{ 'attr' => { name => value } }` → `[name="value"]…` (unsafe attribute names skip the strategy) |
+| strategy | `{ 'css', 'has_text'?, 'nth'? }` → `locator(css).filter(hasText:).nth(n)`; `{ 'role', 'name'? }` → `get_by_role`; `{ 'label' }` → `get_by_label`; `{ 'attr' => { name => value } }` → `[name="value"]…` (unsafe attribute names skip the strategy); any of them plus `'ancestor' => n` → that element's n-th ancestor (`xpath=ancestor::*[n]`, `Engine::ClickControl`) |
 | `root` | strategies of the field root (styled controls) |
 
 `Operation::Locate.call(driver:, target:, visibility:)`, model = Playwright locator:
@@ -473,13 +482,14 @@ located element.
 
 | Probe | Signature | Returns |
 |---|---|---|
-| `snapshot` | `(root, { regions, submitText })` | `{ frame: { url, title }, outline, alerts, captcha, password_fields, truncated, elements }` — the one definition of "interactive element" (design §6.1), see below. The argument is required: every caller passes `Operation::SnapshotAll.probe_arg(markers:, regions:)` (the one source of the `SUBMIT_TEXT` lexicon behind `submit_like`); without `submitText` the probe throws rather than silently stop marking `submit_like` |
+| `snapshot` | `(root, { regions, submitText })` | `{ frame: { url, title }, outline, alerts, captcha, password_fields, truncated, elements }` — the one definition of "interactive element" (design §6.1), see below. The argument is required: every caller passes `Operation::SnapshotAll.probe_arg(markers:, regions:)` (the one source of the `SUBMIT_TEXT` lexicon behind `submit_like`); an apply / respond verb (`SnapshotAll::APPLY_TEXT`, passed as `applyText`) is `submit_like` only on a non-navigating buttonish element whose dialog / form scope holds another fillable control; without `submitText` / `applyText` the probe throws rather than silently stop marking `submit_like` |
 | `detect` | `(root, { markers })` | `{ url, name (window.name), title, script_srcs, iframe_srcs, iframes: [{ id, name, src }], dom_markers: { selector => count } }` (an invalid marker counts 0) |
 | `listbox` | `(root, { since })` | `{ containers: { key => visible option count }, options: [{ label, value, selected, disabled, listbox_id, strategies }] }` over visible `[role=option]` / `.el-select-dropdown__item` plus ARIA-less leaf items (`[data-value]` that is no form
 control, children of a `[class*=results]` / `[class*=suggestions]` container, `li` of a `ul`/`ol` whose class says
 suggest / dropdown / autocomplete / options; never inside a `no-result` / `loading` / `empty` status), in document order; container = closest `[role=listbox]`, `.el-select-dropdown`, `ul` (key `#id` or css path). With `since` (an earlier `containers`): only options whose container was absent or whose index in it ≥ the old count |
 | `readiness` | `(root, { min, keys, attr, ratio, keyPrefix })` | `{ fields, ready }`. Default: visible fillable controls under root, `ready = fields >= min`. Keys mode (`keys` non-empty): distinct keys found in `attr` of elements under root, any visibility, with `keyPrefix` (a regex source from the platform, e.g. `Apply::Platform::Ashby::INSTANCE_PREFIX_SOURCE`; none when nil) stripped from the start, case-insensitive; `ready = found >= ceil(keys.length × ratio)`. The probe hard-codes no platform rule. (`snapshot.js` / `listbox.js` keep their own UUID-prefix test for a different reason: such ids change per render on any site, so they are never used as locator strategies.) |
-| `read_value` | `(el)` | `{ tag, type, value, checked, files, text, displayed, invalid, error_text, pressed, min, max, step, aria_valuenow }`: `displayed` = selected option text / contenteditable text / combobox chip (leaf `[class*=chip]`, `singleValue`, `multiValue`, `single-value`, `multi-value__label` within ≤ 4 ancestors, stopping at the field root) / file names / for a combobox trigger `button` (`aria-haspopup`) its own text / for another `button` or `[role=button]` (a `chooser` dropzone) the text of its field root (`[data-field-path]`, `fieldset`, `[role=group]`), else of its parent, so the chosen file name next to it counts / value; `type` = the `type` attribute (lower-case, null when absent; `Widget::DateInput` picks native vs masked by it); `invalid` = `aria-invalid` or `:invalid`; `error_text` = `[role=alert]`, `[aria-live]` in the field root + the `aria-describedby` targets; `pressed` = `aria-pressed` / `aria-checked` as written; `min` / `max` = the attribute, else `aria-valuemin` / `aria-valuemax`; `step`, `aria_valuenow` as written (`Widget::Range`) |
+| `click_box` | `(el)` | depth (0 = `el`) of the nearest of `el` and its ancestors (at most 4 up, across a shadow host) with a box >= 4 px on both sides, opacity > 0, not hidden; `null` when none. `Engine::ClickControl` clicks that ancestor for a not-self-visible control (react-select DummyInput) |
+| `read_value` | `(el)` | `{ tag, type, value, checked, files, text, displayed, invalid, error_text, pressed, expanded, min, max, step, aria_valuenow }`: `displayed` = selected option text / contenteditable text / combobox chip (leaf `[class*=chip]`, `singleValue`, `multiValue`, `single-value`, `multi-value__label` within ≤ 4 ancestors, stopping at the field root) / file names / for a combobox trigger `button` (`aria-haspopup`) its own text / for another `button` or `[role=button]` (a `chooser` dropzone) the text of its field root (`[data-field-path]`, `fieldset`, `[role=group]`), else of its parent, so the chosen file name next to it counts / value; `type` = the `type` attribute (lower-case, null when absent; `Widget::DateInput` picks native vs masked by it); `invalid` = `aria-invalid` or `:invalid`; `error_text` = `[role=alert]`, `[aria-live]` in the field root + the `aria-describedby` targets; `pressed` = `aria-pressed` / `aria-checked` as written; `expanded` = `aria-expanded="true"` (`Engine::ReadComboboxOptions` closes a menu left open); `min` / `max` = the attribute, else `aria-valuemin` / `aria-valuemax`; `step`, `aria_valuenow` as written (`Widget::Range`) |
 | `outer_html` | `(el)` | `el.outerHTML` (`Session#html(frame_path:)`) |
 | `opens_tab` | `(el)` | `true` when the element sits in an `a[href]` / `area[href]` / `form` whose `target` (else the document's `<base target>`) names another browsing context (`_blank` or a window name, not `_self` / `_parent` / `_top`). `Recipe::Interpret` asks it before a click / press to know whether to wait for a new tab; `window.open` from a script is invisible to it |
 
@@ -492,7 +502,8 @@ walked. Per element:
   → `aria-label` → content (buttons, links, tabs, options; an EMPTY button / link is named by nothing outside itself,
   only `close` for a `close`/`dismiss` class token) → `label[for]` / parent `label` / `legend` / an adopted label →
   text just before the control (for a checkbox / radio first the text just after it) inside its field root; text
-  before a non-checkbox control that holds a link (`a[href]`, a footer "powered by" credit) is not a caption →
+  before a non-checkbox control that holds a link (`a[href]`, a footer "powered by" credit) is not a caption, nor is a
+  letterless text (`LETTER` = `\p{L}`; "+380", "$" - the scan passes over it to the next text) →
   `placeholder` → `title` (unless it only repeats the control's value) → for a file input its `question`. Label text is
   `ownText`: as rendered (CSS-hidden descendants, nested controls and a link / button wrapping a control skipped;
   inline children joined without a separator), required marks (`*`/`✱`, trailing or standalone) stripped. An adopted
@@ -508,6 +519,9 @@ walked. Per element:
   (`<a href><button>` keeps the link, a custom `[role=button]` host around a native `<button>` keeps the native one).
 - `captcha_artifact`: the element is a captcha response field (`g-recaptcha-response`, `h-captcha-response`,
   `cf-turnstile-response`).
+- `prefix`: for a text / tel / number / email / url input, the nearest rendered text before it (its own and its parent's
+  previous siblings, inside the field root, never across another control) when that text is ≤ 8 chars with no letter
+  (Hurma's `<span class="country-code">+380</span>` before `input[type=tel]`); else null. `Apply::Field#prefix`.
 - state `required` (only for fields, group members and choosers; attribute, `aria-required` on it or its root, `*`/`✱`, a `required` class token such as Ashby's
   `_required_f7cvd_91` or a `[class*=required]` child on the label or question), `invalid` (`aria-invalid` or
   `:user-invalid`), `checked expanded pressed selected disabled readonly`, `filled` (Boolean; values are never
@@ -518,8 +532,15 @@ walked. Per element:
   `visible`: = `self_visible`, except file inputs (any label / `[class*=dropzone]` / `[class*=upload]` / nearby
   button seen) and radios, checkboxes, comboboxes (label or field root seen); `in_viewport`.
 - `field_root`: closest `[data-field-path]`, else the closest `fieldset` / `[role=radiogroup]` / `[role=group]` that
-  holds only this control's group, else (fields only) the highest ancestor (≤ 6 levels, never `form`/`body`) without
-  another control group. Exposed as `root_strategies` and `attrs['data-field-path']`.
+  holds only this control's group, else (fields only) the highest ancestor (≤ `FIELD_ROOT_DEPTH` = 6 levels, never
+  `form`/`body`) without another control group; when that one carries no question, the walk goes on while the
+  ancestor still holds no other control, up to `FIELD_ROOT_MAX_DEPTH` = 12, and takes the first ancestor with a
+  question (Vuetify: the title and its `*` sit 7 levels above the input). Exposed as `root_strategies` and
+  `attrs['data-field-path']`.
+- `help`: the field's help text without aria-describedby - the first rendered text block after the question / label
+  element inside the field root (≤ 3 levels up from it), before any control, skipping labels, `[role=alert]`,
+  `[aria-live]`, `[class*=error]` / `[class*=invalid]` and a repeat of the question (≤ 300 chars); null otherwise.
+  `BuildFieldInventory` falls back to it for `description`.
 - `group`: `radio_group` (same `name`, or `role=radio` in a `radiogroup`), `combobox` (`role=combobox` that is not a
   `select`, or a readonly input with `aria-haspopup`, a sibling arrow/indicator, or an `.el-select`/`.v-select`/
   `select__control` ancestor, or a readonly input whose wrapper (≤ 4 ancestors) holds ≥ 2 `[role=option]` /
@@ -527,8 +548,10 @@ walked. Per element:
   buttons); `group_key` on every member, `options: [{ label, value, checked, strategies }]` on the first member.
   Selects carry `options: [{ label, value, selected, disabled }]`; comboboxes `chip` (current chip text).
 - flags `password` (`type=password`, `autocomplete` current/new-password), `search_like` (`type=search`, under
-  `[role=search]`, `header`, `footer`, a `nav` that is not `[role=tablist]`), `submit_like` (submit type, or a send verb in name/class: `SUBMIT_TEXT` = submit / whole-word send / надіслати / відправити / подати / отправить, never when the text names a code / OTP such as "Resend code" or "Надіслати код", never inside a
-  field root, never search-like, only with a fillable control nearby; the text lexicon is `SnapshotAll::SUBMIT_TEXT`), `scope`
+  `[role=search]`, or page chrome: `header`, `footer`, a `nav` that is not `[role=tablist]`, unless that chrome sits
+  inside the element's own form / dialog - Vuetify's `<form>...<footer class="v-footer"><button type=submit>`, a
+  modal footer's consent checkbox; a newsletter `<form>` inside the page footer stays chrome), `submit_like` (submit type, or a send verb in name/class: `SUBMIT_TEXT` = submit / whole-word send / надіслати / відправити / подати / отправить, never when the text names a code / OTP such as "Resend code" or "Надіслати код", never inside a
+  field root, never search-like except a submit type in page chrome (never under `[role=search]` / `type=search`), only with a fillable control nearby; the text lexicon is `SnapshotAll::SUBMIT_TEXT`), `scope`
   (`dialog` inside `dialog` / `[role=dialog]` / `[role=alertdialog]` / `[aria-modal=true]`, else `form` inside a
   `<form>`, plus `#id` for a stable container id, else `@n`, the container's 1-based position among the same kind
   in its document / shadow root, so two id-less forms are two scopes; null on the page: SnapshotAll's fingerprint,
@@ -555,7 +578,11 @@ Frame-level: `outline` (visible `h1`–`h3`, `tabs A* | B` with `*` = selected, 
 `recaptcha_challenge`, `hcaptcha`, `hcaptcha_invisible`, `turnstile`, `turnstile_invisible`, `datadome` from iframe
 srcs and `.grecaptcha-badge`; an unframed widget - `.h-captcha` / `.g-recaptcha` / `.cf-turnstile[data-sitekey]`, a
 captcha response field or an hCaptcha / reCAPTCHA script, framed only on submit - is its `_invisible` kind; a widget counts as visible when its iframe is seen and taller than 30 px; the
-`Apply::Gate::VisibleCaptcha` gate stops on the visible kinds only), `password_fields` (visible password elements).
+`Apply::Gate::VisibleCaptcha` gate stops on the visible kinds only). The iframe-src rules are one table
+(`CAPTCHA_FRAMES` in `snapshot.js`); a frame whose own URL matches it (an hCaptcha enclave / challenge, a reCAPTCHA
+anchor) is the widget its parent already reported and scans nothing - otherwise hCaptcha's recaptchacompat
+`g-recaptcha-response` shim and its nested challenge iframe report the one captcha again, as `recaptcha_invisible` /
+`hcaptcha`, `password_fields` (visible password elements).
 
 ## Deadlines & errors
 

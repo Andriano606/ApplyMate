@@ -9,6 +9,12 @@
 # (read from the parent side, so it works across origins), else { 'url_contains' => <frame url> }; nested frames
 # chain their parents' hops. A frame that cannot be evaluated (detached, navigating) is listed with
 # 'readable' => false and contributes no elements.
+#
+# Frame visibility: a frame renders only when every <iframe> on its chain does (Driver's host_visible, ANDed down the
+# parents). Elements of a frame that does not render (Lever's hCaptcha enclave: a full-page iframe with
+# visibility:hidden, whose "Verify Answers" div reports itself visible) are reported 'visible' / 'self_visible' /
+# 'in_viewport' false and its 'password_fields' 0, so the Navigator is never offered controls nobody can see; the
+# frame entry carries 'visible'.
 class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation::Base
   PROBES = ApplyMate::Client::Browser::Driver::Playwright::PROBES
   FRAME_JS = <<~JS.freeze
@@ -28,7 +34,14 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
   # ("Resend code", "Send verification code", "Надіслати код") counts: an email-verification button beside the fields
   # is neither the final button nor a send the guard must refuse.
   SUBMIT_TEXT = /^(?!.*(\b(code|otp)\b|(^|\s)код)).*(submit|\bsend\b|надіслати|відправити|подати|отправить)/i
+  # The apply / respond verbs: a final button ("Apply", "Відгукнутися", "Откликнуться") only where it has something
+  # to send, so snapshot.js marks them submit_like only on a non-navigating buttonish element whose dialog / form scope
+  # holds another fillable control (a CleverStaff uib-modal's "Відгукнутися"); outside any scope "Apply now" is the
+  # launcher the Navigator must click. Engine::ClassifyAdvance::FINAL_LEXICON = SUBMIT_TEXT | APPLY_TEXT.
+  APPLY_TEXT = /apply|відгукн|откликн/i
   STYLED_TYPES = %w[radio checkbox file].freeze
+  # What an element of a frame whose iframe chain does not render reports, whatever its own document computed.
+  HIDDEN_FRAME_STATE = { 'visible' => false, 'self_visible' => false, 'in_viewport' => false }.freeze
   # Element state that is part of the digest besides the fingerprint: a click that reveals a hidden section, opens an
   # accordion or selects a tab changes the page without adding elements (the Navigator's "did anything change?").
   DIGEST_STATE = %w[visible expanded selected pressed checked disabled].freeze
@@ -42,16 +55,17 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
   # snapshot.js's argument; every caller of the probe (this operation, a widget's scoped Session#probe(:snapshot))
   # passes it, so the submit lexicon has one source.
   def self.probe_arg(markers: [], regions: [])
-    { 'markers' => markers, 'regions' => regions, 'submitText' => SUBMIT_TEXT.source }
+    { 'markers' => markers, 'regions' => regions, 'submitText' => SUBMIT_TEXT.source, 'applyText' => APPLY_TEXT.source }
   end
 
   def perform!(driver:, markers: [], regions: [], **)
     skip_authorize
     raw = driver.evaluate_all_frames(FRAME_JS, self.class.probe_arg(markers:, regions:))
     paths = frame_paths(raw)
-    elements = raw.flat_map { |frame| elements_of(frame, paths.fetch(frame[:index])) }
+    rendered = rendered_frames(raw)
+    elements = raw.flat_map { |frame| elements_of(frame, paths.fetch(frame[:index]), rendered.fetch(frame[:index])) }
     self.model = ApplyMate::Client::Browser::Snapshot.new(
-      frames: raw.map { |frame| frame_entry(frame, paths.fetch(frame[:index])) },
+      frames: raw.map { |frame| frame_entry(frame, paths.fetch(frame[:index]), rendered.fetch(frame[:index])) },
       elements:,
       evidence: evidence(raw, markers),
       digest: self.class.digest_of(elements)
@@ -81,22 +95,31 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
     { 'url_contains' => frame[:url] }
   end
 
-  def frame_entry(frame, path)
+  # { frame index => true when its iframe chain renders }. Parents precede children (see #frame_paths); a frame whose
+  # parent is unknown (beyond MAX_FRAMES) is judged on its own host; a host not reported (canned results) is visible.
+  def rendered_frames(raw)
+    raw.each_with_object({}) do |frame, rendered|
+      rendered[frame[:index]] = frame[:host_visible] != false && rendered.fetch(frame[:parent_index], true)
+    end
+  end
+
+  def frame_entry(frame, path, rendered)
     snapshot = frame.dig(:value, 'snapshot') || {}
     parent = frame[:parent_index]
     {
       'ref' => "f#{frame[:index]}", 'index' => frame[:index], 'url' => frame[:url],
       'title' => snapshot.dig('frame', 'title'), 'parent' => parent && "f#{parent}", 'frame_path' => path,
-      'outline' => snapshot.fetch('outline', []), 'alerts' => snapshot.fetch('alerts', []),
-      'captcha' => snapshot.fetch('captcha', []), 'password_fields' => snapshot.fetch('password_fields', 0),
+      'visible' => rendered, 'outline' => snapshot.fetch('outline', []), 'alerts' => snapshot.fetch('alerts', []),
+      'captcha' => snapshot.fetch('captcha', []), 'password_fields' => rendered ? snapshot.fetch('password_fields', 0) : 0,
       'truncated' => snapshot.fetch('truncated', false), 'readable' => snapshot.present?
     }
   end
 
-  def elements_of(frame, path)
+  def elements_of(frame, path, rendered)
     index = frame[:index]
     seen = Hash.new(0)
     Array(frame.dig(:value, 'snapshot', 'elements')).map do |element|
+      element = element.merge(HIDDEN_FRAME_STATE) unless rendered
       element.merge('ref' => "f#{index}:e#{element['index']}", 'frame' => "f#{index}",
                     'fingerprint' => fingerprint(element, index, seen), 'target' => target(element, path))
     end

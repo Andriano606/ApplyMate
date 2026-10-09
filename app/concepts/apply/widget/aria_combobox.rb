@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# An ARIA combobox (react-select, Ashby's autocomplete, intl-tel-input, readonly el-select / v-select): click it,
+# An ARIA combobox (react-select, Ashby's autocomplete, intl-tel-input, readonly el-select / v-select): click it
+# (Engine::ClickControl: through its container when the input has no box of its own, react-select's DummyInput),
 # type a prefix of the answer (unless readonly), press ArrowDown (Ashby opens ONLY on the keyboard), wait for the
 # listbox options that are new since the click (Session#dom_mark / #wait_for_listbox: the field's frame and the top
 # document, so portaled menus count), pick the best option with MatchOption and click it. PREFIXES: the first
@@ -37,7 +38,7 @@ class Apply::Widget::AriaCombobox < Apply::Widget::Base
 
   def open_and_filter(text)
     mark = session.dom_mark(target)
-    session.click(target)
+    Apply::Operation::Engine::ClickControl.call(ctx:, target:)
     unless target.readonly?
       session.fill(target, '')
       session.type(target, text)
