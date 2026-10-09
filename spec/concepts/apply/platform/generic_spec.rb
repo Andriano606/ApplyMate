@@ -12,13 +12,35 @@ RSpec.describe Apply::Platform::Generic do
     expect(adapter).to be_ai_only
   end
 
-  it 'needs two deterministic signals (one plus the AI corroboration in VerifySubmit), no submit request' do
-    expect(evidence).to include(submit_request: nil, min_signals: 2)
+  it 'needs two deterministic signals (one plus the AI corroboration in VerifySubmit)' do
+    expect(evidence).to include(min_signals: 2)
+  end
+
+  describe 'submit_request' do
+    it 'is a 2xx non-GET to the form\'s own registered domain, any body' do
+      ctx.form_url = 'https://kvertus.hurma.work/public-vacancies/144?source=NQ=='
+      url = evidence.dig(:submit_request, :url)
+
+      expect(evidence[:submit_request]).not_to have_key(:body_ok)
+      expect(url).to match('https://kvertus.hurma.work/api/v1/public-vacancies/144/candidates')
+      expect(url).to match('https://api.hurma.work/candidates')
+      expect(url).not_to match('https://www.google.com/recaptcha/enterprise/clr')
+      expect(url).not_to match('https://hurma.work.evil.example/x')
+    end
+
+    it 'is nil while the form URL is unknown' do
+      ctx.form_url = nil
+      allow(ctx.apply).to receive(:form_url).and_return(nil)
+
+      expect(evidence[:submit_request]).to be_nil
+    end
   end
 
   it 'reads thank-you texts in uk, en and ru' do
     [ 'Thank you for applying!', 'Your application has been successfully submitted.', "We've received your CV",
-      'Дякуємо за ваш відгук!', 'Вашу заявку успішно надіслано', 'Спасибо за отклик', 'Ваша заявка успешно отправлена' ].each do |text|
+      'Дякуємо за ваш відгук!', 'Вашу заявку успішно надіслано', 'Спасибо за отклик', 'Ваша заявка успешно отправлена',
+      'Ваша заявка відправлена', 'Ми розглянемо її найближчим часом', 'Резюме надіслане', 'Анкету прийнято',
+      'Ваш отклик отправлен', 'Мы рассмотрим вашу заявку', "We'll review your application" ].each do |text|
       expect(evidence[:texts]).to be_any { |pattern| pattern.match?(text) }, text
     end
     expect(evidence[:texts]).to be_none { |pattern| pattern.match?('Apply for this job') }

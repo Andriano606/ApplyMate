@@ -690,9 +690,14 @@ Instance (`new(ctx:, match:)`, built by `Context#adopt_match!`):
 `Apply::Platform::Generic` (key `generic`, no signals, `readiness` → `:ai_only`, `Platform::Base#ai_only?`) is what
 `Detect` returns below the threshold. Its form is reached by the [Navigator](#navigator-generic) and accepted only by R2;
 no readiness poll ever claims a generic page is the form. `success_evidence` → `{ texts: SUCCESS_TEXTS, url_patterns:
-SUCCESS_URLS, submit_request: nil, min_signals: 2 }`: thank-you / received / submitted texts in uk, en and ru, and
-`thank|success|confirm|received|applied` in the URL's path / query / fragment (never the host). One deterministic signal
-plus the AI's corroboration counts as submitted; the AI alone never does (design R13). Every external DOU apply whose
+SUCCESS_URLS, submit_request: { url: <same site> }, min_signals: 2 }`: thank-you / received / submitted / "we will review"
+texts in uk, en and ru (all genders: «заявка відправлена», «резюме надіслане»), `thank|success|confirm|received|applied`
+in the URL's path / query / fragment (never the host), and a 2xx non-GET request after the claim to the form's own
+registered domain (`Engine::CheckOrigin.site_of(ctx.form_url)`, the one "same site" rule; any body, so `submit_request`
+has no `body_ok`; nil while the form URL is unknown). The request alone never suffices (a site may answer 200 to a
+rejected form) and the page signals the baseline already held never count. One deterministic signal plus the AI's
+corroboration counts as submitted; the AI alone never does (design R13). Regression fixture: the real Hurma post-submit
+DOM (`spec/fixtures/files/apply_engine/hurma/post_submit_success.html`). Every external DOU apply whose
 platform no adapter knows runs as Generic.
 
 `Apply::Platform::Registry`: `PLATFORMS = %w[Apply::Platform::Ashby]`, `BOARD_PLATFORMS = []` (phase 4, pinned, never
