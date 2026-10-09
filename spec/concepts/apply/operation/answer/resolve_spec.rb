@@ -102,6 +102,14 @@ RSpec.describe Apply::Operation::Answer::Resolve do
     end
   end
 
+  describe 'a marketing opt-out checkbox' do
+    let(:fields) { [ answer_field(id: 'o', kind: 'checkbox', label: 'I do not want to receive the newsletter') ] }
+
+    it 'checks it by policy (leaving it unchecked would opt the user IN)' do
+      expect(resolved.model).to eq('o' => { 'value' => true, 'source' => 'policy', 'confidence' => 1.0 })
+    end
+  end
+
   describe 'consent' do
     let(:fields) do
       [ answer_field(id: 'c', kind: 'checkbox', label: 'I agree to the privacy policy', required: true),
@@ -116,6 +124,24 @@ RSpec.describe Apply::Operation::Answer::Resolve do
       user.update!(auto_consent: false)
 
       expect(answer_of('c')).to include('value' => true, 'source' => 'policy_pending')
+    end
+
+    # Real labels: Ashby's lone "GDPR" question over an "Acknowledge/Confirm" checkbox, MacPaw's "I agree to the&nbsp;<a>
+    # Privacy Policy</a>.", a bare "GDPR" checkbox. All go through ResolveConsent, none to the AI.
+    it 'routes a single GDPR / privacy checkbox through the consent policy, never the AI' do
+      ctx.fields = [
+        answer_field(id: 'g', kind: 'checkbox', label: 'GDPR', required: true),
+        answer_field(id: 'p', kind: 'checkbox', label: 'I agree to the Privacy Policy.', required: true),
+        answer_field(id: 'a', kind: 'checkbox', label: 'Acknowledge/Confirm', description: 'GDPR', required: true),
+        answer_field(id: 'o', kind: 'checkbox', label: "I don't want to receive marketing emails"),
+        answer_field(id: 'm', kind: 'checkbox', label: 'Keep me updated with the newsletter')
+      ]
+      stub_ai({})
+
+      expect(resolved.model).to eq(%w[g p a o].index_with { { 'value' => true, 'source' => 'policy', 'confidence' => 1.0 } })
+      expect(resolved[:fields].map(&:semantic)).to eq(%w[consent_required consent_required consent_required
+                                                          marketing_opt_out marketing_opt_in])
+      expect(a_request(:post, gemini_url)).not_to have_been_made
     end
 
     it 'leaves a required consent without an affirmative option to the review form' do
@@ -140,6 +166,26 @@ RSpec.describe Apply::Operation::Answer::Resolve do
         'p' => { 'value' => ai_phone, 'source' => 'fact', 'confidence' => 1.0 },
         'cv' => { 'value' => { 'file' => 'cv' }, 'source' => 'fact', 'confidence' => 1.0 }
       )
+    end
+
+    it 'attaches the CV to the CV slot only, never to a cover-letter or an extra-files upload' do
+      ctx.fields = [ answer_field(id: 'cv', kind: 'file', label: 'Resume/CV', required: true),
+                     answer_field(id: 'cl', kind: 'file', label: 'Cover Letter'),
+                     answer_field(id: 'x', kind: 'file', label: 'Need to share files with us?'),
+                     answer_field(id: 'pf', kind: 'file', label: 'Portfolio') ]
+      stub_ai({})
+
+      expect(resolved.model.keys).to eq(%w[cv])
+      expect(a_request(:post, gemini_url)).not_to have_been_made
+    end
+
+    it 'answers a country picker from the location fact, matched to its options, apart from the city' do
+      profile.update!(facts: { 'ai' => { 'location' => 'Kyiv, Ukraine' } })
+      ctx.fields = [ answer_field(id: 'co', kind: 'select', label: 'Country', required: true,
+                                  options: [ { 'label' => 'Poland' }, { 'label' => 'Ukraine' } ]),
+                     answer_field(id: 'ci', kind: 'text', label: 'City') ]
+
+      expect(resolved.model.transform_values { |entry| entry['value'] }).to eq('co' => 'Ukraine', 'ci' => 'Kyiv, Ukraine')
     end
 
     it 'stores the cv reference as plain JSON' do

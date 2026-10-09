@@ -7,8 +7,9 @@
 # snapshot_all(regions: [root]) filtered to the root's frame); `root:` (a CSS selector) narrows them further to the
 # elements whose 'regions' include it.
 #
-#   rejected 'password'           any element is a password field (a sign-in form; the SignInWall gate halts
-#                                 login_required on a rendered password field)
+#   rejected 'password'           a RENDERED (visible) password field: a sign-in form, the same rule as the SignInWall
+#                                 gate. A hidden one (a closed login dropdown in the site header under a broad SPA
+#                                 root) says nothing about the form
 #   dropped from the count        search-like elements (snapshot.js marks type=search, role=search, header / footer /
 #                                 nav as search_like: the site chrome) and everything that is not a fillable control
 #                                 (BuildFieldInventory.control?)
@@ -29,7 +30,7 @@ class Apply::Operation::Engine::AssessFormLikeness < ApplyMate::Operation::Base
   def perform!(elements:, root: nil, **)
     skip_authorize
     elements = elements.select { |element| Array(element['regions']).include?(root) } if root
-    return self.model = verdict(false, 'password', 0, 0) if elements.any? { |element| element['password'] }
+    return self.model = verdict(false, 'password', 0, 0) if elements.any? { |element| element['password'] && element['visible'] }
 
     controls = elements.select { |element| Apply::Operation::Engine::BuildFieldInventory.control?(element) }
     files = controls.count { |element| element['type'] == 'file' }

@@ -20,6 +20,9 @@
 # appends one (a click that opens a tab: `session.on(:click) { session.open_page(url) }`) and `switch_to(index)`
 # makes that URL the current_url; `show(snapshot, url: nil, html: nil)` swaps the page snapshot_all (and current_url,
 # html) answers.
+# probe(:readiness, root) reports `rendered_fields:` (default 3) fillable controls under any root (what readiness.js
+# would count). probe(:anchor, root) answers `anchors:` keyed by the root's css ({ 'selector', 'container' }), {}
+# (nothing stable, no dialog) for any other root.
 class FakeSession
   attr_reader :calls, :open_options
 
@@ -28,8 +31,10 @@ class FakeSession
   )
 
   def initialize(html:, final_url:, cookies: '', read_values: {}, missing: [], snapshot: EMPTY_SNAPSHOT,
-                 listbox_options: [], pages: nil)
+                 listbox_options: [], pages: nil, rendered_fields: 3, anchors: {})
     @html = html
+    @rendered_fields = rendered_fields
+    @anchors = anchors
     @final_url = final_url
     @pages = (pages || [ final_url ]).dup
     @cookies = cookies
@@ -152,6 +157,8 @@ class FakeSession
     case name
     when :read_value then read_value(target)
     when :outer_html then @html
+    when :readiness then { 'fields' => @rendered_fields, 'ready' => @rendered_fields >= arg.to_h.fetch('min', 1) }
+    when :anchor then @anchors.fetch(target.strategies.first['css'], {})
     end
   end
 

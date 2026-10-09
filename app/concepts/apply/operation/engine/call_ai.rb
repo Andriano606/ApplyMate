@@ -13,9 +13,15 @@
 #   4. the HTTP timeout: the client's declared latency for the kind (Client::Base.call_seconds: the kind's
 #      Request::TIMEOUTS for an API, 240 s for GeminiScraping), capped by the caller's own budget (`timeout:`, e.g.
 #      RecoverField's), never past the run's remaining time minus AI_RESERVE (what the step needs after the call). Less than
-#      MIN_TIMEOUT left -> Halt(:deadline). Inside a lease the client does not retry (a
-#      sleeping retry burns the lease's deadline); outside it keeps the kind's default.
-#   5. AiHandler.complete; tokens are added SQL-side to applies and to the running step's row.
+#      MIN_TIMEOUT left -> Halt(:deadline).
+#   5. AiHandler.complete with client retries: 0; CallAi owns the retry. A transient provider failure
+#      (Client::Base::Unavailable: 429 rate limit, 5xx, timeout) is retried at most TRANSIENT_RETRIES times, sleeping
+#      RETRY_BACKOFF * 2**(n-1) seconds clamped so the retry still gets MIN_TIMEOUT + AI_RESERVE of the run (or scope)
+#      deadline; with less left, or once the retries are spent, Unavailable propagates (Runner: Halt(:capacity)). The
+#      fence is re-checked after each sleep. A retry is the same budgeted call (not re-counted). QuotaExhausted is never
+#      retried (Runner: Halt(:ai_quota_exhausted)).
+#   6. tokens are added SQL-side to applies and to the running step's row, and traced `ai_call`,
+#      for a schema-invalid answer too (InvalidResponse#usage; traced with invalid: true) before it propagates.
 # InvalidResponse / EmptyResponse propagate: the caller decides about its single retry, the Runner maps what is left.
 #
 # model = the parsed answer (schema.extract, indifferent access); result[:ai_calls] = this attempt's count after the call
@@ -25,6 +31,9 @@ class Apply::Operation::Engine::CallAi < ApplyMate::Operation::Base
   # Seconds of the run kept for the step after the call.
   AI_RESERVE = 30
   MIN_TIMEOUT = 5
+  # Bounded retry of a transient provider failure (step 5): what stops it is the count and the deadline.
+  TRANSIENT_RETRIES = 2
+  RETRY_BACKOFF = 2
 
   COUNT_SQL = <<~SQL.squish
     UPDATE applies
@@ -59,21 +68,57 @@ class Apply::Operation::Engine::CallAi < ApplyMate::Operation::Base
     client_class = AiIntegration::PROVIDER_CLIENTS.fetch(integration.provider)
     images = usable_images(ctx, client_class, images)
     counts = count_call(ctx)
-    timeout = timeout_for(ctx, client_class, schema, timeout)
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    outcome = ApplyMate::Ai::AiHandler.complete(
-      prompt_instance: prompt, response_schema_class: schema, ai_integration: integration,
-      request_options: { timeout:, retries: (ctx.session_open? ? 0 : nil), system:, images: }
-    )
-    ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
-    record_tokens(ctx, outcome.usage)
-    ctx.trace(:ai_call, kind: schema.kind.to_s, input_tokens: outcome.usage.input_tokens, output_tokens: outcome.usage.output_tokens,
-                        ms:, **counts)
+    outcome = complete_with_retries(ctx, client_class, schema, timeout) do |call_timeout|
+      ApplyMate::Ai::AiHandler.complete(
+        prompt_instance: prompt, response_schema_class: schema, ai_integration: integration,
+        request_options: { timeout: call_timeout, retries: 0, system:, images: }
+      )
+    rescue ApplyMate::Ai::ResponseSchema::Json::InvalidResponse => e
+      account(ctx, schema, e.usage, started, counts, invalid: true) if e.usage
+      raise
+    end
+    account(ctx, schema, outcome.usage, started, counts)
     result[:ai_calls] = counts[:ai_calls]
     self.model = outcome.data
   end
 
   private
+
+  # Yields the call's HTTP timeout (recomputed per try: the run's remaining time shrinks); retries Unavailable (step 5).
+  def complete_with_retries(ctx, client_class, schema, cap)
+    retries = 0
+    begin
+      yield timeout_for(ctx, client_class, schema, cap)
+    rescue ApplyMate::Ai::Client::Base::Unavailable => e
+      wait = retry_wait(ctx, retries += 1)
+      raise if wait.nil?
+
+      ctx.trace(:ai_retry, attempt: retries, wait:, error: e.message.truncate(200))
+      sleep(wait)
+      ctx.check_fence!
+      retry
+    end
+  end
+
+  # Seconds to sleep before retry number `retry_number`, or nil when the retries are spent or the deadline leaves no
+  # room for one more call after the sleep.
+  def retry_wait(ctx, retry_number)
+    return if retry_number > TRANSIENT_RETRIES
+
+    room = (ctx.remaining - AI_RESERVE - MIN_TIMEOUT).floor
+    return if room <= 0
+
+    [ RETRY_BACKOFF * (2**(retry_number - 1)), room ].min
+  end
+
+  # Tokens and the `ai_call` trace for every call that returned, a schema-invalid answer included (`invalid: true`).
+  def account(ctx, schema, usage, started, counts, invalid: false)
+    ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
+    record_tokens(ctx, usage)
+    ctx.trace(:ai_call, kind: schema.kind.to_s, input_tokens: usage.input_tokens, output_tokens: usage.output_tokens, ms:,
+                        **counts, **(invalid ? { invalid: true } : {}))
+  end
 
   # Returns the images the request may carry.
   def usable_images(ctx, client_class, images)

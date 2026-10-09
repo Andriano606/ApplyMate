@@ -58,7 +58,7 @@ class Apply::Widget::OptionGroup < Apply::Widget::Base
 
   # [{ 'name', 'checked', 'strategies' }] of the choice controls under the field root.
   def choices
-    elements = session.probe(:snapshot, root_target).fetch('elements', [])
+    elements = session.probe(:snapshot, root_target, ApplyMate::Client::Browser::Operation::SnapshotAll.probe_arg).fetch('elements', [])
     elements.select { |element| choice?(element) }.map do |element|
       { 'name' => element['name'].to_s, 'checked' => (element['checked'] || element['pressed']) == true,
         'strategies' => element['strategies'] }

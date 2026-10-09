@@ -99,6 +99,22 @@ RSpec.describe Apply::Operation::Engine::AwaitInput do
     end
   end
 
+  context 'when the code arrives after the last poll, before the request is closed' do
+    before do
+      allow_any_instance_of(described_class).to receive(:sleep) do # rubocop:disable RSpec/AnyInstance
+        travel(2.minutes)
+        answer if Time.current >= Time.zone.parse(apply.reload.input_request['expires_at'])
+      end
+    end
+
+    it 'uses the stored code instead of throwing it away' do
+      expect(await).to be(true)
+
+      expect(session.calls_of(:fill)).to eq([ [ field_element['target'], code ] ])
+      expect(apply.reload).to have_attributes(input_request: nil, input_response: nil, stage: 'submit')
+    end
+  end
+
   it 'halts without waiting when the run has no time left' do
     short = ctx.with(deadline_at: (described_class::RESERVE - 1).seconds.from_now)
 

@@ -63,6 +63,14 @@ RSpec.describe ApplyMate::Ai::AiHandler do
                                            usage: ApplyMate::Ai::Usage.new(input_tokens: 50, output_tokens: 7))
       end
 
+      it 'attaches the usage of an unusable answer to the InvalidResponse it raises' do
+        stub_request(:post, endpoint).to_return(gemini_json_response('not json', usage: { prompt: 33, candidates: 4 }))
+
+        expect { outcome }.to raise_error(ApplyMate::Ai::ResponseSchema::Json::InvalidResponse) { |error|
+          expect(error.usage).to eq(ApplyMate::Ai::Usage.new(input_tokens: 33, output_tokens: 4))
+        }
+      end
+
       context 'with request_options' do
         let(:request_options) { { system: 'Be brief', timeout: 12, retries: 0 } }
 

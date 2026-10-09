@@ -41,6 +41,18 @@ RSpec.describe Apply::Operation::Engine::CallAi do
     expect(counters).to include(ai_calls: 2, ai_calls_total: 2)
   end
 
+  context 'when the answer violates the schema' do
+    let(:answer) { { confidence: 'sure' }.to_json }
+
+    it 'still records the tokens it cost and traces the call as invalid before raising' do
+      expect { call }.to raise_error(ApplyMate::Ai::ResponseSchema::Json::InvalidResponse) { |error|
+        expect(error.usage).to have_attributes(input_tokens: 120, output_tokens: 10)
+      }
+      expect(counters).to include(ai_calls: 1, ai_input_tokens: 120, ai_output_tokens: 10)
+      expect(ctx.scratch.trace.last).to include('event' => 'ai_call', 'invalid' => true, 'input_tokens' => 120)
+    end
+  end
+
   it 'traces the call with kind, tokens and counters' do
     call
 
@@ -166,11 +178,11 @@ RSpec.describe Apply::Operation::Engine::CallAi do
       captured
     end
 
-    it 'uses the kind timeout while the run has time, with the default retries outside a lease' do
-      expect(sent_timeout).to include(timeout: 30, retries: nil)
+    it 'uses the kind timeout while the run has time; the client never retries (CallAi owns the retry)' do
+      expect(sent_timeout).to include(timeout: 30, retries: 0)
     end
 
-    it 'is clamped to the remaining time minus the reserve and retries nothing inside a lease' do
+    it 'is clamped to the remaining time minus the reserve inside a lease' do
       open_session!
       ctx.scratch.scope_deadline = 45.seconds.from_now
 
@@ -206,6 +218,57 @@ RSpec.describe Apply::Operation::Engine::CallAi do
       call
 
       expect(counters).to include(ai_input_tokens: 0, ai_output_tokens: 0, ai_calls: 1)
+    end
+  end
+
+  describe 'transient provider failures' do
+    let(:rate_limited) { { status: 429, body: { error: { code: 429, status: 'RESOURCE_EXHAUSTED' } }.to_json } }
+
+    before { allow_any_instance_of(described_class).to receive(:sleep) } # rubocop:disable RSpec/AnyInstance
+
+    def retries_traced
+      ctx.scratch.trace.select { |entry| entry['event'] == 'ai_retry' }
+    end
+
+    it 'retries a 429 inside a lease with backoff and returns the answer, counted as one call' do
+      open_session!
+      stub_request(:post, gemini).to_return(rate_limited, { status: 503, body: '' },
+                                            gemini_json_response(answer, usage: { prompt: 10, candidates: 1 }))
+
+      expect(call.model).to include('submitted' => true)
+      expect(a_request(:post, gemini)).to have_been_made.times(3)
+      expect(retries_traced.map { |entry| entry.slice('attempt', 'wait') })
+        .to eq([ { 'attempt' => 1, 'wait' => 2 }, { 'attempt' => 2, 'wait' => 4 } ])
+      expect(counters).to include(ai_calls: 1, ai_input_tokens: 10)
+    end
+
+    it 'stops after TRANSIENT_RETRIES and raises Unavailable (Runner: capacity), the API key scrubbed' do
+      stub_request(:post, gemini).to_return(rate_limited)
+
+      expect { call }.to raise_error(ApplyMate::Ai::Client::Base::Unavailable) { |error| expect(error.message).not_to match(/AIza|key=(?!\[)/) }
+      expect(a_request(:post, gemini)).to have_been_made.times(described_class::TRANSIENT_RETRIES + 1)
+      expect(Apply::Operation::Engine::Run.as_halt(ApplyMate::Ai::Client::Base::Unavailable.new('x')).code).to eq(:capacity)
+    end
+
+    it 'clamps the backoff to the deadline and gives up when no call would fit after it' do
+      ctx.scratch.scope_deadline = (described_class::AI_RESERVE + described_class::MIN_TIMEOUT + 1.5).seconds.from_now
+      stub_request(:post, gemini).to_return(rate_limited)
+
+      expect { call }.to raise_error(ApplyMate::Ai::Client::Base::Unavailable)
+      expect(retries_traced.pluck('wait')).to all(be <= 1)
+    end
+
+    it 'never retries an exhausted daily quota: QuotaExhausted, mapped to the needs_human ai_quota_exhausted halt' do
+      body = { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota',
+                        details: [ { violations: [ { quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' } ] },
+                                   { retryDelay: '67247s' } ] } }.to_json
+      stub_request(:post, gemini).to_return(status: 429, body:)
+
+      expect { call }.to raise_error(ApplyMate::Ai::Client::Base::QuotaExhausted) { |error|
+        halt = Apply::Operation::Engine::Run.as_halt(error)
+        expect([ halt.code, halt.state ]).to eq(%i[ai_quota_exhausted needs_human])
+      }
+      expect(a_request(:post, gemini)).to have_been_made.once
     end
   end
 

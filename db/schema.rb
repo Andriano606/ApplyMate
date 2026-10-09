@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_08_000007) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -409,7 +409,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_000007) do
     t.bigint "default_fill_form_prompt_id"
     t.bigint "default_generate_cv_prompt_id"
     t.bigint "default_saved_filter_id"
-    t.integer "daily_apply_limit", default: 30, null: false
     t.datetime "applies_changed_at"
     t.integer "review_policy", default: 2, null: false
     t.boolean "auto_consent", default: true, null: false

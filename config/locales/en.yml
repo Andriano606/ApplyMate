@@ -207,7 +207,6 @@ en:
       screenshot: Screenshot after submit
     create:
       already_active: There is already an active application for this vacancy.
-      daily_limit_reached: Daily application limit reached (%{limit}). Try again tomorrow.
       reapply_confirmation_required: You already applied to this vacancy. Confirm
         to apply again.
       success: Application created
@@ -217,6 +216,7 @@ en:
     failure:
       ai_budget_exhausted: AI request budget exhausted
       ai_lifetime_cap: Overall AI limit reached
+      ai_quota_exhausted: AI quota exhausted
       already_applied: Already applied
       already_claimed: Already submitted
       bot_wall: Site blocks automation
@@ -256,6 +256,8 @@ en:
         manually.
       ai_lifetime_cap: The overall AI limit for this application has been reached.
         Apply manually.
+      ai_quota_exhausted: The quota of the AI integration is exhausted. Try again
+        later, or cancel and apply again with another AI integration.
       already_applied: You seem to have applied to this vacancy already. Confirm you
         want to send again.
       already_claimed: Submission has already started. Check whether the application

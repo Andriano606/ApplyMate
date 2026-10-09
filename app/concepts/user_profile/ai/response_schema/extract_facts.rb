@@ -2,7 +2,7 @@
 
 class UserProfile::Ai::ResponseSchema::ExtractFacts < ApplyMate::Ai::ResponseSchema::Json
   FACT_KEYS = %w[
-    full_name first_name last_name email phone linkedin github location salary notice_period
+    full_name first_name last_name email phone linkedin github location country salary notice_period
     years_experience work_authorization
   ].freeze
   KEYS = (FACT_KEYS + %w[languages]).freeze

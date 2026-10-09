@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <title>Python developer - Acme careers</title>
+  <style>
+    /* Vuetify's auto-grow textarea: a hidden sizer twin measures the text height. */
+    .v-textarea__sizer { position: absolute; visibility: hidden; height: 0; }
+    .upload input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <!-- A Vuetify (Hurma-like) application form: required-ness lives in JS validation rules only, fields are named by
+       placeholders, the submit control is a type=button "Send application" and the CV goes through a clipped input. -->
+  <div class="v-application">
+    <h1>Python developer</h1>
+    <div id="apply" class="v-form">
+      <div class="v-input"><input id="input-1" type="text" placeholder="Ім'я та прізвище"></div>
+      <div class="v-input"><input id="input-2" type="text" placeholder="Електронна пошта" aria-describedby="hint-2">
+        <div id="hint-2" class="v-messages">Ми надішлемо підтвердження</div></div>
+      <div class="v-input"><input id="input-3" type="text" placeholder="Місто"></div>
+      <div class="v-input"><input id="input-4" type="text" placeholder="Посилання на портфоліо *"></div>
+      <div class="v-input v-textarea">
+        <textarea id="input-5" placeholder="Супровідний лист"></textarea>
+        <textarea id="input-5-sizer" class="v-textarea__sizer" aria-hidden="true" readonly tabindex="-1"></textarea>
+      </div>
+      <div class="upload"><label for="cv">Завантажити резюме</label><input id="cv" type="file" accept=".pdf"></div>
+      <button type="button" class="v-btn">Send application</button>
+    </div>
+  </div>
+</body>
+</html>

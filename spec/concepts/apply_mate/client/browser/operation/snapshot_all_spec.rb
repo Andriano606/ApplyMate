@@ -50,14 +50,14 @@ RSpec.describe ApplyMate::Client::Browser::Operation::SnapshotAll do
     snapshot
 
     expect(driver).to have_received(:evaluate_all_frames)
-      .with(include('document.documentElement'), { 'markers' => markers, 'regions' => [] })
+      .with(include('document.documentElement'), { 'markers' => markers, 'regions' => [], 'submitText' => described_class::SUBMIT_TEXT.source })
   end
 
   it 'passes the regions to snapshot.js' do
     described_class.call(driver:, markers:, regions: [ '#form' ])
 
     expect(driver).to have_received(:evaluate_all_frames)
-      .with(anything, { 'markers' => markers, 'regions' => [ '#form' ] })
+      .with(anything, { 'markers' => markers, 'regions' => [ '#form' ], 'submitText' => described_class::SUBMIT_TEXT.source })
   end
 
   it 'gives every element a ref, its frame and a role|name|frame fingerprint' do
@@ -67,6 +67,34 @@ RSpec.describe ApplyMate::Client::Browser::Operation::SnapshotAll do
       [ 'f1:e1', 'f1', 'input|resume|f1' ],
       [ 'f2:e0', 'f2', 'combobox|country|f2' ]
     ])
+  end
+
+  context 'with two elements of one role and name in a frame (two "Apply" launchers)' do
+    let(:frames) do
+      [ frame(0, 'https://careers.example/jobs/1', parent: nil, elements: [
+        probe_element(0, 'button', 'Apply', type: nil), probe_element(1, 'button', 'Apply', type: nil),
+        probe_element(2, 'button', 'Apply', type: nil)
+      ]) ]
+    end
+
+    it 'keeps the first fingerprint plain and numbers the repeats, so they are told apart' do
+      expect(snapshot.elements.map { |el| el['fingerprint'] }).to eq([ 'button|apply|f0', 'button|apply|f0#1', 'button|apply|f0#2' ])
+    end
+  end
+
+  context 'with a modal inserted before the page launchers of the same name' do
+    let(:frames) do
+      [ frame(0, 'https://careers.example/jobs/1', parent: nil, elements: [
+        probe_element(0, 'button', 'Apply', type: nil).merge('scope' => 'dialog'),
+        probe_element(1, 'button', 'Apply', type: nil), probe_element(2, 'button', 'Apply', type: nil),
+        probe_element(3, 'button', 'Apply', type: nil).merge('scope' => 'form#apply')
+      ]) ]
+    end
+
+    it 'keys each by its scope, so the dialog button never takes over a launcher identity (or its FORBIDDEN entry)' do
+      expect(snapshot.elements.map { |el| el['fingerprint'] })
+        .to eq([ 'button|apply|f0|dialog', 'button|apply|f0', 'button|apply|f0#1', 'button|apply|f0|form#apply' ])
+    end
   end
 
   it 'builds frame paths: an iframe#id hop when the iframe has a CSS-safe id, else the frame url, chained' do

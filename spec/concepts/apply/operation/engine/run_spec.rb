@@ -211,6 +211,33 @@ RSpec.describe Apply::Operation::Engine::Run, type: :job do
       expect(apply.failure).to include('code' => 'capacity', 'kind' => 'transient')
     end
 
+    it 'maps an AI provider overload / quota (Unavailable) to a transient capacity halt with the key redacted' do
+      raise_in_prepare(ApplyMate::Ai::Client::Base::Unavailable.new('Faraday::TooManyRequestsError: 429 for POST https://g.example/x?key=AIzaSyFAKE'))
+
+      expect { run }.to have_enqueued_job(Apply::Job::Apply)
+      expect(apply.failure).to include('code' => 'capacity', 'kind' => 'transient')
+      expect(apply.failure.to_json).not_to include('AIzaSyFAKE')
+    end
+
+    it 'maps an exhausted AI quota to needs_human ai_quota_exhausted, without auto-resume' do
+      raise_in_prepare(ApplyMate::Ai::Client::Base::QuotaExhausted.new('Faraday::TooManyRequestsError: PerDay quota'))
+
+      expect { run }.not_to have_enqueued_job(Apply::Job::Apply)
+      expect(apply).to be_needs_human
+      expect(apply.failure).to include('code' => 'ai_quota_exhausted', 'kind' => 'needs_human')
+    end
+
+    it 'stores no credential of an unexpected error in failure.detail or the step error_detail' do
+      google_key = "AIza#{SecureRandom.alphanumeric(35)}"
+      raise_in_prepare(RuntimeError.new("boom #{google_key} https://h.example/x?apikey=S3CRET&signature=S1G"))
+      run
+
+      expect(apply.failure).to include('code' => 'unexpected_error')
+      stored = [ apply.failure.to_json, *ApplyStep.where(apply:).pluck(:error_detail) ].join(' ')
+      expect(stored).not_to include(google_key)
+      expect(stored).not_to match(/S3CRET|S1G/)
+    end
+
     it 'maps an AI timeout too short for the client to deadline, not capacity' do
       raise_in_prepare(ApplyMate::Ai::Client::Base::DeadlineTooShort.new('20 s left'))
 

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Several id-less forms</title>
+</head>
+<body>
+  <!-- ASP.NET / CMS pages: every <form> without an id. Each is its own scope (snapshot.js scopeOf `form@n`), so the
+       newsletter's email never makes the other form's "Apply" launcher a send; an email-verification "Resend code"
+       beside the application fields is neither submit_like nor a final. -->
+  <h1>Backend Developer</h1>
+  <form><input type="email" id="newsletter-email" aria-label="Newsletter email"></form>
+  <form><button type="button" id="form-apply">Apply</button></form>
+  <form action="/submit" method="post">
+    <input type="email" id="email" aria-label="Email">
+    <button type="button" id="resend">Resend code</button>
+    <button type="submit" id="final">Submit application</button>
+  </form>
+</body>
+</html>

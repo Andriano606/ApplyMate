@@ -230,9 +230,34 @@ RSpec.describe Apply::Operation::Engine::ReachForm do
       expect(reach!).to eq([ { 'op' => 'goto', 'url_template' => '{landing_url}' }, *navigator_ops ])
       expect(session.calls_of(:goto)).to eq([ [ careers ] ])
       expect(session.calls_of(:wait_until).sole.sole[:timeout]).to eq(described_class::IDENTIFY_TIMEOUT)
-      expect(session.calls_of(:ready?)).to be_empty # Generic is ai_only: no readiness poll claims the page
+      # Generic is ai_only: no readiness poll claims the page; the landing only asks whether a form is rendered yet.
+      body = ApplyMate::Client::Browser::Target.css('body')
+      expect(session.calls_of(:ready?)).to eq([ [ body, { timeout: 0, min_fields: Apply::Operation::Engine::WaitReady::DEFAULT_MIN_FIELDS } ] ])
       expect(ctx.scratch.trace.find { |entry| entry['event'] == 'landed' }).to include('identified' => false)
       expect(Apply::Operation::Engine::Navigate).to have_received(:call).with(ctx:, heal_hint: nil)
+    end
+
+    it 'ends the identify wait at the first poll when the landing already renders a form (an SSR page)' do
+      stub_navigator
+
+      reach!
+
+      expect(ctx.scratch.trace.find { |entry| entry['event'] == 'landed' }).to include('identified' => false, 'form_rendered' => true)
+    end
+
+    context 'when the landing renders no form yet' do
+      let(:session) do
+        evidence = { frame_urls:, script_srcs: [], iframe_srcs: [], dom_markers: {} }
+        FakeSession.new(html: '', final_url: careers, snapshot: FakeSession::EMPTY_SNAPSHOT.with(evidence:), missing: [ 'body' ])
+      end
+
+      it 'keeps polling for the platform (the wait does not end on the form check)' do
+        stub_navigator
+
+        reach!
+
+        expect(ctx.scratch.trace.find { |entry| entry['event'] == 'landed' }).to include('identified' => false, 'form_rendered' => false)
+      end
     end
 
     it 'waits LANDING_TIMEOUT (clamped to the time left) when the HTTP level found a probable platform' do

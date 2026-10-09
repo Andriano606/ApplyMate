@@ -3,7 +3,8 @@
 # The form's fields in the open session (design §7.1, §10.2): one snapshot of every frame with the form regions
 # (Engine::FormElements.snapshot; no ctx.form_root -> Halt(:not_a_form)), RunGates(:after_goto) on it, for an ai_only
 # platform (Generic) R2 on the form root (Engine::AssessFormLikeness; rejected -> Halt(:not_a_form)), then
-# Engine::BuildFieldInventory (snapshot + ctx.schema).
+# Engine::BuildFieldInventory (snapshot + ctx.schema; in the survey, without the optional controls the Navigator's
+# accepted claim left out of its field_refs: ctx.scratch.claim_left_out, Engine::Navigate#left_out).
 # `reconcile: true` (submit scope): Engine::ReconcileFields against the stored applies.fields (ids kept, fresh
 # targets). The list is ctx.fields and is persisted as applies.fields.
 #
@@ -29,7 +30,8 @@ class Apply::Operation::Stage::DiscoverFields < Apply::Operation::Stage::Base
     snapshot = Apply::Operation::Engine::FormElements.snapshot(ctx)
     Apply::Operation::Engine::RunGates.call(ctx:, event: :after_goto, snapshot:)
     assess_form!(ctx, snapshot) if ctx.platform&.ai_only?
-    fresh = Apply::Operation::Engine::BuildFieldInventory.call(ctx:, snapshot:).model
+    left_out = reconcile ? Set.new : Set.new(ctx.scratch.claim_left_out)
+    fresh = Apply::Operation::Engine::BuildFieldInventory.call(ctx:, snapshot:, left_out:).model
     fields = reconcile ? Apply::Operation::Engine::ReconcileFields.call(stored: apply.field_list, fresh:).model : fresh
     ctx.fields = fields
     ctx.trace(:fields_discovered, total: fields.size, without_widget: fields.reject(&:widget).map(&:id))

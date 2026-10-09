@@ -67,6 +67,13 @@
             error.hidden = false;
             return;
           }
+          // A site-side check the read-back never sees (a duplicate-account lookup): the field stays valid, Next stays
+          // on page 1 and only the alert says why. Engine: Stage::FillFields' Next-stall halt.
+          if (document.getElementById('email').value.startsWith('taken-')) {
+            error.textContent = 'This email is already registered.';
+            error.hidden = false;
+            return;
+          }
           for (const name of carried) {
             const hidden = document.createElement('input');
             hidden.type = 'hidden';

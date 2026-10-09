@@ -23,8 +23,8 @@ class Apply::Field < Data.define(
     radio_group option_group checkbox checkbox_group file date range hidden
   ].freeze
   SEMANTICS = %w[
-    full_name first_name last_name email phone linkedin github location salary cv cover_letter
-    consent_required marketing_opt_in demographic legal_status password other
+    full_name first_name last_name email phone linkedin github country location salary cv cover_letter
+    consent_required marketing_opt_in marketing_opt_out demographic legal_status password other
   ].freeze
   SOURCES = %w[schema_api snapshot].freeze
   OPTION_KINDS = %w[select multiselect combobox radio_group option_group checkbox_group].freeze

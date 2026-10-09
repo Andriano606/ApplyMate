@@ -11,8 +11,8 @@
 #                     the :json_schema capability; others rely on format_instructions text alone
 #   timeout           Integer seconds — HTTP timeout for API clients
 #   max_output_tokens Integer — cap on the visible answer
-#   retries           Integer — transient-failure retries an API client may make (Gemini 429/502/503). 0 inside a
-#                     browser lease: a sleeping retry would burn the lease's deadline.
+#   retries           Integer — transient-failure retries an API client may make (Gemini 429/5xx/timeouts). The apply
+#                     engine's CallAi always sends 0 and owns a deadline-clamped retry itself.
 #   thinking_budget   Integer — reasoning tokens allowed on top of max_output_tokens. Thinking models
 #                     (Gemini 2.5+, Ollama qwen3/deepseek-r1) spend their reasoning from the same
 #                     provider-side cap, so clients send max_output_tokens + thinking_budget as that

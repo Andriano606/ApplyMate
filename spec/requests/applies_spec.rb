@@ -156,6 +156,14 @@ RSpec.describe 'Applies on the vacancy page', type: :request do
         expect(waiting.reload.input_response).to include('code' => code)
       end
 
+      it 'keeps the code out of the request log' do
+        post provide_input_apply_path(waiting), params: { code: }, headers: stream_headers
+
+        expect(request.filtered_parameters).to include('code' => '[FILTERED]')
+        expect(ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters).filter('postal_code' => '01001'))
+          .to eq('postal_code' => '01001')
+      end
+
       it 'answers with an error flash when the apply is not waiting' do
         waiting.update_columns(input_request: nil)
 

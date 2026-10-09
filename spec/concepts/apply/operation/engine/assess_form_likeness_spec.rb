@@ -37,6 +37,12 @@ RSpec.describe Apply::Operation::Engine::AssessFormLikeness do
     expect(assess(login)).to have_attributes(accepted: false, reason: 'password')
   end
 
+  it 'ignores a hidden password field (a closed login dropdown under a broad SPA root)' do
+    hidden_login = field('Password', type: 'password', visible: false)
+
+    expect(assess([ *application, hidden_login ])).to have_attributes(accepted: true, reason: 'identity_field')
+  end
+
   it 'rejects enough fields when none of them asks who the candidate is' do
     expect(assess([ field('City'), field('Company'), field('Budget') ])).to have_attributes(accepted: false, reason: 'no_identity_field')
   end

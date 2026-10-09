@@ -85,12 +85,19 @@ RSpec.describe Apply::Operation::Engine::BuildFieldInventory do
     end
 
     it 'reads kinds, labels and options from the DOM without a schema' do
-      expect(fields.size).to eq(15)
+      expect(fields.size).to eq(14)
       expect(fields).to all(have_attributes(source: 'snapshot'))
       expect(field('9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04')).to have_attributes(kind: 'combobox', options: 'dynamic')
-      expect(field('c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11')).to have_attributes(kind: 'checkbox', widget: 'native_check',
-                                                                                label: 'Acknowledge/Confirm', required: true)
-      expect(field('3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03')).to have_attributes(label: nil, placeholder: 'Type here...')
+      # The bare "Acknowledge/Confirm" checkbox keeps its name (NativeCheck clicks that label); its question becomes the
+      # description, which the lexicon reads as consent.
+      gdpr = field('c408722a-7b8c-4d9e-8f0a-2b3c4d5e6f11')
+      expect(gdpr).to have_attributes(kind: 'checkbox', widget: 'native_check', label: 'Acknowledge/Confirm',
+                                      description: 'Privacy notice', required: true)
+      expect(Apply::Operation::Answer::Classify.call(field: gdpr).model).to eq('consent_required')
+    end
+
+    it 'drops the optional field with an empty label and a generic placeholder (nothing to answer)' do
+      expect(fields.map(&:id)).not_to include(a_string_including('3086edf6-0b7d-4a3c-8e2f-9d4c1b5a6e03'))
     end
   end
 
@@ -114,6 +121,82 @@ RSpec.describe Apply::Operation::Engine::BuildFieldInventory do
         expect(fields.map(&:ordinal)).to eq([ 0, 1 ])
         expect(fields.map(&:id)).to eq([ "f_#{signature}_0", "f_#{signature}_1" ])
         expect(fields.map(&:signature).uniq).to eq([ signature ])
+      end
+    end
+
+    context 'with placeholder-only controls (no label, no question)' do
+      let(:elements) do
+        [
+          element('#name', "Ім'я та прізвище *", required: true, attrs: { 'placeholder' => "Ім'я та прізвище *" }),
+          element('#about', '', tag: 'textarea', type: nil, attrs: { 'placeholder' => 'Type here...' }),
+          element('#birth', '', required: true, attrs: { 'placeholder' => 'dd.mm.yyyy' })
+        ]
+      end
+
+      it 'labels one by its placeholder without the required mark, never by a generic placeholder or a date mask' do
+        expect(fields.map { |field| [ field.label, field.placeholder, field.required ] }).to eq([
+          [ "Ім'я та прізвище", "Ім'я та прізвище *", true ], [ nil, 'dd.mm.yyyy', true ]
+        ])
+        expect(fields.first.signature).to eq(Apply::Field.signature_for(label: "Ім'я та прізвище", kind: 'text', option_labels: nil))
+      end
+    end
+
+    context 'with controls nobody answers' do
+      let(:elements) do
+        [
+          element('#twin', 'Phone', type: 'tel', visible: false, self_visible: false, required: true),
+          element('#g-recaptcha-response', '', tag: 'textarea', type: nil, visible: false, captcha_artifact: true),
+          element('#currency', 'USD - United States Dollar', readonly: true, self_visible: true),
+          element('#autofill', '', type: 'file', role: nil, question: 'Autofill from resume'),
+          element('#phone', 'Phone', type: 'tel')
+        ]
+      end
+
+      it 'leaves out non-rendered twins, captcha fields, readonly inputs and resume-parse helpers' do
+        expect(fields.map { |field| field.target.strategies.first['css'] }).to eq([ '#phone' ])
+      end
+
+      it 'agrees with AssessFormLikeness and the Navigator on what a control is' do
+        expect(elements.map { |el| described_class.control?(el) }).to eq([ false, false, false, true, true ])
+      end
+    end
+
+    context 'with several upload fields' do
+      let(:elements) do
+        [
+          element('#resume', 'Attach', type: 'file', role: nil, question: 'Resume/CV'),
+          element('#cover_letter', 'Attach', type: 'file', role: nil, question: 'Cover Letter'),
+          element('#files', 'Need to share files with us? Attach PDF, PNG or JPG formats only.', type: 'file', role: nil)
+        ]
+      end
+
+      it 'labels a generic "Attach" by its question and implies required only for the CV slot' do
+        expect(fields.map { |field| [ field.label, field.required ] }).to eq([
+          [ 'Resume/CV', true ], [ 'Cover Letter', false ],
+          [ 'Need to share files with us? Attach PDF, PNG or JPG formats only.', false ]
+        ])
+      end
+    end
+
+    # Hurma / Vuetify validate in JS only: no required attribute, the requirement is a mark or a word in the text.
+    context 'with JS-only required-ness (no required attribute anywhere)' do
+      let(:elements) do
+        [
+          element('#first', 'Імʼя'), element('#role', 'Посада', attrs: { 'placeholder' => 'Ваша посада ✱' }),
+          element('#city', 'Місто', attrs: { 'placeholder' => "Обов'язкове поле" }),
+          element('#mail', 'Email'), element('#tel', 'Phone (optional)', type: 'tel'),
+          element('#who', 'Full name'), element('#note', "Коментар (необов'язково)"),
+          element('#cv', 'Attach', type: 'file', role: nil, question: 'Резюме'),
+          element('#portfolio', 'Portfolio', type: 'file', role: nil),
+          element('#extra', 'Додаткові файли', type: 'file', role: nil)
+        ]
+      end
+
+      it 'reads marks and required words, defaults name / email / phone / CV to required, and lets "optional" win' do
+        expect(fields.to_h { |field| [ field.label, field.required ] }).to eq(
+          'Імʼя' => true, 'Посада' => true, 'Місто' => true, 'Email' => true, 'Phone (optional)' => false, 'Full name' => true,
+          "Коментар (необов'язково)" => false, 'Резюме' => true, 'Portfolio' => false, 'Додаткові файли' => false
+        )
       end
     end
 
@@ -177,6 +260,33 @@ RSpec.describe Apply::Operation::Engine::BuildFieldInventory do
             [ 'Birth date', 'date', 'date_input' ], [ 'Start date', 'date', 'date_input' ],
             [ 'Years of experience', 'range', 'range' ]
           ]
+        )
+      end
+    end
+
+    context 'with custom selects and an ARIA-less typeahead' do
+      let(:elements) do
+        [
+          element('#location', 'Current location', typeahead: true),
+          *(1..7).map { |n| element("#select#{n}", "Select #{n}", role: 'combobox', group: 'combobox', readonly: true) }
+        ]
+      end
+      let(:session) do
+        options = %w[AED USD AED].map do |label|
+          ApplyMate::Client::Browser::Operation::WaitForListbox::Option.new(label:, target: ApplyMate::Client::Browser::Target.css('.item'))
+        end
+        FakeSession.new(html: '', final_url: 'https://jobs.example/apply', snapshot:, read_values:, listbox_options: options)
+      end
+
+      it 'writes the typeahead with Typeahead and opens the first MAX_PROBED_COMBOBOXES comboboxes for their options' do
+        expect(fields.first).to have_attributes(kind: 'autocomplete', widget: 'typeahead', options: 'dynamic')
+        comboboxes = fields.drop(1)
+        expect(comboboxes.map(&:widget)).to all(eq('aria_combobox'))
+        expect(comboboxes.first(described_class::MAX_PROBED_COMBOBOXES).map(&:options))
+          .to all(eq([ { 'label' => 'AED', 'value' => 'AED' }, { 'label' => 'USD', 'value' => 'USD' } ]))
+        expect(comboboxes.last.options).to eq('dynamic')
+        expect(comboboxes.map(&:signature)).to eq(
+          (1..7).map { |n| Apply::Field.signature_for(label: "Select #{n}", kind: 'combobox', option_labels: nil) }
         )
       end
     end

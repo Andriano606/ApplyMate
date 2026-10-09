@@ -89,6 +89,91 @@ RSpec.describe Apply::Operation::Engine::Navigate do
     expect(apply.reload.ai_calls).to eq(2)
   end
 
+  context 'when probe/anchor.js finds a stable selector for the claimed root (an id, a data-* attribute, the only form)' do
+    let(:session) do
+      FakeSession.new(html: '', final_url: job, snapshot: job_page, anchors: { form_css => { 'selector' => '#application-form' } })
+    end
+    let(:form_page) do
+      page = super()
+      # The fresh snapshot of the claim check is taken with regions: [root], so snapshot.js reports the new selector.
+      page.with(elements: page.elements.map do |el|
+        el.merge('regions' => Array(el['regions']).map { |region| region == form_css ? '#application-form' : region })
+      end)
+    end
+
+    it 'stores the form root by that selector, not by its nth-of-type chain (an inserted banner must not shift it)' do
+      session.on(:click) { session.show(form_page) }
+      ai_answers(continue(action('click', ref: 'f0:e1')), form_reached('f0:e1', field_refs: %w[f0:e1 f0:e2 f0:e3], submit_ref: 'f0:e4'))
+
+      expect(navigate.last).to include('op' => 'wait_for', 'root' => '#application-form')
+      expect(ctx.form_root).to eq(ApplyMate::Client::Browser::Target.css('#application-form'))
+      expect(session.calls_of(:probe)).to include([ :anchor, ApplyMate::Client::Browser::Target.css(form_css) ])
+    end
+  end
+
+  it "passes the landing page's own title (its first h1) to every prompt" do
+    session.show(job_page.with(frames: job_page.frames.map { |frame| frame.merge('outline' => [ 'h2 About', 'h1 Trainee FE Developer' ]) }))
+    allow(Apply::Ai::Prompt::Navigate).to receive(:new).and_call_original
+    ai_answers(continue(action('click', ref: 'f0:e1')), form_reached('f0:e1', field_refs: %w[f0:e1 f0:e2 f0:e3], submit_ref: 'f0:e4'))
+    session.on(:click) { session.show(form_page) }
+
+    navigate
+    expect(Apply::Ai::Prompt::Navigate).to have_received(:new).with(hash_including(posting_title: 'Trainee FE Developer')).twice
+  end
+
+  it 'keeps the positional path when nothing on the way up is stable (anchor.js answers no selector)' do
+    session.on(:click) { session.show(form_page) }
+    ai_answers(continue(action('click', ref: 'f0:e1')), form_reached('f0:e1', field_refs: %w[f0:e1 f0:e2 f0:e3], submit_ref: 'f0:e4'))
+
+    expect(navigate.last).to include('op' => 'wait_for', 'root' => form_css)
+  end
+
+  context 'when the claim leaves controls inside the form out of its field_refs (a helper upload, Preply)' do
+    # f0:e0 tab, f0:e1..e3 name / email / phone, f0:e4 optional "Promo code", f0:e5 required "Portfolio", f0:e6 send
+    let(:form_page) do
+      inputs = [ [ 'Full name', 'text' ], [ 'Email', 'email' ], [ 'Phone', 'tel' ], [ 'Promo code', 'text' ], [ 'Portfolio', 'url' ] ]
+      build_snapshot(frames: [ { url: job } ], elements: [
+        snapshot_element(role: 'tab', name: 'Apply', selected: true, css: 'body > main > div > button:nth-of-type(2)'),
+        *inputs.each_with_index.map do |(name, type), index|
+          snapshot_element(name:, type:, required: name == 'Portfolio', css: "#{form_css} > input:nth-of-type(#{index + 1})",
+                           regions: [ form_css ])
+        end,
+        snapshot_element(role: 'button', name: 'Submit application', submit_like: true, css: "#{form_css} > button",
+                         regions: [ form_css ])
+      ])
+    end
+
+    before { session.on(:click) { session.show(form_page) } }
+
+    it 'remembers the optional controls it left out for DiscoverFields, never a required one' do
+      ai_answers(continue(action('click', ref: 'f0:e1')), form_reached('f0:e1', field_refs: %w[f0:e1 f0:e2 f0:e3], submit_ref: 'f0:e6'))
+
+      navigate
+      expect(ctx.scratch.claim_left_out).to eq(Set["#{form_css} > input:nth-of-type(4)"])
+      ctx.close_scope!
+      expect(ctx.scratch.claim_left_out).to be_nil
+    end
+
+    it 'leaves nothing out when the claim left out more controls than it listed (a sloppy claim)' do
+      ai_answers(continue(action('click', ref: 'f0:e1')), form_reached('f0:e1', field_refs: %w[f0:e1], submit_ref: 'f0:e6'))
+
+      navigate
+      expect(ctx.scratch.claim_left_out).to be_empty
+    end
+  end
+
+  context 'when readiness.js sees fewer controls than the verdict counted (an upload chooser, a custom radio group)' do
+    let(:session) { FakeSession.new(html: '', final_url: job, snapshot: job_page, rendered_fields: 1) }
+
+    it 'stores the wait_for min_fields readiness.js measured, so the replay does not drift' do
+      session.on(:click) { session.show(form_page) }
+      ai_answers(continue(action('click', ref: 'f0:e1')), form_reached('f0:e1', field_refs: %w[f0:e1 f0:e2 f0:e3], submit_ref: 'f0:e4'))
+
+      expect(navigate.last).to include('op' => 'wait_for', 'min_fields' => 1)
+      expect(session.calls_of(:probe)).to include([ :readiness, ApplyMate::Client::Browser::Target.css(form_css), { 'min' => 1 } ])
+    end
+  end
+
   it 'never sends a value and wraps the page in the untrusted markers' do
     ai_answers(give_up('no_application_path'))
     halt_of

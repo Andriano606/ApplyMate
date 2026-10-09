@@ -10,7 +10,8 @@ class UserProfile::Job::ExtractFacts < ApplicationJob
   # staying taken) get a few spaced retries; after that the job ends and Stage::AnswerFields extracts the facts inline
   # at the profile's next apply.
   retry_on ApplyMate::Ai::Client::Base::EmptyResponse, ApplyMate::Ai::ResponseSchema::Json::InvalidResponse,
-           ApplyMate::Ai::Client::GeminiScraping::ResponseTimeoutError, ApplyMate::Client::LocalChrome::Busy, Faraday::Error,
+           ApplyMate::Ai::Client::GeminiScraping::ResponseTimeoutError, ApplyMate::Client::LocalChrome::Busy,
+           ApplyMate::Ai::Client::Base::Unavailable, Faraday::Error,
            attempts: 3, wait: :polynomially_longer
 
   def perform(user_profile_id)

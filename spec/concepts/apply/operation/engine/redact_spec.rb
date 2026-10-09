@@ -29,6 +29,21 @@ RSpec.describe Apply::Operation::Engine::Redact do
                                'access_token=[REDACTED]?code=[REDACTED] end')
   end
 
+  it 'masks API keys in a provider URL (Gemini ?key=)' do
+    text = 'Faraday::TooManyRequestsError: status 429 for POST https://x.googleapis.com/v1beta/m:generateContent?key=AIzaSyFAKE123&alt=sse'
+
+    expect(redact(text)).to include('?key=[REDACTED]&alt=sse').and(satisfy { |out| !out.include?('AIzaSyFAKE123') })
+    expect(redact('api_key=SECRET1 x-api-key=SECRET2 monkey=banana')).to eq('api_key=[REDACTED] x-api-key=[REDACTED] monkey=banana')
+  end
+
+  it 'masks apikey, any *token, signature and sig parameters and a bare Google API key anywhere' do
+    google_key = "AIza#{SecureRandom.alphanumeric(35)}"
+    text = "u?apikey=S1&id_token=S2&X-Amz-Signature=S3&sig=S4 header x-goog-api-key: #{google_key} json {\"k\":\"#{google_key}\"}"
+
+    expect(redact(text)).to eq('u?apikey=[REDACTED]&id_token=[REDACTED]&X-Amz-Signature=[REDACTED]&sig=[REDACTED] ' \
+                               'header x-goog-api-key: [REDACTED] json {"k":"[REDACTED]"}')
+  end
+
   context 'with the apply' do
     let(:user_email) { unique_email('jane.doe') }
     let(:user) { create(:user, email: user_email) }

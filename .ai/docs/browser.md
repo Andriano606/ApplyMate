@@ -288,7 +288,7 @@ driver's deadline is `min(deadline, lease.expires_at - 60 s)`, so a browserd tha
 | `set_checked(target, value)` | `:attached` | `locator.set_checked` |
 | `upload(target, path, via_chooser: false)` | `:attached` (`:required` with `via_chooser`) | `set_input_files(path)`, or `expect_file_chooser { target.click }.set_files(path)`; files stream over the protocol |
 | `scroll_into_view(target)` | `:attached` | `locator.scroll_into_view_if_needed` |
-| `probe(name, target, arg = nil)` | `:attached` | `locator.evaluate(PROBES[name], arg)` |
+| `probe(name, target, arg = nil)` | `:attached` | `locator.evaluate(PROBES[name], arg)`. `probe(:anchor, root)` → `{ 'selector', 'container' }`: `selector` re-addresses the element by the first of `#id` (stable, CSS-safe), `tag[data-*="v"]` / `tag[name="v"]`, `tag[role=r][aria-label="v"]` / `tag[role=r]`, `form` (the only one) that is unique in its document, else the nearest such ancestor plus at most 6 `nth-of-type` steps, else `nil` (nothing stable; never inside a shadow tree); `container` is the nearest `dialog` / `[role=dialog]` / `[role=alertdialog]` / `[aria-modal=true]` / `.modal` ancestor (same rule, else its absolute path), `nil` when none |
 | `present?(target, visibility:)` | given | `Locate`, `TargetNotFound` → `false` |
 | `ready?(root_target, timeout:, min_fields: 1, keys: nil, attr: nil, ratio: 0.8, key_prefix: nil)` | `:attached` | `Operation::WaitReady` (`timeout` in seconds) → Boolean; keys mode when `keys:` given (see Probes `readiness`); `key_prefix` = the platform's per-render prefix (`Readiness#key_prefix`) |
 | `snapshot_all(markers: [], regions: [])` | — | `Operation::SnapshotAll` → `Snapshot` (below); `markers` are counted by `detect.js`, `regions` (CSS selectors, e.g. the platform's form root and excluded autofill pane) come back per element as `'regions'` (the ones the element or its field root sits inside) |
@@ -315,8 +315,8 @@ the same way:
 | Engine caller | Session methods |
 | ------------- | --------------- |
 | `Engine::CollectRenderedEvidence`, `RunGates` / gates (`CookieConsent` clicks) | `snapshot_all`, `current_url`, `click` |
-| `Engine::ReachForm`, `Engine::Observe`, `Engine::WaitReady` | `goto`, `current_url`, `snapshot_all`, `frames`, `wait_until`, `ready?` |
-| `Engine::Navigate` (the AI Navigator), `Engine::ExecuteAction`, `Engine::AdoptNewTab` | `snapshot_all(markers:, regions:)`, `current_url`, `pages`, `probe(:opens_tab)`, `goto` (an `navigate` action), `wait_until`; clicks / presses / scrolls go through the recipe ops below |
+| `Engine::ReachForm`, `Engine::Observe`, `Engine::WaitReady` | `goto`, `current_url`, `snapshot_all`, `frames`, `wait_until`, `ready?` (ReachForm's landing: `ready?(body, timeout: 0)` ends the identify wait) |
+| `Engine::Navigate` (the AI Navigator), `Engine::ExecuteAction`, `Engine::AdoptNewTab` | `snapshot_all(markers:, regions:)`, `current_url`, `pages`, `probe(:opens_tab)`, `probe(:anchor)` / `probe(:readiness)` (the claimed root), `goto` (an `navigate` action), `wait_until`; clicks / presses / scrolls go through the recipe ops below |
 | `Engine::RecoverField` | `snapshot_all(regions:)`; its click / press through the recipe ops |
 | `Engine::AwaitInput` (`Gate::EmailCode`) | `snapshot_all(markers:)`, `click`, `press`, `settle(:submit)`; the code is typed by the `Text` widget |
 | `Recipe::Interpret`, recipe ops (`apply/recipe/op/*`: `Goto`/`Unwrap`, `Click`, `Press`, `Scroll`, `SwitchTab`, `WaitFor`) | `pages`, `probe(:opens_tab)`, `goto`, `click`, `press`, `scroll_into_view`, `settle(:click / :key)`, `wait_until`, `switch_to`, `settle_content`, `ready?`, `current_url` |
@@ -339,7 +339,7 @@ frame's `document.documentElement` (first `Driver::Playwright::MAX_FRAMES = 20` 
 | Part | Shape |
 |---|---|
 | `frames` | `[{ 'ref' => 'f<i>', 'index', 'url', 'title', 'parent' => nil \| 'f<j>', 'frame_path', 'outline', 'alerts', 'captcha', 'password_fields', 'truncated', 'readable' }]`; `readable: false` when the frame could not be evaluated (no elements) |
-| `elements` | every probe element plus `'ref' => 'f<i>:e<j>'`, `'frame' => 'f<i>'`, `'fingerprint' => "role\|name\|f<i>"` (role or tag, name downcased) and `'target'` (a `Target`) |
+| `elements` | every probe element plus `'ref' => 'f<i>:e<j>'`, `'frame' => 'f<i>'`, `'fingerprint' => "role\|name\|f<i>"` (role or tag, name downcased; then `\|<scope>` when the probe reports a `scope`: `dialog` / `form`, `#id` added for a stable container id, else `@n` for the n-th container of that kind, so a modal's button never inherits a page launcher's identity or FORBIDDEN entry; the n-th repeat of one such key in a frame gets `#<n>`, the first stays plain) and `'target'` (a `Target`) |
 | `evidence` | `{ frame_urls:, script_srcs:, iframe_srcs:, dom_markers: { marker => count summed over frames } }` |
 | `digest` | SHA1 of the fingerprints joined in order |
 
@@ -352,7 +352,10 @@ that is `visible` through its label/root/dropzone but not `self_visible` (Locate
 
 **`Operation::Goto`** (port of `gotoSmart`): `ResolvePublicAddress` (raises `UnsafeUrlError` before any navigation)
 → `driver.navigate(url)` (`waitUntil: 'domcontentloaded'`, `NAVIGATE_TIMEOUT_MS = 30_000`) →
-`WaitPastCloudflare(max_ms: 40_000)` → `wait_for_network_idle(8_000)` (a timeout there is fine). A navigation error
+`WaitPastCloudflare(max_ms: 40_000)` → settle: network idle OR a form already rendered, whichever comes first, at most
+`NETWORK_IDLE_MS = 8_000` (a timeout there is fine): `wait_for_network_idle` in `IDLE_SLICE_MS = 1_000` slices, each
+preceded by one `Operation::WaitReady(body, min_fields: RENDERED_FORM_FIELDS = 3, timeout_ms: 0)` probe, so a
+server-rendered page whose form is on screen is not held the full 8 s by beacons that never go idle. A navigation error
 (timeout, `NS_ERROR_*`, smokescreen `407` on a redirect to a private host) propagates as `Playwright::Error`.
 
 **`Operation::WaitPastCloudflare`** (port of `waitPastCloudflare`), model `[passed, was_challenge]`. Predicate:
@@ -470,11 +473,13 @@ located element.
 
 | Probe | Signature | Returns |
 |---|---|---|
-| `snapshot` | `(root)` | `{ frame: { url, title }, outline, alerts, captcha, password_fields, truncated, elements }` — the one definition of "interactive element" (design §6.1), see below |
+| `snapshot` | `(root, { regions, submitText })` | `{ frame: { url, title }, outline, alerts, captcha, password_fields, truncated, elements }` — the one definition of "interactive element" (design §6.1), see below. The argument is required: every caller passes `Operation::SnapshotAll.probe_arg(markers:, regions:)` (the one source of the `SUBMIT_TEXT` lexicon behind `submit_like`); without `submitText` the probe throws rather than silently stop marking `submit_like` |
 | `detect` | `(root, { markers })` | `{ url, name (window.name), title, script_srcs, iframe_srcs, iframes: [{ id, name, src }], dom_markers: { selector => count } }` (an invalid marker counts 0) |
-| `listbox` | `(root, { since })` | `{ containers: { key => visible option count }, options: [{ label, value, selected, disabled, listbox_id, strategies }] }` over visible `[role=option]` / `.el-select-dropdown__item`; container = closest `[role=listbox]`, `.el-select-dropdown`, `ul` (key `#id` or css path). With `since` (an earlier `containers`): only options whose container was absent or whose index in it ≥ the old count |
+| `listbox` | `(root, { since })` | `{ containers: { key => visible option count }, options: [{ label, value, selected, disabled, listbox_id, strategies }] }` over visible `[role=option]` / `.el-select-dropdown__item` plus ARIA-less leaf items (`[data-value]` that is no form
+control, children of a `[class*=results]` / `[class*=suggestions]` container, `li` of a `ul`/`ol` whose class says
+suggest / dropdown / autocomplete / options; never inside a `no-result` / `loading` / `empty` status), in document order; container = closest `[role=listbox]`, `.el-select-dropdown`, `ul` (key `#id` or css path). With `since` (an earlier `containers`): only options whose container was absent or whose index in it ≥ the old count |
 | `readiness` | `(root, { min, keys, attr, ratio, keyPrefix })` | `{ fields, ready }`. Default: visible fillable controls under root, `ready = fields >= min`. Keys mode (`keys` non-empty): distinct keys found in `attr` of elements under root, any visibility, with `keyPrefix` (a regex source from the platform, e.g. `Apply::Platform::Ashby::INSTANCE_PREFIX_SOURCE`; none when nil) stripped from the start, case-insensitive; `ready = found >= ceil(keys.length × ratio)`. The probe hard-codes no platform rule. (`snapshot.js` / `listbox.js` keep their own UUID-prefix test for a different reason: such ids change per render on any site, so they are never used as locator strategies.) |
-| `read_value` | `(el)` | `{ tag, type, value, checked, files, text, displayed, invalid, error_text, pressed, min, max, step, aria_valuenow }`: `displayed` = selected option text / contenteditable text / combobox chip (leaf `[class*=chip]`, `singleValue`, `multiValue`, `single-value`, `multi-value__label` within ≤ 4 ancestors, stopping at the field root) / file names / for a `button` or `[role=button]` (a `chooser` dropzone) the text of its field root (`[data-field-path]`, `fieldset`, `[role=group]`), else of its parent, so the chosen file name next to it counts / value; `type` = the `type` attribute (lower-case, null when absent; `Widget::DateInput` picks native vs masked by it); `invalid` = `aria-invalid` or `:invalid`; `error_text` = `[role=alert]`, `[aria-live]` in the field root + the `aria-describedby` targets; `pressed` = `aria-pressed` / `aria-checked` as written; `min` / `max` = the attribute, else `aria-valuemin` / `aria-valuemax`; `step`, `aria_valuenow` as written (`Widget::Range`) |
+| `read_value` | `(el)` | `{ tag, type, value, checked, files, text, displayed, invalid, error_text, pressed, min, max, step, aria_valuenow }`: `displayed` = selected option text / contenteditable text / combobox chip (leaf `[class*=chip]`, `singleValue`, `multiValue`, `single-value`, `multi-value__label` within ≤ 4 ancestors, stopping at the field root) / file names / for a combobox trigger `button` (`aria-haspopup`) its own text / for another `button` or `[role=button]` (a `chooser` dropzone) the text of its field root (`[data-field-path]`, `fieldset`, `[role=group]`), else of its parent, so the chosen file name next to it counts / value; `type` = the `type` attribute (lower-case, null when absent; `Widget::DateInput` picks native vs masked by it); `invalid` = `aria-invalid` or `:invalid`; `error_text` = `[role=alert]`, `[aria-live]` in the field root + the `aria-describedby` targets; `pressed` = `aria-pressed` / `aria-checked` as written; `min` / `max` = the attribute, else `aria-valuemin` / `aria-valuemax`; `step`, `aria_valuenow` as written (`Widget::Range`) |
 | `outer_html` | `(el)` | `el.outerHTML` (`Session#html(frame_path:)`) |
 | `opens_tab` | `(el)` | `true` when the element sits in an `a[href]` / `area[href]` / `form` whose `target` (else the document's `<base target>`) names another browsing context (`_blank` or a window name, not `_self` / `_parent` / `_top`). `Recipe::Interpret` asks it before a click / press to know whether to wait for a new tab; `window.open` from a script is invisible to it |
 
@@ -484,15 +489,29 @@ listbox option radio radiogroup checkbox switch textbox menuitem dialog`, conten
 walked. Per element:
 
 - `index tag type role name question` — `role` explicit or implicit (Playwright's mapping); `name` = `aria-labelledby`
-  → `aria-label` → content (buttons, links, tabs, options) → `label[for]` / parent `label` / `legend` (own text,
-  without nested controls, trailing `*`/`✱` stripped) → text just before the control inside its field root →
-  `placeholder` → `title`; `question` = the field root's title (`aria-labelledby`, `legend`, or the first
-  label/`[class*=question]`/`[class*=title]`/heading that is not an option label).
-- state `required` (attribute, `aria-required` on it or its root, `*`/`✱`, a `required` class token such as Ashby's
+  → `aria-label` → content (buttons, links, tabs, options; an EMPTY button / link is named by nothing outside itself,
+  only `close` for a `close`/`dismiss` class token) → `label[for]` / parent `label` / `legend` / an adopted label →
+  text just before the control (for a checkbox / radio first the text just after it) inside its field root →
+  `placeholder` → `title` (unless it only repeats the control's value) → for a file input its `question`. Label text is
+  `ownText`: as rendered (CSS-hidden descendants, nested controls and a link / button wrapping a control skipped;
+  inline children joined without a separator), required marks (`*`/`✱`, trailing or standalone) stripped. An adopted
+  label: a `label[for]` whose control is not rendered (a display:none twin of a Vue phone input or a Froala editor's
+  textarea) or does not exist, in a container (≤ 4 ancestors, never across `<form>`) whose only rendered text-entry
+  control is this one. The `{ role, name }` strategy carries the browser's own accessible name (labelledby, aria-label,
+  content, own label, placeholder, title), never a heuristic one; `question` = the field root's title
+  (`aria-labelledby`, `legend`, or the first label/`[class*=question]`/`[class*=title]`/heading that is not an option
+  label).
+- One element per clickable thing: a link / button wrapping exactly one other clickable candidate is listed once
+  (`<a href><button>` keeps the link, a custom `[role=button]` host around a native `<button>` keeps the native one).
+- `captcha_artifact`: the element is a captcha response field (`g-recaptcha-response`, `h-captcha-response`,
+  `cf-turnstile-response`).
+- state `required` (only for fields, group members and choosers; attribute, `aria-required` on it or its root, `*`/`✱`, a `required` class token such as Ashby's
   `_required_f7cvd_91` or a `[class*=required]` child on the label or question), `invalid` (`aria-invalid` or
   `:user-invalid`), `checked expanded pressed selected disabled readonly`, `filled` (Boolean; values are never
   returned), `aria_hidden`.
-- `self_visible` (box, not `visibility:hidden`/`display:none`, no transparent ancestor, not clipped to ≤ 1 px) and
+- `self_visible` (box, not `visibility:hidden`/`display:none`, no transparent ancestor, not clipped to ≤ 1 px, not
+  pushed before the document origin by a negatively offset `absolute` / `fixed` box - the off-canvas honeypot
+  `left:-9999px`; a box merely scrolled out of an overflow container still counts) and
   `visible`: = `self_visible`, except file inputs (any label / `[class*=dropzone]` / `[class*=upload]` / nearby
   button seen) and radios, checkboxes, comboboxes (label or field root seen); `in_viewport`.
 - `field_root`: closest `[data-field-path]`, else the closest `fieldset` / `[role=radiogroup]` / `[role=group]` that
@@ -500,15 +519,28 @@ walked. Per element:
   another control group. Exposed as `root_strategies` and `attrs['data-field-path']`.
 - `group`: `radio_group` (same `name`, or `role=radio` in a `radiogroup`), `combobox` (`role=combobox` that is not a
   `select`, or a readonly input with `aria-haspopup`, a sibling arrow/indicator, or an `.el-select`/`.v-select`/
-  `select__control` ancestor), `option_group` (a non-submit button in a field root with a question and ≥ 2 such
+  `select__control` ancestor, or a readonly input whose wrapper (≤ 4 ancestors) holds ≥ 2 `[role=option]` /
+  `[data-value]` items: an Alpine / jQuery select), `option_group` (a non-submit button in a field root with a question and ≥ 2 such
   buttons); `group_key` on every member, `options: [{ label, value, checked, strategies }]` on the first member.
   Selects carry `options: [{ label, value, selected, disabled }]`; comboboxes `chip` (current chip text).
 - flags `password` (`type=password`, `autocomplete` current/new-password), `search_like` (`type=search`, under
-  `[role=search]`, `header`, `footer`, a `nav` that is not `[role=tablist]`), `submit_like` (submit type, or "submit" in name/class, never inside a
-  field root, never search-like, only with a fillable control nearby), `chooser` (a self-visible, non-submit `button` /
+  `[role=search]`, `header`, `footer`, a `nav` that is not `[role=tablist]`), `submit_like` (submit type, or a send verb in name/class: `SUBMIT_TEXT` = submit / whole-word send / надіслати / відправити / подати / отправить, never when the text names a code / OTP such as "Resend code" or "Надіслати код", never inside a
+  field root, never search-like, only with a fillable control nearby; the text lexicon is `SnapshotAll::SUBMIT_TEXT`), `scope`
+  (`dialog` inside `dialog` / `[role=dialog]` / `[role=alertdialog]` / `[aria-modal=true]`, else `form` inside a
+  `<form>`, plus `#id` for a stable container id, else `@n`, the container's 1-based position among the same kind
+  in its document / shadow root, so two id-less forms are two scopes; null on the page: SnapshotAll's fingerprint,
+  ExecuteAction's no-submit guard), `chooser` (a self-visible, non-submit `button` /
   `[role=button]` whose name matches `UPLOAD_LEXICON` = `/upload|attach|resume|\bcv\b|browse|завантаж|прикріп|резюме|загруз/i`
-  and whose field root (else its grandparent, else its parent) holds no `input[type=file]`: a dropzone that creates the
-  file input on click; `BuildFieldInventory` makes it a `file` field with widget `dropzone`), `href` for links.
+  and whose field root (else its uploader: up to 4 ancestors, stopping at a `<form>` or at an ancestor holding another
+  field) holds no `input[type=file]`: a dropzone that creates the file input on click; `BuildFieldInventory` makes it a `file` field with widget `dropzone`), `file_trigger` (a non-chooser, non-submit link / button that wraps an
+  `input[type=file]`, or has an `UPLOAD_LEXICON` name and exactly one file input within 3 ancestors: Lever's "ATTACH
+  RESUME/CV" anchor, Ashby's "Upload file"; part of that file field: never `submit_like`, left out of the Navigator
+  prompt, `ExecuteAction` rejects a click on it as `file_trigger`), `typeahead` (an ARIA-less typeahead: a non-readonly
+  `type=text` input without `role=combobox` / `list`, beside a `SUGGEST_CONTAINER` (`[class*=dropdown|suggest|
+  autocomplete|typeahead|results]`) within 2 ancestors that hold no other field; → `autocomplete` + `Widget::Typeahead`),
+  `href` for links. A custom select trigger (`aria-haspopup=listbox` on a non-input, or a readonly input over a list of
+  ≥ 2 `[role=option]` / `[data-value]` items within 4 ancestors) is a `combobox` group; a non-input trigger is named by
+  its label, never its content (its current value), and reports `readonly: true` (AriaCombobox clicks, never types).
 - `strategies`: `{ attr: { id } }` unless the id is instance-prefixed (`<uuid>_…`) or a React `:r…:` id;
   `{ attr: { name[, value] } }` (radios/checkboxes with value) unless instance-prefixed; `{ role, name }`;
   `{ label }`; always last `{ css: <nth-of-type path> }` (shadow trees joined by a descendant space). `attrs` keeps
@@ -518,7 +550,8 @@ walked. Per element:
 Frame-level: `outline` (visible `h1`–`h3`, `tabs A* | B` with `*` = selected, visible dialogs; ≤ 40), `alerts`
 (visible `[role=alert]`/`[aria-live=assertive]`, ≤ 10), `captcha` (`recaptcha`, `recaptcha_invisible`,
 `recaptcha_challenge`, `hcaptcha`, `hcaptcha_invisible`, `turnstile`, `turnstile_invisible`, `datadome` from iframe
-srcs and `.grecaptcha-badge`; a widget counts as visible when its iframe is seen and taller than 30 px; the
+srcs and `.grecaptcha-badge`; an unframed widget - `.h-captcha` / `.g-recaptcha` / `.cf-turnstile[data-sitekey]`, a
+captcha response field or an hCaptcha / reCAPTCHA script, framed only on submit - is its `_invisible` kind; a widget counts as visible when its iframe is seen and taller than 30 px; the
 `Apply::Gate::VisibleCaptcha` gate stops on the visible kinds only), `password_fields` (visible password elements).
 
 ## Deadlines & errors

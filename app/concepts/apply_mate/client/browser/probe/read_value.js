@@ -53,6 +53,7 @@
   else if (el.isContentEditable) displayed = text(el);
   else if (chips.length) displayed = chips.join(', ');
   else if (type === 'file') displayed = files.join(', ');
+  else if (buttonish && combobox) displayed = text(el);
   else if (buttonish) displayed = text(fieldRoot || el.parentElement || el);
   else displayed = value;
 

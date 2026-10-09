@@ -12,7 +12,8 @@
 # each round probes at most Driver::Playwright::MAX_FRAMES frames once (ready? with timeout 0 never waits).
 class Apply::Operation::Engine::WaitReady < ApplyMate::Operation::Base
   # Visible fillable controls the default readiness wants (no schema): fewer is a newsletter box, not an application.
-  DEFAULT_MIN_FIELDS = 3
+  # The same count Browser::Operation::Goto settles on (a landing whose form is rendered stops waiting).
+  DEFAULT_MIN_FIELDS = ApplyMate::Client::Browser::Operation::Goto::RENDERED_FORM_FIELDS
   DEFAULT_ROOT = 'body'
 
   # platform.readiness, else visible fields under the platform's form root (also for no platform yet). Callers never

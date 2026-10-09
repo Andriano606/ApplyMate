@@ -23,7 +23,7 @@ article(id=anchor_id data-model-id=@apply.id class=CARD_CLASSES)
   .mx-4.mt-4.sm:mx-5.empty:hidden
     = render Apply::Component::FailureNotice.new(apply: @apply, user: @user)
   .mx-4.mt-4.sm:mx-5.empty:hidden
-    = render Apply::Component::InputRequest.new(apply: @apply, user: @user)
+    = render Apply::Component::InputRequest.new(apply: @apply)
   .mx-4.mt-4.sm:mx-5.empty:hidden
     = render Apply::Component::ReviewForm.new(apply: @apply, user: @user)
   .mx-4.mt-4.sm:mx-5.empty:hidden

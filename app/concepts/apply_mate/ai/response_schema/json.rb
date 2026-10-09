@@ -4,7 +4,11 @@
 # and `format_instructions`; `extract` parses (fence/prose tolerant) and validates, raising
 # InvalidResponse on a blank, unparseable or schema-violating answer.
 class ApplyMate::Ai::ResponseSchema::Json < ApplyMate::Ai::ResponseSchema::Base
-  class InvalidResponse < StandardError; end
+  # `usage`: the provider's token usage of the call that produced the answer (ApplyMate::Ai::Usage), set by
+  # AiHandler#complete so a caller still accounts for the tokens an unusable answer cost; nil when raised elsewhere.
+  class InvalidResponse < StandardError
+    attr_accessor :usage
+  end
 
   FENCE = /```[a-z]*[ \t]*\n?(.*?)```/mi
 

@@ -51,12 +51,15 @@ class Apply::Operation::Engine::Context
   #                  before_submit artifact to it)
   # followup_calls   wizard pages that brought new fields this run (Engine::AnswerFollowups; capped at
   #                  AnswerFollowups::MAX_FOLLOWUP_ANSWER_CALLS)
+  # claim_left_out   [Set<String>] css paths (BuildFieldInventory.dom_key) of optional controls the Navigator's accepted
+  #                  form claim left out of field_refs (Engine::Navigate#left_out); valid for this session only (reset
+  #                  by #close_scope!), read by Stage::DiscoverFields in the survey
   # wizard_page      the wizard page the submit scope is on (1, advanced by Stage::FillFields on every Next click);
   #                  Engine::ClassifyAdvance tells a stored follow-up field still ahead from one already behind
   Scratch = Struct.new(:session, :scope, :scope_deadline, :platform, :match, :evidence, :schema, :fields, :form_root,
                        :form_url, :trace, :platform_switches, :claim_mark, :artifacts_count, :consent_clicks, :http,
                        :canonical_unwrapped, :step_record, :submit_baseline, :followup_calls, :wizard_page,
-                       keyword_init: true) do
+                       :claim_left_out, keyword_init: true) do
     def self.fresh
       new(trace: [], platform_switches: 0, artifacts_count: 0, consent_clicks: 0, canonical_unwrapped: [],
           followup_calls: 0, wizard_page: 1)
@@ -159,6 +162,7 @@ class Apply::Operation::Engine::Context
   # ... and closes it again in `ensure`: nothing may reach for a released lease afterwards.
   def close_scope!
     self.session = nil
+    scratch.claim_left_out = nil
     scratch.scope = nil
     scratch.scope_deadline = nil
   end

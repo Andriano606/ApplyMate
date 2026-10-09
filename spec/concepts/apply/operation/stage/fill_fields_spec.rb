@@ -68,6 +68,23 @@ RSpec.describe Apply::Operation::Stage::FillFields do
       expect(session.calls.flatten).not_to include(css('#salary'), css('#token'))
     end
 
+    context 'with a display:none honeypot the answers filled' do
+      let(:website) { answer_field(id: 'website', kind: 'url', label: 'Website', target: css('#website')) }
+      let(:fields) { [ name, resume, website ] }
+      let(:answers) { super().merge('website' => answer_entry('https://jane.example', source: 'fact', confidence: 1.0)) }
+      let(:session) do
+        FakeSession.new(html: '', final_url: 'https://jobs.ashbyhq.com/preply/x/application', snapshot:, read_values:,
+                        missing: [ '#website' ])
+      end
+
+      it 'never writes the hidden field, does not halt, and traces it hidden_unfilled' do
+        expect(fill![:step_result]).to eq('filled' => 2, 'unfilled' => [], 'pages' => 1)
+        expect(session.calls_of(:present?)).to include([ css('#website'), { visibility: :required } ])
+        expect(session.calls.select { |call| %i[fill type].include?(call.first) }.map(&:second)).not_to include(css('#website'))
+        expect(ctx.scratch.trace.find { |entry| entry['event'] == 'hidden_unfilled' }).to include('fields' => [ 'website' ])
+      end
+    end
+
     it 'uploads the CV from a temp file that is gone after the stage' do
       fill!
 
@@ -230,7 +247,8 @@ RSpec.describe Apply::Operation::Stage::FillFields do
     end
     let(:page_two) do
       build_snapshot(frames: [ { outline: page_two_outline } ], elements: [
-        snapshot_element(role: 'textbox', name: 'Cover letter', tag: 'textarea', css: '#cover', required: true, regions: region),
+        snapshot_element(role: 'textbox', name: 'Cover letter', tag: 'textarea', required: true, regions: region,
+                         strategies: [ { 'css' => '#cover' } ]),
         snapshot_element(role: 'checkbox', name: 'I agree to the privacy policy', type: 'checkbox', required: true,
                          regions: region, strategies: [ { 'css' => '#consent' } ]),
         page_two_advance
@@ -306,6 +324,43 @@ RSpec.describe Apply::Operation::Stage::FillFields do
       expect(ctx.scratch.followup_calls).to eq(0)
     end
 
+    context 'when every step is in the DOM and the later one is hidden by CSS' do
+      let(:hidden) { [ '#cover' ] }
+      let(:session) do
+        FakeSession.new(html: '', final_url: 'https://careers.acme.example/jobs/7/apply', snapshot: page_one,
+                        read_values:, missing: hidden)
+      end
+      let(:fields) { inventory(page_one) + [ inventory(page_two).first ] }
+      let(:answers) do
+        name_field, email_field, phone_field, cover_field = fields
+        { name_field.id => answer_entry('Jane Doe', source: 'fact', confidence: 1.0),
+          email_field.id => answer_entry(email, source: 'fact', confidence: 1.0),
+          phone_field.id => answer_entry(phone, source: 'fact', confidence: 1.0),
+          cover_field.id => answer_entry(letter['value'], confidence: 0.9) }
+      end
+
+      before { session.on(:click) { hidden.clear } }
+
+      it 'leaves the not-shown step-2 field for page 2 instead of halting on page 1' do
+        expect(fill![:step_result]).to eq('filled' => 5, 'unfilled' => [], 'pages' => 2)
+        click_at = session.calls.index { |call| call.first == :click }
+        cover_at = session.calls.index { |call| call.first == :type && call.second.strategies.first['css'] == '#cover' }
+        expect(cover_at).to be > click_at
+        expect(a_request(:post, gemini)).not_to have_been_made
+      end
+
+      it 'halts required_field_unfillable at :final when the required field never shows' do
+        session.on(:click) { hidden << '#cover' }
+        cover = fields.last.with(required: true)
+        ctx.fields = fields[0..2] + [ cover ]
+
+        expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt).to have_attributes(code: :required_field_unfillable, detail: cover.id)
+        }
+        expect(session.calls_of(:type).map(&:first)).not_to include(css('#cover'))
+      end
+    end
+
     it 'halts target_not_found at the final page when a stored required field of a later page never showed' do
       ctx.fields = fields + [ answer_field(id: 'f_gone_0', label: 'Portfolio', required: true, page: 2, target: nil) ]
       stub_answers(letter)
@@ -343,9 +398,50 @@ RSpec.describe Apply::Operation::Stage::FillFields do
       end
     end
 
+    context 'when the site refuses page 1 and its Next does not advance' do
+      let(:refused) do
+        build_snapshot(frames: [ { outline: [ 'h2 Step 1 of 2' ], alerts: [ 'This email is already registered.' ] } ],
+                       elements: page_one.elements.map { |element| element.except('ref', 'frame', 'fingerprint', 'target') })
+      end
+
+      before { session.on(:click) { |_target| session.show(refused) } }
+
+      it 'halts validation_rejected with the page error after one click, before any claim' do
+        expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt).to have_attributes(code: :validation_rejected,
+                                          detail: 'next did not advance: This email is already registered.')
+        }
+        expect(session.calls_of(:click)).to eq([ [ next_target ] ])
+        expect(session.calls.drop(session.calls.index { |call| call.first == :click }).count([ :settle, :click ])).to eq(2)
+        expect(ctx.scratch.trace).to include(include('event' => 'wizard_stalled', 'page' => 1, 'button' => 'Next'))
+        expect(a_request(:post, gemini)).not_to have_been_made
+        expect(apply.reload.submit_claimed_at).to be_nil
+      end
+
+      it 'names the fields the page marks invalid when it shows no alert' do
+        invalid = page_one.elements.map do |element|
+          element.except('ref', 'frame', 'fingerprint', 'target').merge('invalid' => element['name'] == 'Email')
+        end
+        session.on(:click) { |_target| session.show(build_snapshot(frames: [ { outline: [ 'h2 Step 1 of 2' ] } ], elements: invalid)) }
+
+        expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt).to have_attributes(code: :validation_rejected, detail: 'next did not advance: invalid: Email')
+        }
+      end
+
+      it 'goes on when the page changes during the second settle (a slow transition)' do
+        settles = nil
+        session.on(:click) { |_target| settles = 0 }
+        session.on(:settle) { |profile| session.show(page_two) if settles && profile == :click && (settles += 1) == 2 }
+        stub_answers(letter)
+
+        expect(fill![:step_result]).to eq('filled' => 5, 'unfilled' => [], 'pages' => 2)
+      end
+    end
+
     context 'with more than MAX_WIZARD_PAGES pages' do
-      let(:page_one) do
-        build_snapshot(frames: [ { outline: [ 'h2 Step 1 of 7' ] } ], elements: [
+      def step(number)
+        build_snapshot(frames: [ { outline: [ "h2 Step #{number} of 7" ] } ], elements: [
           snapshot_element(role: 'textbox', name: 'Full name', css: '#full_name', required: true, regions: region),
           snapshot_element(role: 'textbox', name: 'Email', type: 'email', css: '#email', required: true, regions: region),
           snapshot_element(role: 'textbox', name: 'Phone', type: 'tel', css: '#phone', regions: region),
@@ -353,7 +449,15 @@ RSpec.describe Apply::Operation::Stage::FillFields do
         ])
       end
 
-      before { session.on(:click) { |_target| session.show(page_one) } }
+      let(:page_one) { step(1) }
+
+      before do
+        clicks = 0
+        session.on(:click) do |_target|
+          clicks += 1
+          session.show(step(clicks + 1))
+        end
+      end
 
       it 'halts wizard_too_long on the sixth page without clicking its Next' do
         expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|

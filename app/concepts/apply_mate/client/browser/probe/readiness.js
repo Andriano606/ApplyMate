@@ -1,4 +1,7 @@
-// Is the form under `root` rendered? Default: at least `min` visible fillable controls. Keys mode (`keys` given, the
+// Is the form under `root` rendered? Default: at least `min` fillable controls, the kinds Engine::BuildFieldInventory
+// .control? counts (inputs, textareas, selects, contenteditable, role textbox / combobox / radio / checkbox / switch):
+// visible ones, plus file inputs at any visibility (a CV upload is a clipped input behind a dropzone). Engine::Navigate
+// stores a recipe's WaitFor min_fields from THIS count (`fields`), so the replay measures what the claim measured. Keys mode (`keys` given, the
 // platform's schema keys): count the distinct keys found in `attr` of elements under root, any visibility (clipped
 // file inputs and opacity:0 radios count); ready once found >= ceil(keys.length * ratio). `keyPrefix` (optional) is
 // the platform's per-render prefix as a portable regex source (Platform::Base::Readiness#key_prefix, e.g. Ashby's
@@ -25,6 +28,9 @@
     '[contenteditable]:not([contenteditable=false])',
     '[role=textbox]',
     '[role=combobox]',
+    '[role=radio]',
+    '[role=checkbox]',
+    '[role=switch]',
   ].join(', ');
   const visible = (el) => {
     const rect = el.getBoundingClientRect();
@@ -37,7 +43,7 @@
     );
   };
   const fields = Array.from(root.querySelectorAll(SELECTOR)).filter(
-    visible,
+    (el) => (el.localName === 'input' && el.type === 'file') || visible(el),
   ).length;
   return { fields, ready: fields >= min };
 };

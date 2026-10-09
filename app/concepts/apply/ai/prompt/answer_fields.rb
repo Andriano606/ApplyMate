@@ -24,7 +24,7 @@ class Apply::Ai::Prompt::AnswerFields < ApplyMate::Ai::Prompt::Base
   PROMPT
 
   # Facts that may be sent to the AI (ResolveFact semantics); work_authorization and demographic never are.
-  PROMPT_FACTS = %w[full_name email phone linkedin github location salary notice_period years_experience languages].freeze
+  PROMPT_FACTS = %w[full_name email phone linkedin github location country salary notice_period years_experience languages].freeze
 
   # errors: the validation errors of the previous answer set (the one retry)
   def initialize(apply:, fields:, platform: nil, errors: [])

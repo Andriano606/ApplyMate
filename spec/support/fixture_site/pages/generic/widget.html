@@ -116,6 +116,10 @@
             dropdown.style.left = `${rect.left + window.scrollX}px`;
             dropdown.style.display = 'block';
           });
+          // Element UI closes the dropdown on Escape.
+          input.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') dropdown.style.display = 'none';
+          });
         };
         dropdown.querySelectorAll('.el-select-dropdown__item').forEach((item) =>
           item.addEventListener('click', () => {

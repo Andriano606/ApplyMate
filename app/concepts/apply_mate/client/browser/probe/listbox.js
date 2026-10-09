@@ -1,4 +1,6 @@
-// Options of open listboxes in one document (ARIA [role=option], Element UI .el-select-dropdown__item), visible
+// Options of open listboxes in one document (ARIA [role=option], Element UI .el-select-dropdown__item, and the
+// ARIA-less lists of LOOSE_OPTIONS: an Alpine select's `[data-value]` items, the rows a typeahead renders into its
+// `results` / `suggestions` container; only leaf items, never a "no results" / "loading" status), visible
 // only, grouped by their container (the listbox id, else its css path). `containers` = { key => visible option
 // count }; Session#dom_mark keeps it. With `since` (such a containers map) only options that are new since then are
 // returned: their container was not open before, or their index in it is at or past the old count. This is the
@@ -34,6 +36,29 @@
     }
     return segments.join(' > ');
   };
+  const OPTIONS = '[role=option], .el-select-dropdown__item';
+  const LOOSE_OPTIONS = [
+    '[data-value]:not(input, select, option)',
+    '[class*=results] > *',
+    '[class*=suggestions] > *',
+    ':is(ul, ol):is([class*=suggest], [class*=dropdown], [class*=autocomplete], [class*=options]) > li',
+  ].join(', ');
+  const STATUS =
+    '[class*=no-result], [class*=noresult], [class*=loading], [class*=empty]';
+  const candidates = () => {
+    const strict = Array.from(doc.querySelectorAll(OPTIONS));
+    const loose = Array.from(doc.querySelectorAll(LOOSE_OPTIONS)).filter(
+      (item) =>
+        !item.matches(OPTIONS) &&
+        !item.closest(OPTIONS) &&
+        !item.querySelector(`${OPTIONS}, ${LOOSE_OPTIONS}`) &&
+        !item.closest(STATUS),
+    );
+    // Document order (a strict option keeps its place among loose ones).
+    return Array.from(new Set([...strict, ...loose])).sort((a, b) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+    );
+  };
   const containerOf = (option) =>
     option.closest('[role=listbox], .el-select-dropdown, ul') ||
     option.parentElement;
@@ -42,9 +67,7 @@
 
   const containers = {};
   const options = [];
-  for (const option of doc.querySelectorAll(
-    '[role=option], .el-select-dropdown__item',
-  )) {
+  for (const option of candidates()) {
     if (!visible(option)) continue;
     const container = containerOf(option);
     const key = keyOf(container);

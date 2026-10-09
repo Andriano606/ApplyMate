@@ -11,6 +11,10 @@ class ApplyMate::Ai::Prompt::Base
   MAX_HREF = 120
   MAX_OPTIONS_SHOWN = 30
   MAX_OPTION_LABEL = 40
+  # role / type / tag are page attributes snapshot.js passes on raw (no trim, no length cap): a kind is ONE short
+  # lowercase token or nothing, so a forged newline ("fake element lines") or a kilobyte attribute never reaches a prompt.
+  MAX_KIND = 24
+  KIND_TOKEN = /\A[a-z][a-z0-9_-]*\z/
   STATE_WORDS = %w[selected expanded pressed disabled required].freeze
   # Element flags shown as state words too: the validator refuses submit / password targets, search marks site chrome.
   FLAG_WORDS = { 'submit_like' => 'submit', 'password' => 'password', 'search_like' => 'search' }.freeze
@@ -60,9 +64,14 @@ class ApplyMate::Ai::Prompt::Base
   end
 
   def kind_of(element)
-    kind = element['role'] || (element['type'] == 'file' ? 'file' : element['tag'])
-    type = element['type']
+    type = kind_token(element['type'])
+    kind = kind_token(element['role']) || (type == 'file' ? 'file' : kind_token(element['tag']))
     type.present? && !%w[text file].include?(type) && type != kind ? "#{kind}:#{type}" : kind.to_s
+  end
+
+  def kind_token(text)
+    value = text.to_s.downcase
+    value if value.length <= MAX_KIND && value.match?(KIND_TOKEN)
   end
 
   def state_words(element)

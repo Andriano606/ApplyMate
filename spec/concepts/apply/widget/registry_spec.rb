@@ -12,7 +12,7 @@ RSpec.describe Apply::Widget::Registry do
 
     expect(described_class.drivers.map(&:key)).to match_array(on_disk)
     expect(described_class.drivers.map(&:key)).to eq(
-      %w[dropzone file_input aria_combobox autocomplete native_select option_group native_check date_input range content_editable text]
+      %w[dropzone file_input aria_combobox typeahead autocomplete native_select option_group native_check date_input range content_editable text]
     )
   end
 

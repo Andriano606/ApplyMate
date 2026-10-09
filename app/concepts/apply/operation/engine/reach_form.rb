@@ -10,7 +10,8 @@
 # 0. landing: the platform is not identified yet (generic) and the lease is fresh -> Recipe::Op::Goto('{landing_url}')
 #    (the final URL of the redirect walk), then a bounded wait in which every poll snapshots the page, runs the
 #    after_goto gates and redetects (LANDING_TIMEOUT when the HTTP level found a probable platform, e.g. Preply's
-#    ?ashby_jid=, else IDENTIFY_TIMEOUT); a platform identified there has its schema read;
+#    ?ashby_jid=, else IDENTIFY_TIMEOUT, cut short when nothing is probable and the page already renders a form:
+#    #form_rendered?); a platform identified there has its schema read;
 # 1. canonical: the adapter's canonical_form_url, at most once per platform per session
 #    (ctx.scratch.canonical_unwrapped, kept by Recipe::Op::Unwrap) and the session is not already on it
 #    (CheckApplyKey.normalized_url, host + path) -> Recipe::Op::Unwrap('{canonical_form_url}');
@@ -67,13 +68,26 @@ class Apply::Operation::Engine::ReachForm < ApplyMate::Operation::Base
 
     op = Apply::Recipe::Op::Goto.new(url_template: '{landing_url}')
     op.perform!(ctx)
-    window = ctx.match&.probable ? LANDING_TIMEOUT : IDENTIFY_TIMEOUT
+    probable = ctx.match&.probable
+    window = probable ? LANDING_TIMEOUT : IDENTIFY_TIMEOUT
+    rendered = false
     identified = ctx.session.wait_until(timeout: ctx.clamp(window)) do
-      Apply::Operation::Engine::Observe.call(ctx:, event: :after_goto).model.known?
+      next true if Apply::Operation::Engine::Observe.call(ctx:, event: :after_goto).model.known?
+
+      rendered = !probable && form_rendered?
     end
-    ctx.trace(:landed, platform: ctx.match&.key, identified: identified == true, url: ctx.session.current_url)
+    identified = identified == true && !rendered
+    ctx.trace(:landed, platform: ctx.match&.key, identified:, form_rendered: rendered, url: ctx.session.current_url)
     read_schema if identified
     [ op.to_h ]
+  end
+
+  # The landing already renders a form (WaitReady::DEFAULT_MIN_FIELDS visible fillable controls): a platform that has
+  # not shown its markers with the form on screen will not show them later, so the identify wait ends here.
+  def form_rendered?
+    wait_ready = Apply::Operation::Engine::WaitReady
+    root = ApplyMate::Client::Browser::Target.css(wait_ready::DEFAULT_ROOT)
+    ctx.session.ready?(root, timeout: 0, min_fields: wait_ready::DEFAULT_MIN_FIELDS)
   end
 
   def read_schema

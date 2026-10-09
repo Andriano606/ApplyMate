@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # The user types the code a running apply is waiting for (Engine::AwaitInput): owner only, one guarded UPDATE that
-# stores it only while the apply is running, parked in stage 'awaiting_input' with an open input_request. The run
+# stores it only while the apply is running, parked in stage Engine::AwaitInput::STAGE with an open input_request. The run
 # polls the column (by its run_token) and consumes it; a code sent at any other time changes nothing.
 class Apply::Operation::ProvideInput < ApplyMate::Operation::Base
   MAX_CODE_LENGTH = 32
@@ -22,7 +22,7 @@ class Apply::Operation::ProvideInput < ApplyMate::Operation::Base
 
   def store!(code)
     now = Time.current
-    updated = Apply.where(id: model.id, state: :running, stage: 'awaiting_input')
+    updated = Apply.where(id: model.id, state: :running, stage: Apply::Operation::Engine::AwaitInput::STAGE)
                    .where.not(input_request: nil)
                    .update_all(input_response: { 'code' => code, 'at' => now.iso8601 }, updated_at: now)
     invalid!(:base, I18n.t('apply.provide_input.not_allowed')) if updated.zero?

@@ -137,7 +137,7 @@ parallel tables. The i18n spec iterates `CODES`: every code needs `apply.failure
 | transient | failed | `worker_lost deadline browser_crashed capacity` |
 | permanent | failed | `budget_exhausted ai_budget_exhausted ai_lifetime_cap stuck invalid_ai_output required_field_unfillable no_widget_driver target_not_found target_obstructed validation_rejected invalid_record unexpected_error review_expired human_timeout legacy_failure` |
 | unsupported | unsupported | `login_required closed_posting bot_wall not_a_form no_application_path external_messenger private_address wizard_too_long` |
-| needs_human | needs_human | `captcha_challenge email_code missing_profile_fact session_expired manual_apply_required` |
+| needs_human | needs_human | `captcha_challenge email_code missing_profile_fact session_expired manual_apply_required ai_quota_exhausted` |
 | unverified | submit_unverified | `already_claimed outcome_unknown` |
 | review | needs_review | `review already_applied` |
 
@@ -164,6 +164,9 @@ nil for `HaltUnowned` / `ExpireWaiting`.
 | `ApplyMate::Client::Browser::DeadlineExceeded` | `deadline` (transient) |
 | `Apply::Operation::Engine::Throttled` | `capacity` (the step row; the apply goes to `waiting_capacity`, like `PoolBusy`) |
 | `ApplyMate::Client::LocalChrome::Busy` | `capacity`, but NOT `waiting_capacity`: a transient halt through `RecordHalt` → one auto-resume (before the claim), the second one stays `failed(:capacity)` (the process-wide local Chrome slot stayed taken: GeminiScraping, the Grover CV render; see [Latency-aware budgets](#latency-aware-budgets-and-the-local-chrome-slot)) |
+| `ApplyMate::Ai::Client::Base::Unavailable` | `capacity` (transient, one auto-resume before the claim): the AI provider answered 429 / 5xx / timed out (overload, per-minute rate limit) after `CallAi`'s bounded retries (`TRANSIENT_RETRIES = 2`, deadline-clamped backoff). `Client::Gemini#with_retries` raises it with the message scrubbed (`Client::Base.scrub`) and `cause: nil`; `SmokeSurvey` reports it as its halt line |
+| `ApplyMate::Ai::Client::Base::QuotaExhausted` | `ai_quota_exhausted` (needs_human, never retried): the provider's quota is used up for hours (Gemini: a `PerDay` quotaId in the 429 body, or `retryDelay` >= `QUOTA_RETRY_DELAY = 3_600` s). The user retries later (Resume) or cancels and applies again with another integration |
+| any other `ApplyMate::Ai::Client::Base::ProviderError` (e.g. a Gemini 400) | `unexpected_error`; message `"<Faraday class>: <scrubbed message + body excerpt>"`, no cause chain |
 | `ApplyMate::Ai::Client::Base::DeadlineTooShort` | `deadline` (transient): the AI call's timeout was shorter than the client can start in (GeminiScraping: < `SETUP_SECONDS`), i.e. the run is out of time, nothing is contended |
 | `ApplyMate::Client::Browser::TargetNotFound` | `target_not_found` |
 | `ApplyMate::Client::Browser::Obstructed` | `target_obstructed` |
@@ -274,10 +277,19 @@ the non-engine callers (`VacancyCv`, `VacancyQuestion`, `ExtractFacts`, `Generat
    `ai_calls_total > 90` is `Halt(:ai_lifetime_cap)` (checked first), `ai_calls > 30` is `Halt(:ai_budget_exhausted)`.
 4. `timeout = min(client.call_seconds(kind), the caller's own cap, floor(ctx.remaining - 30))`; below 5 s is
    `Halt(:deadline)`. `call_seconds(kind)` is the client's declared latency (`Client::Base.call_seconds`, the one
-   latency declaration): the kind's `Request::TIMEOUTS` for an API, `GeminiScraping::CALL_SECONDS` = 240 s. Inside a lease `retries: 0` (a sleeping retry
-   burns the lease deadline); outside it the kind default (`Request::RETRIES`).
-5. `AiHandler.complete`; the tokens are added SQL-side (`col = col + n`) to `applies.ai_input_tokens/ai_output_tokens`
-   and to `ctx.scratch.step_record` (a provider that reports none counts 0); trace `ai_call`.
+   latency declaration): the kind's `Request::TIMEOUTS` for an API, `GeminiScraping::CALL_SECONDS` = 240 s. Recomputed
+   before every try.
+5. `AiHandler.complete` with client `retries: 0`: `CallAi` owns the retry, inside a lease and outside. A transient
+   `Client::Base::Unavailable` (429 rate limit, 5xx, timeout) is retried at most `TRANSIENT_RETRIES = 2` times after
+   `RETRY_BACKOFF * 2**(n-1)` s (2 s, 4 s), clamped to `floor(ctx.remaining - AI_RESERVE - MIN_TIMEOUT)`; with no room
+   left or the retries spent, `Unavailable` propagates (Runner: `capacity`). What stops it when the provider stays
+   down: the retry count and the deadline. Each retry is traced `ai_retry` (`attempt`, `wait`, scrubbed `error`),
+   re-checks the fence after the sleep, and is NOT re-counted in the AI budget (same call). `QuotaExhausted` is never
+   retried (Runner: `ai_quota_exhausted`).
+6. the tokens are added SQL-side (`col = col + n`) to `applies.ai_input_tokens/ai_output_tokens` and to
+   `ctx.scratch.step_record` (a provider that reports none counts 0); trace `ai_call`. A schema-invalid answer is
+   accounted too before `InvalidResponse` propagates (`AiHandler` sets `InvalidResponse#usage`; traced with
+   `invalid: true`).
 
 `InvalidResponse` / `EmptyResponse` propagate: the caller decides about its single retry, the Runner maps what is left.
 
@@ -287,6 +299,8 @@ the non-engine callers (`VacancyCv`, `VacancyQuestion`, `ExtractFacts`, `Generat
 | `MAX_AI_CALLS_PER_APPLY` | 90 |
 | `AI_RESERVE` | 30 s kept for the step after the call |
 | `MIN_TIMEOUT` | 5 s |
+| `TRANSIENT_RETRIES` | 2 (retries of `Unavailable`) |
+| `RETRY_BACKOFF` | 2 s, doubled per retry, clamped to the deadline |
 
 ### Latency-aware budgets and the local Chrome slot
 
@@ -561,7 +575,7 @@ Predicates: `file?`, `fillable?` (not hidden), `option_kind?` (`OPTION_KINDS`), 
 
 ### Profile facts
 
-`UserProfile::Operation::ExtractFacts` makes one AI call and stores the result under `facts['ai']`. Two callers: the job `UserProfile::Job::ExtractFacts` (queue `:apply`, enqueued by profile Create/Update when `saved_change_to_cv?`; the user's default AI integration, none -> facts stay `nil`; `retry_on` `EmptyResponse` / `InvalidResponse` / `GeminiScraping::ResponseTimeoutError` / `Faraday::Error`, 3 attempts, `polynomially_longer`) and `Stage::AnswerFields` (inline before `Answer::Resolve`, with `apply.ai_integration`), so a profile whose facts were never extracted (created before the column, saved without an integration, a job out of retries) gets them at its next apply: no absorbing "facts nil" state. It returns early while `facts_cv_digest` equals the CV digest. A re-extraction replaces only `facts['ai']`; `facts['user']` is kept and `UserProfile#fact(key)` returns the user value before the AI value.
+`UserProfile::Operation::ExtractFacts` makes one AI call and stores the result under `facts['ai']`. Two callers: the job `UserProfile::Job::ExtractFacts` (queue `:apply`, enqueued by profile Create/Update when `saved_change_to_cv?`; the user's default AI integration, none -> facts stay `nil`; `retry_on` `EmptyResponse` / `InvalidResponse` / `GeminiScraping::ResponseTimeoutError` / `Client::Base::Unavailable` / `Faraday::Error`, 3 attempts, `polynomially_longer`) and `Stage::AnswerFields` (inline before `Answer::Resolve`, with `apply.ai_integration`), so a profile whose facts were never extracted (created before the column, saved without an integration, a job out of retries) gets them at its next apply: no absorbing "facts nil" state. It returns early while `facts_cv_digest` equals the CV digest. A re-extraction replaces only `facts['ai']`; `facts['user']` is kept and `UserProfile#fact(key)` returns the user value before the AI value.
 
 ## Context scratch
 
@@ -631,7 +645,7 @@ the step is skipped with `restore` when a succeeded row with the same key and `i
 | `throttle` | `Stage::AcquireHostSlot` | — | always | none; raises `Engine::Throttled` (→ `waiting_capacity`, retried by `Job::Apply` up to `MAX_THROTTLE_WAITS`, then `capacity`) |
 | `navigate:replay:submit` | `Stage::ReachForm replay: true` | `:submit` | always | `not_a_form`; after a `recipe_drift` the Navigator's halts (heal mode) |
 | `discover:submit` | `Stage::DiscoverFields reconcile: true` | `:submit` | always | after_goto gates |
-| `fill:submit` | `Stage::FillFields` | `:submit` | always | `required_field_unfillable` (after `RecoverField`), `review` (before any Next click and before the claim), `wizard_too_long` (> `MAX_WIZARD_PAGES` = 6 pages, > `MAX_FOLLOWUP_ANSWER_CALLS` = 8 follow-up answer calls), `target_not_found` (no submit or Next button; a stored required later-page field never shown), `no_widget_driver`, `target_obstructed`, after_action gates on a new page |
+| `fill:submit` | `Stage::FillFields` | `:submit` | always | `required_field_unfillable` (after `RecoverField`), `review` (before any Next click and before the claim), `validation_rejected` (a Next click that leaves the page key unchanged), `wizard_too_long` (> `MAX_WIZARD_PAGES` = 6 pages, > `MAX_FOLLOWUP_ANSWER_CALLS` = 8 follow-up answer calls), `target_not_found` (no submit or Next button; a stored required later-page field never shown), `no_widget_driver`, `target_obstructed`, after_action gates on a new page |
 | `submit:submit` | `Stage::Submit` | `:submit` | always | before the claim: `deadline` (< `SUBMIT_RESERVE` = 120 s left), before-submit gates, `target_not_found` (no or ambiguous button), `wizard_too_long` (`ClassifyAdvance` says `:next`: a page FillFields did not consume); after the claim every halt is `submit_unverified` |
 | `verify:submit` | `Stage::Verify` | `:submit` | always | `validation_rejected`, `outcome_unknown` (→ `submit_unverified`) |
 
@@ -790,7 +804,7 @@ Events (`Base::EVENTS`): `http_resolved` (after the redirect walk, evidence only
 | `ExternalMessenger` | http_resolved, after_goto | main URL on `t.me`, `telegram.me`, `wa.me`, `m.me` (embedded frames ignored) | `Halt(:external_messenger)` |
 | `SignInWall` | http_resolved, after_goto, after_action | main URL on `OAUTH_HOSTS` (accounts.google.com, login.microsoftonline.com, linkedin.com/oauth, linkedin.com/uas/login, github.com/login), or a visible password field in the snapshot | `Halt(:login_required)` |
 | `DataDome` | http_resolved, after_goto | `captcha-delivery.com` in hops / current URLs / scripts / frames, or snapshot captcha `datadome` | `Halt(:bot_wall)` |
-| `ClosedPosting` | after_goto, after_action | a frame's outline / alerts match `CLOSED_LEXICON` (en / uk / ru) AND that frame has no visible fillable control (`BuildFieldInventory.control?`): a form page with a "closed" footer line stays silent | `Halt(:closed_posting, detail: matched text)` |
+| `ClosedPosting` | after_goto, after_action | a frame's outline headings (never its `tabs ...` entries) / alerts match `CLOSED_LEXICON` (en / uk / ru; the adjective-first "Закрита вакансія" / "Закрытая вакансия" only as a whole singular line, so a "Закриті вакансії" filter or list heading is not a closed posting) AND that frame has no visible fillable control (`BuildFieldInventory.control?`, filled or empty, except a LONE filled select / combobox, the language switcher of a closed page): a form page with a "closed" footer line stays silent, also after its last fill | `Halt(:closed_posting, detail: matched text)` |
 | `CookieConsent` | after_goto, after_action | a visible enabled button whose whole name matches `CONSENT_LEXICON` (necessary / essential only, reject all; uk + en), else `LAST_RESORT` (accept all) | clicks it (`session.click` + `settle(:click)`), never raises; at most `MAX_CLICKS = 2` per session |
 | `VisibleCaptcha` | after_action, before_submit | snapshot captcha `recaptcha`, `recaptcha_challenge`, `hcaptcha`, `turnstile` (invisible kinds ignored) | `Halt(:manual_apply_required, detail: :captcha)` (§18) |
 | `EmailCode` | after_submit | a frame's outline / alerts match `CODE_LEXICON` AND it has a visible text input with `autocomplete=one-time-code` or a name / id / placeholder like code / otp / verification | `Engine::AwaitInput` (parks the run), returns true; otherwise nil |
@@ -806,18 +820,23 @@ After the submit click (the claim already exists) `Gate::EmailCode` finds a code
 
 1. `expires_at = now + min(MAX_WAIT, ctx.remaining - RESERVE)`; `MAX_WAIT = 5 min`, `RESERVE = 60 s`; nothing left is
    `Halt(:email_code, 'no time to wait')`.
-2. Fenced `persist!(stage: 'awaiting_input', input_request: { kind, requested_at, expires_at }, input_response: nil)` +
+2. Fenced `persist!(stage: AwaitInput::STAGE ('awaiting_input'), input_request: { kind, requested_at, expires_at }, input_response: nil)` +
    `Engine::Broadcast`: the UI shows the code box (`Apply::Component::InputRequest`, "UI").
 3. Every `POLL_INTERVAL = 3 s`: `ctx.check_fence!`, then `Apply.where(id:, run_token:).pick(:input_response)` (primary
    key). The apply thread is parked here (one thread per browser slot); the heartbeat TimerTask keeps the row alive.
 4. The user posts the code to `Apply::Operation::ProvideInput`, which stores `input_response` `{code, at}` with ONE
-   guarded UPDATE (`state = running AND stage = 'awaiting_input' AND input_request IS NOT NULL`; 0 rows is
-   `not_allowed`).
+   guarded UPDATE (`state = running AND stage = AwaitInput::STAGE AND input_request IS NOT NULL`; 0 rows is
+   `not_allowed`). `AwaitInput::STAGE` is the ONE name of the stage (ProvideInput and `Component::InputRequest` read
+   it). The `code` param is filtered from the request log (`/\Acode\z/` in `config/initializers/filter_parameter_logging.rb`).
 5. Code received: request and response are cleared, stage back to `submit`; the code is written through `SetFieldValue`
    (read-back; a `Mismatch` is `Halt(:email_code, 'code not accepted')`), the ONE visible `submit_like` button of the
    frame is clicked (Enter in the input when there is not exactly one), `settle(:submit)`, trace `email_code_entered`
    (never the code). Verify runs as usual.
-6. Timeout: request cleared, stage `submit`, `Halt(:email_code)`; the claim rule lands it in `submit_unverified`.
+6. Timeout (the poll loop ends at `expires_at`): ONE fenced, guarded UPDATE closes the request
+   (`FencedUpdate(attributes: { input_request: nil, stage: 'submit' }, extra_condition: { input_response: nil })`).
+   0 rows means a code arrived after the last poll (the user answered in time): it is read and used as in 5. Once the
+   request is closed, ProvideInput's guard refuses a late code. Nothing stored → `Halt(:email_code)`; the claim rule
+   lands it in `submit_unverified`.
 
 Columns `applies.input_request` / `input_response` (jsonb); cleared by `AwaitInput`, by `StartContext` (a resumed run
 never consumes a stale code) and by `Lifecycle::Decide#attributes` (`input_request: nil` on every halt, so no apply
@@ -860,13 +879,17 @@ Per fillable field, the first rule that applies wins; a field whose `condition` 
 1. An answer with source `user` from an earlier review is kept as it is.
 2. `platform.answer_override(field)` -> `override`.
 3. `Answer::Classify` gives the `semantic` (persisted back onto the field): platform key (`Platform::Base#semantic_for`,
-   Ashby `_systemfield_*`) -> `password` flag -> `file` kind (cv) -> `email` / `tel` kind -> `field.autocomplete` (`Classify::AUTOCOMPLETE`) ->
+   Ashby `_systemfield_*`) -> `password` flag -> `file` kind (by label first, `Classify#file`: resume-parse helper ->
+   `other`; cover / motivation letter -> `cover_letter`; label names the CV (`cv_file`) -> `cv`; portfolio / additional
+   / other attachments (`extra_files`) -> `other`; no label (blank or a generic "Attach") -> `cv`; any other label ->
+   `cv` when required, else `other`) -> `email` / `tel` kind -> `field.autocomplete` (`Classify::AUTOCOMPLETE`) ->
    label (then placeholder) against `config/apply/field_semantics.yml` (uk / en / ru regexes, first semantic wins,
    sensitive ones first, a regex under one semantic only) -> `other`. The text is normalized first
    (`Classify::TRAILER`: trailing `* : . ? !` and a trailing `(...)` note cut). Profile-fact patterns (names, email,
-   phone, location) are anchored to the whole label and `consent_required` names consent wording only, because both
+   phone, country, location) are anchored to the whole label and `consent_required` names consent wording only, because both
    are answered at confidence 1.0 with no review reason: "Are you open to relocation?", "Name of your current
-   employer" or "Do you agree to work from the office?" must reach the AI as `other`. Nationality / national origin
+   employer" or "Do you agree to work from the office?" must reach the AI as `other`. A bare "Country" is `country`, not
+   `location`: a city typed into a country picker matches no option. Nationality / national origin
    are `demographic`, citizenship is `legal_status`.
 4. **Sensitive semantics never reach the AI.**
    `password` -> `Halt(:login_required)`; `demographic` -> the user's explicit `demographic` fact (matched to the
@@ -874,7 +897,7 @@ Per fillable field, the first rule that applies wins; a field whose `condition` 
    `Halt(:missing_profile_fact, detail: field id)` when required; `legal_status` -> the `work_authorization` fact only,
    else the same empty / halt.
 5. Profile facts (`Answer::ResolveFact`: `UserProfile#fact`, `email` falls back to `user.email`, `full_name` to the profile
-   name, languages are joined; `cv` -> `Answer::FileRef.cv`, stored as `{ 'file' => 'cv' }`). A fact that does not fit
+   name, `country` to the last comma-separated part of the `location` fact ("Kyiv, Ukraine" -> "Ukraine"), languages are joined; `cv` -> `Answer::FileRef.cv`, stored as `{ 'file' => 'cv' }`). A fact that does not fit
    the field's options goes to the AI instead. A file field with any other semantic (a platform key mapping it to
    `cover_letter`, ...) never reaches the AI: empty when optional, `Halt(:missing_profile_fact)` when required (an AI
    string would become an upload path; `Stage::FillFields` also uploads only a `FileRef`, never a string answer).
@@ -883,7 +906,11 @@ Per fillable field, the first rule that applies wins; a field whose `condition` 
    a list when `field.multi_valued?`); source `policy` when `users.auto_consent` (default **true**, design
    §18.3), `policy_pending` when the user opted out. No affirmative option: a required field gets
    `{ value: nil, source: policy_pending }` and the user fills it in the review form; an optional one stays empty.
-   `marketing_opt_in` is never set (`Answer::Resolve` returns nil for it; `ResolveConsent` only sees `consent_required`).
+   `marketing_opt_in` is never set (`Answer::Resolve` returns nil for it; `ResolveConsent` only sees `consent_required`);
+   a `marketing_opt_out` checkbox ("I do not want to receive the newsletter") is CHECKED (source `policy`): unchecked it
+   would opt the user in. Its lexicon needs a negated subscription phrase, or a whole-label "Unsubscribe" / "Opt out
+   (of marketing emails)": an opt-in or consent text ending "you can unsubscribe at any time", or an EEO "you may opt
+   out of answering", must never classify as an opt-out (it would be ticked).
 7. Everything else, in ONE AI call (`Apply::Ai::Prompt::AnswerFields`, schema `Apply::Ai::ResponseSchema::AnswerFields`, kind
    `:answers`): fields as id / kind / label / description / options / required / max_length plus
    `platform.answer_hints` (`{ field_id => text }`), the vacancy text and every field description inside
@@ -934,7 +961,7 @@ ONE state-guarded `UPDATE ... WHERE id AND state = needs_review` writes `answers
 `role`, `name` (accessible name), `question`, `group` / `group_key` / `options` (radio / option groups, comboboxes),
 `attrs` (`id name type autocomplete placeholder accept multiple maxlength value data-field-path`), `chip`, `href`,
 `required`, `filled`, `visible`,
-`disabled`, `password`, `search_like`, `submit_like`, `regions` (which of the requested `regions` selectors contain it),
+`disabled`, `password`, `search_like`, `submit_like`, `scope` (`dialog` / `form` [`#id`] or null), `regions` (which of the requested `regions` selectors contain it),
 `root_strategies` (the field root) and `target` (an `ApplyMate::Client::Browser::Target` with its `frame_path`).
 
 `Engine::FormElements.snapshot(ctx)` asks for the regions `[form_root css, *platform.excluded_regions]`;
@@ -954,7 +981,9 @@ R. **replay** — a stored navigation (submit scope): its ops through `Recipe::I
    cleared by `Interpret`, so the submit scope always finds its own.
 0. **land** — generic match on a fresh (`about:blank`) lease → `Goto('{landing_url}')` and a poll of
    `Engine::Observe(:after_goto)` until the platform is known: `LANDING_TIMEOUT = 20` s when the HTTP level found a
-   `probable` platform (Preply's `?ashby_jid=`), else `IDENTIFY_TIMEOUT = 5` s.
+   `probable` platform (Preply's `?ashby_jid=`), else `IDENTIFY_TIMEOUT = 5` s, ended at the first poll when nothing is
+   probable and the page already renders a form (`ReachForm#form_rendered?`: `session.ready?(body, timeout: 0,
+   min_fields: WaitReady::DEFAULT_MIN_FIELDS)`); traced `landed` (`identified`, `form_rendered`).
 1. **unwrap_canonical** — `platform.canonical_form_url` present, not yet unwrapped for this platform in this session
    (`ctx.scratch.canonical_unwrapped`, appended by `Op::Unwrap#perform!` whoever runs it), and not the current page by
    `CheckApplyKey.normalized_url` (host + path) → `[Unwrap('{canonical_form_url}')]` through `Interpret`.
@@ -1064,18 +1093,29 @@ One turn:
    Traced `navigator_turn` / `navigator_invalid`.
 6. **give_up** → `Halt(give_up_code)` (trace `navigator_give_up`), except `captcha_challenge` →
    `Halt(:manual_apply_required, detail: :captcha)` (§18, `GIVE_UP_HALTS`). A missing code is invalid output.
-7. **form_reached** → the claimed root: a `dialog` scope (`CONTAINER_ROLES`) is the root itself (`#id` when its id is a
-   stable `attr` strategy and CSS-safe, else its `css` path); otherwise the closest common ancestor of the `css` paths
-   (`tag:nth-of-type` chains from snapshot.js) of `scope_ref`, `field_refs`, `submit_ref` and `advance_ref` in the
-   scope's frame, widened to the enclosing `<form>` when there is one. No root → rejected (`no_root`). Then a fresh
+7. **form_reached** → the claimed root: a `dialog` scope (`CONTAINER_ROLES`) is the root itself (its `css` path);
+   otherwise the closest common ancestor of the `css` paths (`tag:nth-of-type` chains from snapshot.js) of `scope_ref`,
+   `field_refs`, `submit_ref` and `advance_ref` in the scope's frame, widened to the enclosing `<form>` when there is
+   one. Either path is then re-addressed by `probe(:anchor)` (`Navigate#anchored`, probe/anchor.js): a stable `#id`,
+   `tag[data-*]` / `tag[name]`, `tag[role][aria-label]`, the page's only `form`, or the nearest such ancestor plus a
+   few `nth-of-type` steps (`#form > div:nth-of-type(2)`); the absolute path only when nothing on the way up is stable.
+   A banner inserted above the form then does not shift a replayed `wait_for`. No root → rejected (`no_root`). Then a fresh
    `snapshot_all(markers:, regions: [root_css])`, the elements of the root's frame → `AssessFormLikeness(root:)` (R2)
    and `CheckOrigin` (judged on the current URL, kept only when accepted); traced `form_claim` (`accepted`, `reason`,
    `fillable`, `file_inputs`, `root`, `origin_ok`, `host`). Accepted → `ctx.form_root = Target.css(root_css,
-   frame_path:)`, `ctx.form_url`, append `WaitFor(root:, frame_path:, min_fields: fillable.clamp(1,
-   WAIT_FOR_MAX_FIELDS = 3))`, return. Rejected → the reason goes into the next prompt's errors; the next turn (already
+   frame_path:)`, `ctx.form_url`, `ctx.scratch.claim_left_out` (`Navigate#left_out`: the css paths,
+   `BuildFieldInventory.dom_key`, of the optional fillable controls in the root the AI saw and left out of
+   `field_refs` - a helper upload; never a required control, and none at all when `field_refs` is empty or more were
+   left out than listed; reset by `close_scope!`, read once by `Stage::DiscoverFields` in the survey), append
+   `WaitFor(root:, frame_path:, min_fields: <probe(:readiness) fields under the root>.clamp(1, WAIT_FOR_MAX_FIELDS = 3))`
+   (the replay's `Session#ready?` counts with the same probe, so the stored minimum never drifts), return. Rejected → the reason goes into the next prompt's errors; the next turn (already
    counted) looks again.
 8. **continue** → at most `MAX_ACTIONS_PER_TURN = 3` actions, each through `Engine::ExecuteAction` against the snapshot
-   the AI saw: an action whose signature (`"<fingerprint> <type>"`, `"tab:<i> switch_tab"`, `"page wait"`) is in
+   the AI saw (a click / press that changed nothing gets ONE second look, `ExecuteAction::SECOND_LOOK_SECONDS = 2.5`,
+   before it counts as "no change": a modal that fades in after the network settle; the URL / tab count is read
+   again after the look, so a delayed JS redirect is `navigated`, and a look whose snapshots all failed keeps the
+   post-action snapshot): an action whose signature
+   (`"<fingerprint> <type>"`, `"tab:<i> switch_tab"`, `"page wait"`) is in
    `@forbidden` is skipped; a rejected one → its reason into the next prompt's errors; a performed one → its ops into
    the recipe, trace `navigate`. The batch stops at the first page change (`page_changed`); when nothing changed,
    every performed action becomes FORBIDDEN (listed by its current ref in the next prompt).
@@ -1093,7 +1133,7 @@ row, `CallAi`'s caps, the scope deadline (`Context#scope_deadline`: 8 min, 20 mi
 | same state | `STUCK_AFTER = 3` | `Halt(:stuck)` |
 | invalid answers in a row | `MAX_INVALID_IN_A_ROW = 2` | `Halt(:invalid_ai_output)` |
 | AI calls | `CallAi::MAX_AI_CALLS_PER_ATTEMPT = 30`, `MAX_AI_CALLS_PER_APPLY = 90` | `Halt(:ai_budget_exhausted)` / `Halt(:ai_lifetime_cap)` (SQL-side counter) |
-| one AI call | `Request::TIMEOUTS[:navigate] = 60` s clamped by `CallAi`, `retries: 0` inside the lease | |
+| one AI call | `Request::TIMEOUTS[:navigate] = 60` s clamped by `CallAi`; `CallAi::TRANSIENT_RETRIES = 2` deadline-clamped retries of `Unavailable` | `capacity` / `ai_quota_exhausted` |
 | wait action | `ExecuteAction::MAX_WAIT_MS = 5_000` (default `DEFAULT_WAIT_MS = 2_000`) | clamped, then `ctx.clamp` |
 
 **Action vocabulary** (closed; `ResponseSchema::Navigate::ACTION_TYPES`; there is no `fill`):
@@ -1118,6 +1158,8 @@ action, the AI's own when rejected). A rejection never touches the session, neve
 | type not in `allowed` / the vocabulary | `action_not_allowed` |
 | `click` / `press` / `scroll` / `navigate` ref not in the snapshot (hallucinated) | `unknown_ref` |
 | `click` / `press` on a `submit_like` / `password` element | `submit_like` / `password` |
+| `click` / `press` on what sends the application by NAME (`sends_application?`, never on an `<a>` whose href navigates: not `#`, not `javascript:`): a `ClassifyAdvance::FINAL_LEXICON` verb (send / submit / apply / respond) on an element with a `scope` (dialog / form, unique per container) that holds another visible fillable control, or a `SnapshotAll::SUBMIT_TEXT` verb outside any scope on a frame with another visible formless fillable control (an SPA form without a `<form>`). A launcher on the page itself ("Apply now", a `data-toggle=modal` "Надіслати резюме") stays clickable | `submit_like` |
+| `click` / `press` on a file input's chooser link / button (snapshot.js `file_trigger`; it only opens the OS file dialog) | `file_trigger` |
 | `press` key not in `Op::Press::KEYS` | `unknown_key` |
 | `press Enter` on a fillable control (`BuildFieldInventory.control?`): implicit form submit | `implicit_submit` |
 | `navigate` without `href` | `no_href` |
@@ -1170,18 +1212,37 @@ when `users.review_policy == unknown_platforms` (default `never`, §18).
 
 ## Field inventory
 
-`BuildFieldInventory.call(ctx:, snapshot:)` → `[Apply::Field]`, one per control or group of `FormElements`:
+`BuildFieldInventory.call(ctx:, snapshot:, left_out: Set.new)` → `[Apply::Field]`, one per control or group of
+`FormElements` (minus the `left_out` dom_keys: `Stage::DiscoverFields` passes `ctx.scratch.claim_left_out` in the
+survey, nothing when reconciling):
 
 - **Controls** (`BuildFieldInventory.control?`, the one rule): inputs except buttons, `textarea`, `select`, grouped
   elements, `chooser` upload buttons and `textbox/combobox/radio/checkbox/switch` roles that are not `<button>`;
-  `search_like` and `disabled` elements are skipped. Units: `group_key` (radio / option groups), checkboxes sharing a
+  `search_like`, `disabled` and non-rendered (`visible: false`, except a file input) elements are skipped, and so are
+  `helper?` ones: a `captcha_artifact` (g-recaptcha / h-captcha / cf-turnstile response), aria-hidden, or ANY readonly
+  control (a readonly input that opens a list is a `combobox` group instead). Resume-parse helpers
+  (`Answer::Classify.helper_control?`, `field_semantics.yml` `helper_controls`: "Autofill from resume", "Autocomplete
+  from resume", "Parse resume"; `Classify` never gives such a file field `cv`, it is `other`) are dropped, and
+  so is an optional snapshot field with no label, no description and no or only a generic placeholder ("Type here...").
+  Label: a group's question, else the control's name, else the question, else the placeholder without its trailing
+  `*` / `✱` (`placeholder_label`; never a generic one nor a date mask); a generic name (`Classify.generic_name?`:
+  `generic_names` + `affirm`, e.g. "Attach") yields to the question. A checkbox keeps its name (`Widget::NativeCheck`
+  clicks its label by that text); a generic one ("Acknowledge/Confirm") gets the question as `description`, which
+  `Answer::Classify` reads only for such a label. Implied required:
+  `REQUIRED_LEXICON` (a required word, or a `*` / `✱` left in the label / placeholder: Hurma / Vuetify validate in JS
+  only), or a `CORE_SEMANTICS` classification (`full_name first_name last_name email phone cv`), where `cv` counts only
+  when the label names the CV (`Classify.cv_file?`, `cv_file`); never when `OPTIONAL_LEXICON` matches ("Phone
+  (optional)", "необов'язково"). Units: `group_key` (radio / option groups), checkboxes sharing a
   field root (→ `checkbox_group`), else one element.
 - **Kind**: schema kind when `platform.field_key(RawField)` matches a `ctx.schema` id, else DOM (`text email tel url number
   textarea select multiselect combobox autocomplete radio_group option_group checkbox checkbox_group file date range
   rich_text`). DOM rules beyond the tag / type: a `chooser` element (snapshot.js: a visible button / `[role=button]` whose
   name matches `UPLOAD_LEXICON` with no `input[type=file]` in its field root) → `file`; a `role=combobox` text input with
   `aria-autocomplete` `list`/`both`, not readonly and without `aria-haspopup` (a typeahead, no select chrome) →
-  `autocomplete` (`AUTOCOMPLETE_LISTS`); a text input whose placeholder is a date mask (`Widget::DateInput.masked?`,
+  `autocomplete` (`AUTOCOMPLETE_LISTS`), and so is an ARIA-less typeahead (snapshot.js `typeahead`: a `type=text`
+  input beside a suggestion container, Lever's location input); a custom select (snapshot.js `combobox` group: a readonly
+  input over a list of `[role=option]` / `[data-value]` items, an `aria-haspopup=listbox` button / div trigger) →
+  `combobox`; a text input whose placeholder is a date mask (`Widget::DateInput.masked?`,
   e.g. `dd.mm.yyyy`) → `date`; `type=date/month/week/datetime-local` → `date`; `type=range` → `range`; a contenteditable
   → `rich_text`. A single-choice schema kind (`select combobox autocomplete radio_group option_group`) yields to the DOM's
   single-choice kind: Ashby's Boolean / small ValueSelect becomes `radio_group` or `option_group` as the page draws it.
@@ -1190,11 +1251,18 @@ when `users.review_policy == unknown_platforms` (default `never`, §18).
   Without a schema match everything comes from the DOM (`source: 'snapshot'`, id `f_<signature>_<ordinal>`).
 - **Target**: the element's target; groups get the field root as `root` (`:required` visibility is judged on it), file
   inputs keep the hidden input as target with the dropzone as root.
+- **Options**: a select's / group's own; a `combobox` still `'dynamic'` is opened to read them
+  (`Engine::ReadComboboxOptions`: `dom_mark`, click, `ArrowDown`, `wait_for_listbox(timeout: ctx.clamp(WAIT = 2))`, then
+  `CLOSERS` (Escape, Tab, one more click) until no option is open, each given `CLOSE_WAIT = 0.5` s; labels as values, ≤ `MAX_OPTIONS = 100`;
+  nil on nothing / `TargetNotFound` / `Obstructed`) for the first `MAX_PROBED_COMBOBOXES = 6` comboboxes per inventory;
+  an `autocomplete` (options depend on the typed text), a probe that opened nothing and those past the cap stay
+  `'dynamic'`. The signature is computed before the probe, so ids never depend on it.
 - **Identity**: `signature = Apply::Field.signature_for(label:, kind:, option_labels:)`, `ordinal` = position among equal
   signatures (DOM order). Two fields with one id → `Halt(:unexpected_error, detail: 'field id collision')`.
 - **Widget**: `Apply::Widget::Registry.find(field)&.key` (nil = no driver; FillFields halts `no_widget_driver` only if it
   must fill it); a `chooser` element is always `dropzone` (set explicitly: its kind alone, `file`, would pick
-  `FileInput`; `Registry.find` prefers the stored key, so a stored field keeps its driver).
+  `FileInput`; `Registry.find` prefers the stored key, so a stored field keeps its driver); an `autocomplete` from a
+  snapshot.js `typeahead` is `typeahead` (`Widget::Typeahead`, never picked by kind).
 
 `ReconcileFields.call(stored:, fresh:)`: each stored field takes the fresh one with the same id, else the same
 `(signature, ordinal)`; the result is the FRESH field (target, widget, DOM state) under the stored id, semantic and
@@ -1222,6 +1290,7 @@ the answer.
 | `FileInput` (`file_input`) | file | `upload(target, path)` (`:attached`: hidden / clipped input) | - | displayed file name == basename | `:file` |
 | `AriaCombobox` (`aria_combobox`) | combobox | for `PREFIXES = [10, 4]`: `dom_mark`, click, unless readonly `fill('')` + `type(prefix)`, `press('ArrowDown')`, `wait_for_listbox(since:, timeout: ctx.clamp(5))`, `MatchOption` → click the option; none → `Mismatch` | - | chip / displayed text == matched option label | `:click` |
 | `Autocomplete` (`autocomplete`) | autocomplete (typeahead) | for `PREFIXES = [10, 4]` (distinct): click, `fill('')`, `dom_mark`, `type(prefix)` (no ArrowDown: suggestions come from typing), `wait_for_listbox(timeout: ctx.clamp(MAX_WAIT = 5))`; a `MatchOption` match → click it; on the last prefix with suggestions but no match → click the FIRST one and expose it as `approximate_pick`; no suggestions at all → `Mismatch` | - | chip / input value == the picked label | `:click` |
+| `Typeahead` (`typeahead`) | only by stored key: an `autocomplete` from snapshot.js `typeahead` (ARIA-less) | `Autocomplete#write` with `MAX_WAIT = 3`; no suggestion at all (`Mismatch`) → `fill(value)`: a plain text field after all | - | the picked label, else the typed value | `:click` |
 | `NativeSelect` (`native_select`) | select | `MatchOption` → `select(label:)` of the matched option; none (or several) → `Mismatch` before any select call (Playwright would time out on a missing label) | `select(value:)` of the matched option | selected text == option label | `:key` |
 | `OptionGroup` (`option_group`) | radio_group, option_group, checkbox_group | `MatchOption` over the group's choices (from `probe(:snapshot, root)`), click the label / button / `role` option (unpicked ones only for multi) | - | the checked / `aria-pressed` choice names == the wanted labels, not invalid | `:click` |
 | `NativeCheck` (`native_check`) | checkbox | `set_checked` on the visible label when there is one, else the input (`:attached`) | - | `checked` == `MatchOption.truthy?(value)` | `:click` |
@@ -1241,8 +1310,9 @@ answers. Page 1 = `platform.fill_order(ctx.fields)` of the fields with a target 
 fields of later pages without one). Then at most `MAX_WIZARD_PAGES = 6` times:
 
 1. **Fill the page**: every `fillable?` field not already filled (or left unfilled) on an earlier page — a field is
-   never filled twice: no answer → skip, or `Halt(:required_field_unfillable, detail: id)` when required;
-   `SetFieldValue`; `Mismatch` → `RecoverField` (any AI integration); still a `Mismatch` → required:
+   never filled twice: no answer → skip, or `Halt(:required_field_unfillable, detail: id)` when required; in the DOM
+   but not shown (`Session#present?(target, visibility: :required)` false: a CSS-hidden later step, a display:none
+   honeypot; a file input is exempt) → not written, offered again on the next page; `SetFieldValue`; `Mismatch` → `RecoverField` (any AI integration); still a `Mismatch` → required:
    `CaptureArtifact(label: :unfillable)` on `ctx.scratch.step_record` (masked screenshot) and the same halt;
    optional: trace `unfilled` and go on. An approximate pick is persisted as above.
 2. **Review**: `Answer::ReviewRequired` → `Halt(:review)`. It runs on every page, so a follow-up answer that needs a
@@ -1251,13 +1321,26 @@ fields of later pages without one). Then at most `MAX_WIZARD_PAGES = 6` times:
    fields keep their ids, so nothing is asked again.
 3. **`Engine::ClassifyAdvance`** (see Submit and Verify): `nil` → `Halt(:target_not_found, detail: 'no submit or next
    button in the form')`; `:final` → a stored required fillable field that never had a target in this session and was
-   not filled → `Halt(:target_not_found, detail: id)` (the wizard changed under the stored answers), else return
+   not filled → `Halt(:target_not_found, detail: id)` (the wizard changed under the stored answers); one that was in
+   the DOM but never shown (`Session#present?(visibility: :required)` false on every page: a CSS-hidden step that
+   never opened) → the unfilled-required halt (`CaptureArtifact(label: :unfillable)`,
+   `Halt(:required_field_unfillable, detail: id)`); optional never-shown ones are traced `hidden_unfilled`; else return
    (Stage::Submit clicks the `:final` button after the claim); `:next` on page `MAX_WIZARD_PAGES` →
-   `Halt(:wizard_too_long, detail: 'more than 6 pages')` without clicking.
+   `Halt(:wizard_too_long, detail: 'more than 6 pages')` without clicking. ClassifyAdvance runs on a fresh
+   `FormElements.snapshot`, which also gives the page key used in step 4.
 4. **Next page** (`:next`): `GuardAction { session.click(advance.target) }` → `ctx.scratch.wizard_page = page` →
    `settle(:click)` → fresh
    `FormElements.snapshot` → `RunGates(:after_action, snapshot:)` → `Engine::AnswerFollowups.call(ctx:, page:,
    snapshot:)` gives the page's fields; trace `wizard_page` (`page`, `button`, `fields`).
+   **A Next that does not advance**: the page key is `[form frame URL, SnapshotAll.digest_of(form elements) (the
+   Navigator's ONE page-state digest: fingerprint + visible/expanded/selected/pressed/checked/disabled, no values),
+   form frame outline without "dialog …" lines]`. If the key after the click equals the key before it, FillFields
+   runs one more `settle(:click)` and takes one more snapshot (a slow transition). If the key is still the same, the
+   site refused the page: a JS or server check the read-back never sees, such as "email already registered" or a
+   custom error without `aria-invalid`. FillFields traces `wizard_stalled` (`page`, `button`) and halts with
+   `Halt(:validation_rejected, detail: "next did not advance: <form-frame alerts | invalid: <name>>")`
+   (`MAX_STALL_DETAIL = 300`), before any claim. It never clicks the same Next again until `wizard_too_long` (which is
+   `unsupported`, a terminal state).
 
 `Engine::AnswerFollowups` (design `ctx.answer_followups!` / `inventory.discover_new!`): `BuildFieldInventory` on the
 snapshot, `ReconcileFields(stored: ctx.fields, fresh:, strict: false)` (a known field present now takes its fresh target
@@ -1269,7 +1352,8 @@ follow-up or a review edit is reused) go through ONE `Answer::Resolve.call(ctx:,
 lease; `ExtractFacts` is not called); `ctx.persist!(answers: merged, fields:)`. Trace `wizard_fields`. Model = the
 fields on the page now, in `fill_order`.
 
-Termination when the world stays broken: at most `MAX_WIZARD_PAGES` pages (≤ 5 Next clicks), finite fields per page,
+Termination when the world stays broken: a Next that leaves the page key unchanged halts at once (≤ 2 snapshots); at
+most `MAX_WIZARD_PAGES` pages (≤ 5 Next clicks), finite fields per page,
 ≤ `MAX_FOLLOWUP_ANSWER_CALLS` follow-up AI calls (each also counted by `CallAi`'s per-attempt budget), the scope
 deadline over all of it. step_result `{ filled: n, unfilled: [ids], pages: n }`.
 
@@ -1324,12 +1408,20 @@ claim untouched:
      shows evidence of a further page — buttons (`button`, `role=button`, `input[type=submit|button|image]`, not an
      option-group choice) named by `NEXT_LEXICON` (a wizard's Next is often `type=button`, which the probe never
      calls `submit_like`).
+   - No such candidate → the form's buttons named by `FINAL_LEXICON` (a dialog footer's `type=button "Відгукнутися"`
+     outside its `<form>`): inside the form root an apply / respond verb is the final button; outside it the same word
+     is the page's launcher, so `SnapshotAll::SUBMIT_TEXT` (and `submit_like`) never carries it.
+   - Still none → `#dialog_finals`: the form root's nearest dialog / modal container (`probe(:anchor, form_root)`
+     `container`: `dialog`, `role=dialog|alertdialog`, `aria-modal`, `.modal`), one more `snapshot_all(regions:
+     [container, *excluded_regions])`, and its visible, enabled `submit_like` / `FINAL_LEXICON` buttons in the root's
+     frame (an Angular uib-modal keeps `type=button "Відгукнутися"` in `.modal-footer`, a sibling of `.modal-body >
+     form`). No container → none.
    - One candidate → it. Several → the one `NEXT_LEXICON` names when there is evidence of a further page, else the one
      `FINAL_LEXICON` names, else `Halt(:target_not_found, detail: "submit buttons in the form: n")`.
    - `kind = :next` ONLY when the chosen name matches `NEXT_LEXICON = /\A\s*(?:next|continue|далі|продовжити|
      наступн\p{L}*|далее|weiter)\b/i` AND there is evidence of a further page; anything else is `:final` and goes
      through the claim (a click that might submit is never taken as a Next). `FINAL_LEXICON =
-     /submit|apply|send|надіслати|відправити|подати|отправить/i`.
+     SUBMIT_TEXT ∪ /apply|відгукн|откликн/i`.
    - Evidence (looked up only when some form button carries a `NEXT_LEXICON` name): `STEP_INDICATOR =
      %r{\b(?:step|крок|шаг|page|сторінка)\s*(\d+)\s*(?:of|з|из|/|від)\s*(\d+)}i` with `0 < k < n` in the form
      root frame's outline or in `FormElements.visible_text(ctx)` (the root's visible text, the same reader
@@ -1486,7 +1578,9 @@ error_detail, step result / trace through `RedactTree`, artifact HTML). Nil-safe
 | Category | Result |
 |---|---|
 | `Cookie:` / `Set-Cookie:` / `Authorization:` lines | line dropped |
-| `csrfmiddlewaretoken= csrftoken= sessionid= token= code=` values (also `access_token=`) | `name=[REDACTED]` |
+| credentials, via `ApplyMate::Ai::Client::Base.scrub` (the one credential scrubber, also used by the AI clients): `key= api_key= apikey= x-api-key= signature= sig=` and any `*token=` (`access_token=`, `id_token=`, `csrftoken=`) values; a provider error's URL carries Gemini's `?key=` | `name=[REDACTED]` |
+| bare Google API keys (`AIza[0-9A-Za-z_-]{35}`, e.g. in a header or JSON) | `[REDACTED]` |
+| `csrfmiddlewaretoken= sessionid= code=` values (`SESSION_PARAM`) | `name=[REDACTED]` |
 | the apply's `source_profile.session_id`, `user.email` (>= 6 chars) | `{{fact.session_id}}`, `{{fact.email}}` |
 | any other email | `{{email}}` |
 | phone-like digit runs (`\+?\d[\d\s().-]{8,}\d`) | `{{phone}}` (also hits long ids / dates, on purpose) |
@@ -1514,9 +1608,8 @@ index would not catch it once the sibling is `submitted_at`. The user can still 
 
 `Apply::Operation::Create` checks, after `parse_validate_sync`:
 
-1. Daily limit: `current_user.applies.where(created_at: today).count >= users.daily_apply_limit` (default 30) gives `apply.create.daily_limit_reached` (rides `index_applies_on_user_created`).
-2. Re-apply: `Apply.reapply_guarded` (a prior apply that claimed or submitted, not cancelled) needs `confirm_reapply=1` (a virtual form property), else `reapply_confirmation_required`.
-3. A second active apply for the vacancy is rejected by the real partial unique index `index_applies_one_active_per_vacancy`: `RecordNotUnique` becomes `already_active`.
+1. Re-apply: `Apply.reapply_guarded` (a prior apply that claimed or submitted, not cancelled) needs `confirm_reapply=1` (a virtual form property), else `reapply_confirmation_required`.
+2. A second active apply for the vacancy is rejected by the real partial unique index `index_applies_one_active_per_vacancy`: `RecordNotUnique` becomes `already_active`.
 
 On success it calls `Engine::Enqueue` (stores `job_id`) and touches the user's counter key.
 
@@ -1547,11 +1640,11 @@ and post "" for "June 2025").
 It takes `user:` like `FailureNotice` because StatusUpdate broadcasts render it without `current_user`, and `FailureNotice`
 hides for code `review` while the form shows. `ActionBox` shows a "Переглянути" link to the card instead.
 `InputRequest` (`apply.input_request.*`, mounted in `VacancyApplyCard` right after `FailureNotice`) is the code box of
-`Engine::AwaitInput`: it renders only for a `running` apply in stage `awaiting_input` with an open `input_request` and no
+`Engine::AwaitInput`: it renders only for a `running` apply in stage `AwaitInput::STAGE` (`awaiting_input`) with an open `input_request` and no
 `input_response`, as an amber card with the title/hint for the request `kind` (`email_code`, else the `generic` texts),
 the expiry (`input_request['expires_at']`) and one `code` input (`autocomplete=one-time-code`, `inputmode=numeric`,
-`maxlength` = `ProvideInput::MAX_CODE_LENGTH`) posting to `provide_input_apply_path` as `turbo_stream`. It takes `user:`
-like `ReviewForm`. No extra stream: `AwaitInput`'s `Engine::Broadcast` makes `StatusUpdate` re-render the whole card, and
+`maxlength` = `ProvideInput::MAX_CODE_LENGTH`) posting to `provide_input_apply_path` as `turbo_stream`. It takes only
+`apply:`: it reads nothing of the user. No extra stream: `AwaitInput`'s `Engine::Broadcast` makes `StatusUpdate` re-render the whole card, and
 the pill shows the `apply.stage.awaiting_input` text. `running` is not an attention state, so the navbar counter and the
 attention filter do not count `awaiting_input`. The navbar counter and the "Потребують уваги" filter share `Apply.attention_count_for`.
 `spec/i18n/apply_engine_keys_spec.rb` iterates `Halt::CODES`, `Apply.states` and every `Apply::Operation::Base`

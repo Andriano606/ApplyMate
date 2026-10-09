@@ -8,7 +8,17 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
   # is native JSON schema, so the client talks v1beta like MODELS_ENDPOINT.
   API_VERSION = 'v1beta'
   # Transient upstream failures worth retrying (at most Request#retries times, sleeping 2 s then 4 s).
-  RETRYABLE_ERROR = /503|502|429/
+  RETRYABLE_ERROR = /503|502|429|high demand|overloaded|RESOURCE_EXHAUSTED|UNAVAILABLE/
+  # A quota that will not come back within a run: the error body names a per-day quota
+  # (QuotaFailure quotaId "GenerateRequestsPerDayPerProjectPerModel-FreeTier") or asks to wait at least
+  # QUOTA_RETRY_DELAY seconds (RetryInfo retryDelay "67247s"). A per-minute rate limit is neither: it stays Unavailable.
+  QUOTA_PER_DAY = /PerDay|per[ _-]day|daily/i
+  RETRY_DELAY = /"retryDelay"\s*:\s*"(\d+)(?:\.\d+)?s"/
+  QUOTA_RETRY_DELAY = 3_600
+  # Provider errors retried as transient (5xx include the gem's wrapped ones, see #faraday_error) and raised as Unavailable.
+  TRANSIENT_ERRORS = [ Faraday::TooManyRequestsError, Faraday::ServerError, Faraday::TimeoutError, Faraday::ConnectionFailed ].freeze
+  # Characters of message + error body kept in a ProviderError's message.
+  ERROR_TEXT_LIMIT = 600
   # JSON-Schema keys the Gemini `responseSchema` (OpenAPI subset) understands; everything else
   # (additionalProperties, $schema, minimum, …) is dropped because the API rejects unknown fields.
   SCHEMA_KEYS = %w[type nullable properties required items enum maxItems minItems description].freeze
@@ -22,7 +32,8 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
   end
 
   def self.validate_api_key!(api_key:)
-    response = Faraday.get(MODELS_ENDPOINT, { key: api_key })
+    # Header, not ?key=: a Faraday error raised here would otherwise carry the key in its URL.
+    response = Faraday.get(MODELS_ENDPOINT, nil, { 'x-goog-api-key' => api_key })
     raise 'invalid_api_key' unless response.success?
   end
 
@@ -43,7 +54,7 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
   end
 
   def list_models
-    models = @client.models['models']
+    models = with_retries(0) { @client.models['models'] }
     models.map { |model| model['name'].delete_prefix('models/') }
   end
 
@@ -113,19 +124,55 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
     result
   end
 
+  # Every failure leaves as a ProviderError subclass with a scrubbed message and no cause (see Base::ProviderError):
+  # a long quota -> QuotaExhausted at once, a transient one -> retried up to `max_retries` times then Unavailable,
+  # anything else -> ProviderError.
   def with_retries(max_retries)
     retries = 0
     begin
       yield
     rescue StandardError => e
-      if retries < max_retries && e.message.match?(RETRYABLE_ERROR)
+      source = faraday_error(e)
+      text = "#{e.message} #{response_body(source)}"
+      quota = (source.is_a?(Faraday::TooManyRequestsError) || text.include?('RESOURCE_EXHAUSTED')) && long_quota?(text)
+      transient = !quota && (TRANSIENT_ERRORS.any? { |klass| source.is_a?(klass) } || e.message.match?(RETRYABLE_ERROR))
+      if retries < max_retries && transient
         retries += 1
         sleep(2**retries)
         retry
       end
-      Rails.logger.error "Gemini API failure: #{e.message}"
-      raise e
+      raise provider_error(e, text, quota:, transient:), cause: nil
     end
+  end
+
+  # "<class>: <message> <body excerpt>", scrubbed: the body says which quota or limit was hit.
+  def provider_error(error, text, quota:, transient:)
+    message = "#{error.class}: #{ApplyMate::Ai::Client::Base.scrub(text).squish.truncate(ERROR_TEXT_LIMIT)}"
+    Rails.logger.error "Gemini API failure: #{message}"
+    error_class(quota:, transient:).new(message)
+  end
+
+  def error_class(quota:, transient:)
+    return ApplyMate::Ai::Client::Base::QuotaExhausted if quota
+    return ApplyMate::Ai::Client::Base::Unavailable if transient
+
+    ApplyMate::Ai::Client::Base::ProviderError
+  end
+
+  def long_quota?(text)
+    text.match?(QUOTA_PER_DAY) || text[RETRY_DELAY, 1].to_i >= QUOTA_RETRY_DELAY
+  end
+
+  # The Faraday error behind `error`: the gemini-ai gem wraps a 5xx in a Gemini::Errors::RequestError whose `request`
+  # is the Faraday error; anything else is its own source.
+  def faraday_error(error)
+    error.respond_to?(:request) && error.request.is_a?(Faraday::Error) ? error.request : error
+  end
+
+  # The provider's error body (Faraday keeps it on the error), '' when there is none.
+  def response_body(source)
+    body = source.respond_to?(:response_body) ? source.response_body : nil
+    body.is_a?(String) || body.nil? ? body.to_s : body.to_json
   end
 
   def parse(result)

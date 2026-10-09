@@ -29,6 +29,11 @@ class Apply::Operation::Engine::Run < ApplyMate::Operation::Base
     ApplyMate::Client::LocalChrome::Busy => :capacity,
     # An AI call given less time than the client needs to start: the run is out of time, nothing is contended.
     ApplyMate::Ai::Client::Base::DeadlineTooShort => :deadline,
+    # The AI provider is overloaded or rate-limited (429 / 502 / 503) past CallAi's bounded retries: transient, one
+    # auto-resume before the claim.
+    ApplyMate::Ai::Client::Base::Unavailable => :capacity,
+    # The AI integration's quota is used up for hours (Gemini per-day quota): the user retries later or switches.
+    ApplyMate::Ai::Client::Base::QuotaExhausted => :ai_quota_exhausted,
     Apply::Operation::Engine::Throttled => :capacity,
     ApplyMate::Client::Browser::Crashed => :browser_crashed,
     ApplyMate::Client::Browser::DeadlineExceeded => :deadline,
@@ -38,6 +43,15 @@ class Apply::Operation::Engine::Run < ApplyMate::Operation::Base
     ApplyMate::Client::Browser::VersionMismatch => :unexpected_error,
     ApplyMate::Net::UnsafeUrlError => :private_address
   }.freeze
+
+  # The Halt an exception a step leaked stands for (ERROR_CODES, else unexpected_error); the detail is the class and
+  # message, redacted by whoever stores it. Also SmokeSurvey's report line for a mapped exception.
+  def self.as_halt(error)
+    return error if error.is_a?(Apply::Operation::Engine::Halt)
+
+    code = ERROR_CODES.find { |klass, _| error.is_a?(klass) }&.last || :unexpected_error
+    Apply::Operation::Engine::Halt.new(code, detail: "#{error.class}: #{error.message}")
+  end
 
   def perform!(apply:, handler:, **)
     skip_authorize
@@ -204,9 +218,6 @@ class Apply::Operation::Engine::Run < ApplyMate::Operation::Base
   end
 
   def as_halt(error)
-    return error if error.is_a?(Apply::Operation::Engine::Halt)
-
-    code = ERROR_CODES.find { |klass, _| error.is_a?(klass) }&.last || :unexpected_error
-    Apply::Operation::Engine::Halt.new(code, detail: "#{error.class}: #{error.message}")
+    self.class.as_halt(error)
   end
 end

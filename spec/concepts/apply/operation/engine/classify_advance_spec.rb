@@ -19,9 +19,45 @@ RSpec.describe Apply::Operation::Engine::ClassifyAdvance do
     described_class.call(ctx:).model
   end
 
+  context 'with no submit_like button but a type=button "Відгукнутися" in the form (a dialog footer, CleverStaff)' do
+    let(:elements) { [ button('Скасувати'), button('Відгукнутися') ] }
+
+    it 'takes the form button the final lexicon names' do
+      expect(classify).to have_attributes(kind: :final, name: 'Відгукнутися')
+    end
+  end
+
   before do
     ctx.form_root = ApplyMate::Client::Browser::Target.css('form#apply')
     ctx.open_scope!(:submit, session, 5.minutes.from_now)
+  end
+
+  context 'when the final button sits in the dialog footer, outside the <form> (an Angular uib-modal, CleverStaff)' do
+    # .modal[role=dialog] > .modal-body > form#apply and .modal-footer > button "Скасувати" / "Відгукнутися"
+    let(:dialog) { 'div[role=dialog]' }
+    let(:elements) do
+      [ snapshot_element(name: "Ім'я", regions: [ 'form#apply', dialog ]),
+        button('Скасувати', regions: [ dialog ]), button('Відгукнутися', regions: [ dialog ]),
+        button('Відгукнутися', regions: []) ] # the page launcher of the same name, outside the dialog
+    end
+    let(:session) do
+      FakeSession.new(html:, final_url: 'https://careers.acme.example/jobs/1/apply', snapshot:,
+                      anchors: { 'form#apply' => { 'selector' => '#apply', 'container' => dialog } })
+    end
+
+    it "takes the dialog's final button, read with the container as a region" do
+      expect(classify).to have_attributes(kind: :final, name: 'Відгукнутися', target: snapshot.elements[2]['target'])
+      expect(session.calls_of(:snapshot_all).last.sole).to include(regions: [ dialog ])
+    end
+  end
+
+  context 'when the form root has no button and sits in no dialog' do
+    let(:elements) { [ button('Відгукнутися', regions: []) ] }
+
+    it 'finds nothing (the caller halts target_not_found), never the page launcher' do
+      expect(classify).to be_nil
+      expect(session.calls_of(:probe)).to include([ :anchor, ApplyMate::Client::Browser::Target.css('form#apply') ])
+    end
   end
 
   context "with a 'Next' button and 'Step 1 of 2' in the form" do

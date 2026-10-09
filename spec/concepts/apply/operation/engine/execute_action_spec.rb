@@ -11,7 +11,9 @@ RSpec.describe Apply::Operation::Engine::ExecuteAction do
   let(:options) { {} }
   let(:session) { FakeSession.new(html: '', final_url: job, snapshot:) }
   # f0:e0 Apply tab, f0:e1 a careers link, f0:e2 an intranet link, f0:e3 a Google sign-in link, f0:e4 the send
-  # button, f0:e5 a password field, f0:e6 a name field
+  # button, f0:e5 a password field, f0:e6 a name field, f0:e7 a div button "Send application" the probe did not call
+  # submit_like, f0:e8 a dialog's type=button "Відгукнутися" next to f0:e9 (a field of that dialog), f0:e10 the page's
+  # "Відгукнутися" launcher, f0:e11 a link "Submit your CV" that leads to the form
   let(:snapshot) do
     build_snapshot(frames: [ { url: job } ], elements: [
       snapshot_element(role: 'tab', name: 'Apply'),
@@ -20,7 +22,12 @@ RSpec.describe Apply::Operation::Engine::ExecuteAction do
       snapshot_element(role: 'link', name: 'Sign in with Google', href: 'https://accounts.google.com/o/oauth2/auth'),
       snapshot_element(role: 'button', name: 'Send application', submit_like: true),
       snapshot_element(name: 'Password', type: 'password', visible: false), # hidden: SignInWall halts on a visible one
-      snapshot_element(name: 'Full name')
+      snapshot_element(name: 'Full name'),
+      snapshot_element(role: 'button', name: 'Send application', tag: 'div'),
+      snapshot_element(role: 'button', name: 'Відгукнутися', scope: 'dialog'),
+      snapshot_element(name: 'Email', type: 'email', scope: 'dialog'),
+      snapshot_element(role: 'button', name: 'Відгукнутися'),
+      snapshot_element(role: 'link', name: 'Submit your CV', href: '/careers/1/apply')
     ])
   end
   let(:element) { ->(index) { snapshot.elements[index] } }
@@ -41,6 +48,9 @@ RSpec.describe Apply::Operation::Engine::ExecuteAction do
     {
       'a hallucinated ref' => [ { 'type' => 'click', 'ref' => 'f9:e99' }, 'unknown_ref' ],
       'a click on a submit_like button' => [ { 'type' => 'click', 'ref' => 'f0:e4' }, 'submit_like' ],
+      'a click on a div button named "Send application" (not submit_like)' => [ { 'type' => 'click', 'ref' => 'f0:e7' }, 'submit_like' ],
+      'a press on a div button named "Send application"' => [ { 'type' => 'press', 'ref' => 'f0:e7', 'key' => 'Enter' }, 'submit_like' ],
+      'a click on a respond verb inside a dialog with fields' => [ { 'type' => 'click', 'ref' => 'f0:e8' }, 'submit_like' ],
       'a click on a password field' => [ { 'type' => 'click', 'ref' => 'f0:e5' }, 'password' ],
       'a press of a key outside the vocabulary' => [ { 'type' => 'press', 'ref' => 'f0:e0', 'key' => 'a' }, 'unknown_key' ],
       'Enter in a fillable field (implicit submit)' => [ { 'type' => 'press', 'ref' => 'f0:e6', 'key' => 'Enter' }, 'implicit_submit' ],
@@ -86,6 +96,32 @@ RSpec.describe Apply::Operation::Engine::ExecuteAction do
     end
   end
 
+  # A send verb on the page itself, with every field inside a dialog / form scope, is the launcher that opens the
+  # modal form (`<button type=button data-toggle=modal>Надіслати резюме</button>`): clickable.
+  context 'with a send-verb launcher outside any scope' do
+    let(:snapshot) do
+      build_snapshot(frames: [ { url: job } ], elements: [
+        snapshot_element(role: 'button', name: 'Надіслати резюме'),
+        snapshot_element(role: 'textbox', name: 'Search jobs', search_like: true),
+        snapshot_element(name: 'Email', type: 'email', scope: 'form@1'),
+        snapshot_element(role: 'button', name: 'Apply', scope: 'form@2')
+      ])
+    end
+
+    it 'clicks the send-verb launcher' do
+      result = described_class.call(ctx:, action: action_of('click', ref: 'f0:e0'), snapshot:)
+
+      expect(result[:rejected]).to be_nil
+      expect(session.calls_of(:click).map(&:first)).to eq([ element[0]['target'] ])
+    end
+
+    it "clicks an apply launcher in an id-less form apart from another form's fields" do
+      result = described_class.call(ctx:, action: action_of('click', ref: 'f0:e3'), snapshot:)
+
+      expect(result[:rejected]).to be_nil
+    end
+  end
+
   context 'with a click' do
     let(:action) { action_of('click', ref: 'f0:e0') }
     let(:next_page) { build_snapshot(frames: [ { url: job } ], elements: [ snapshot_element(role: 'tab', name: 'Apply', selected: true) ]) }
@@ -100,9 +136,31 @@ RSpec.describe Apply::Operation::Engine::ExecuteAction do
       expect(run[:page_changed]).to be(true)
     end
 
-    it 'reports no change when the page stayed the same' do
+    it 'reports no change when the page stayed the same, after one bounded second look' do
       expect(run[:page_changed]).to be(false)
       expect(run[:navigated]).to be(false)
+      expect(session.calls_of(:wait_until).sole.sole[:timeout]).to eq(described_class::SECOND_LOOK_SECONDS)
+    end
+
+    it 'sees a change that renders after the click settled (a modal fading in) on the second look' do
+      session.on(:wait_until) { session.show(next_page) }
+
+      expect(run[:page_changed]).to be(true)
+      expect(run[:snapshot]).to be(next_page)
+    end
+
+    it 'reports a delayed JS redirect during the second look as a navigation' do
+      session.on(:wait_until) { session.show(snapshot, url: 'https://acme.example/jobs/1/apply') }
+
+      expect(run[:navigated]).to be(true)
+      expect(run[:page_changed]).to be(true)
+    end
+
+    it 'keeps the post-click snapshot when no second-look snapshot succeeds' do
+      allow(session).to receive(:wait_until).and_return(false)
+
+      expect(run[:snapshot]).to be(snapshot)
+      expect(run[:page_changed]).to be(false)
     end
 
     it 'adopts a tab the click opened (Engine::AdoptNewTab) and records the switch' do
@@ -118,6 +176,24 @@ RSpec.describe Apply::Operation::Engine::ExecuteAction do
 
       expect(run[:rejected]).to eq('target_not_found')
       expect(run.model).to eq([])
+    end
+  end
+
+  context 'with the apply / respond verb outside any dialog or form (the page launcher)' do
+    let(:action) { action_of('click', ref: 'f0:e10') }
+
+    it 'clicks it' do
+      expect(run[:rejected]).to be_nil
+      expect(session.calls_of(:click).map(&:first)).to eq([ element[10]['target'] ])
+    end
+  end
+
+  context 'with a send verb on a link that navigates' do
+    let(:action) { action_of('click', ref: 'f0:e11') }
+
+    it 'clicks it: following an href never submits a form' do
+      expect(run[:rejected]).to be_nil
+      expect(session.calls_of(:click).map(&:first)).to eq([ element[11]['target'] ])
     end
   end
 

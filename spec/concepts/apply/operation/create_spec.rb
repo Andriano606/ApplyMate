@@ -76,22 +76,4 @@ RSpec.describe Apply::Operation::Create, type: :operation do
       end
     end
   end
-
-  context 'when the daily limit is reached' do
-    before do
-      current_user.update!(daily_apply_limit: 2)
-      2.times { create(:apply, :failed, user: current_user) }
-    end
-
-    it 'refuses the new apply' do
-      expect(result).to be_failure
-      expect(base_errors).to eq([ I18n.t('apply.create.daily_limit_reached', limit: 2) ])
-    end
-
-    it "ignores yesterday's applies" do
-      current_user.applies.update_all(created_at: 1.day.ago)
-
-      expect(result).to be_success
-    end
-  end
 end

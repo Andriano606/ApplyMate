@@ -40,6 +40,16 @@ class ApplyMate::Ai::AiHandler
     response = client.complete(request)
     log("#{client.class.name} kind=#{kind} input_tokens=#{response.usage.input_tokens.inspect} " \
         "output_tokens=#{response.usage.output_tokens.inspect}")
-    Outcome.new(data: response_schema_class.extract(response.text), usage: response.usage)
+    Outcome.new(data: extract(response_schema_class, response), usage: response.usage)
+  end
+
+  private
+
+  # An unusable answer still cost tokens: the error carries them (InvalidResponse#usage) to Engine::CallAi.
+  def extract(response_schema_class, response)
+    response_schema_class.extract(response.text)
+  rescue ApplyMate::Ai::ResponseSchema::Json::InvalidResponse => e
+    e.usage = response.usage
+    raise
   end
 end

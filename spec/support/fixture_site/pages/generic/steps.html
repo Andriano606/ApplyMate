@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply: Data Engineer (2 steps)</title>
+    <style>
+      body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; }
+      label { display: block; margin-top: 0.75rem; }
+      .step[hidden], .is-hidden { display: none; }
+      .hp { position: absolute; left: -9999px; top: 0; }
+      .error { color: #b00; }
+    </style>
+  </head>
+  <body>
+    <!-- A wizard whose steps are ALL in the DOM from the start and switched by CSS (a class / hidden toggle), the way
+         jQuery-era career sites and many Vue wizards do it, plus two honeypots a bot fills and a person never sees:
+         an off-canvas `position:absolute; left:-9999px` text input (with a label, tabindex=-1) and a display:none one.
+         Next (type=button) shows step 2 only when step 1 is valid; a non-empty honeypot makes the page refuse the
+         submit with an alert instead of posting to {{ORIGIN}}/submit (FixtureSite answers "Thank you for applying").
+         Engine: BuildFieldInventory (snapshot.js `visible`), Stage::FillFields (never writes a field not shown,
+         offers a CSS-hidden step's field again on the next page). -->
+    <form id="apply" action="{{ORIGIN}}/submit" method="post">
+      <div class="hp" aria-label="Leave this field empty">
+        <label for="website">Website</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+      <input id="nickname" name="nickname" type="text" class="is-hidden" />
+
+      <section class="step" id="step-1">
+        <p>Step 1 of 2</p>
+        <label for="full_name">Full name</label>
+        <input id="full_name" name="full_name" type="text" required />
+
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required />
+        <p class="error" role="alert" hidden></p>
+        <button type="button" id="next">Next</button>
+      </section>
+
+      <section class="step" id="step-2" hidden>
+        <p>Step 2 of 2</p>
+        <label for="cover">Cover letter</label>
+        <textarea id="cover" name="cover" rows="4" required></textarea>
+        <button type="submit" id="submit">Submit application</button>
+      </section>
+    </form>
+
+    <script>
+      (() => {
+        const form = document.getElementById('apply');
+        const error = form.querySelector('.error');
+        document.getElementById('next').addEventListener('click', () => {
+          const missing = ['full_name', 'email'].filter((id) => !document.getElementById(id).checkValidity());
+          if (missing.length) {
+            error.textContent = 'Please fill in every required field.';
+            error.hidden = false;
+            return;
+          }
+          document.getElementById('step-1').hidden = true;
+          document.getElementById('step-2').hidden = false;
+        });
+        form.addEventListener('submit', (event) => {
+          if (document.getElementById('website').value || document.getElementById('nickname').value) {
+            event.preventDefault();
+            document.body.insertAdjacentHTML('beforeend', '<p role="alert">Spam detected.</p>');
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

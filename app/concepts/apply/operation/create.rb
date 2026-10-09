@@ -6,7 +6,6 @@ class Apply::Operation::Create < ApplyMate::Operation::Base
     authorize! model, :create?
     form_object = Apply::FormObject::Create.new(params[:apply])
     parse_validate_sync(form_object, model)
-    ensure_under_daily_limit!(current_user)
     ensure_reapply_confirmed!(form_object, current_user)
     save_apply!(current_user)
 
@@ -18,14 +17,6 @@ class Apply::Operation::Create < ApplyMate::Operation::Base
   end
 
   private
-
-  # Rides index_applies_on_user_created.
-  def ensure_under_daily_limit!(current_user)
-    limit = current_user.daily_apply_limit
-    return if current_user.applies.where(created_at: Time.current.all_day).count < limit
-
-    reject!(I18n.t('apply.create.daily_limit_reached', limit:))
-  end
 
   def ensure_reapply_confirmed!(form_object, current_user)
     return if form_object.confirm_reapply.to_b

@@ -37,6 +37,19 @@ RSpec.describe Apply::Operation::Answer::ResolveFact do
     expect(fact('full_name')).to eq('Profile Name')
   end
 
+  it 'prefers the country fact, else takes the last part of a "City, Country" location' do
+    expect(fact('country')).to be_nil
+
+    profile.update!(facts: { 'ai' => { 'location' => 'Lviv, Lviv Oblast, Ukraine' } })
+    expect(fact('country')).to eq('Ukraine')
+
+    profile.update!(facts: { 'ai' => { 'location' => 'Lviv' } })
+    expect(fact('country')).to be_nil
+
+    profile.update!(facts: { 'ai' => { 'location' => 'Lviv, Ukraine', 'country' => 'Україна' } })
+    expect(fact('country')).to eq('Україна')
+  end
+
   it 'returns the cv file reference' do
     expect(fact('cv')).to eq(Apply::Operation::Answer::FileRef.cv)
   end

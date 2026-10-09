@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-# The code box of a running apply parked in stage 'awaiting_input' (Engine::AwaitInput, design §10.4): the site sent a
+# The code box of a running apply parked in stage AwaitInput::STAGE (Engine::AwaitInput, design §10.4): the site sent a
 # one-time code the user has to type. Posts `code` to Apply::Operation::ProvideInput. Rendered inside StatusUpdate
-# broadcasts (the card is replaced on the AwaitInput broadcast), hence the LAZY user.
+# broadcasts (the card is replaced on the AwaitInput broadcast): it reads nothing of the current user.
 class Apply::Component::InputRequest < ApplyMate::Component::Base
-  LAZY = :lazy
-  STAGE = 'awaiting_input'
+  STAGE = Apply::Operation::Engine::AwaitInput::STAGE
   EMAIL_CODE = 'email_code'
   MAX_CODE_LENGTH = Apply::Operation::ProvideInput::MAX_CODE_LENGTH
   SECTION_CLASSES = 'rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 ' \
@@ -14,13 +13,8 @@ class Apply::Component::InputRequest < ApplyMate::Component::Base
                   'focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 ' \
                   'dark:text-gray-100 sm:max-w-xs sm:text-sm'
 
-  def initialize(apply:, user: LAZY)
-    @apply       = apply
-    @user_preset = user
-  end
-
-  def before_render
-    @user = @user_preset == LAZY ? current_user : @user_preset
+  def initialize(apply:)
+    @apply = apply
   end
 
   def render?

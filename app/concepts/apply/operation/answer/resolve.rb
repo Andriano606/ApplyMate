@@ -76,6 +76,8 @@ class Apply::Operation::Answer::Resolve < ApplyMate::Operation::Base
     when 'legal_status' then legal_status(field)
     when 'consent_required' then consent(field)
     when 'marketing_opt_in' then nil
+    # "I do not want to receive the newsletter": checking it is what keeps the user out (never asks the AI).
+    when 'marketing_opt_out' then field.kind == 'checkbox' ? answer(true, 'policy') : nil
     when 'cv' then answer(Apply::Operation::Answer::FileRef.cv.as_json, 'fact')
     else fact(field)
     end

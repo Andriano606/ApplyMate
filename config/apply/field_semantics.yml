@@ -16,6 +16,15 @@
 # The sensitive semantics stay broad on purpose: a false positive there keeps a field away from the AI (decline option
 # / missing_profile_fact halt), which is the safe direction.
 semantics:
+  # Opt-OUT wording ("I do not want to receive the newsletter"): Answer::Resolve CHECKS it, the opposite of an opt-in
+  # (left unchecked). Before marketing_opt_in, which would otherwise match "newsletter" first.
+  marketing_opt_out:
+    - (do not|don't|не) (want|wish|хочу|бажаю)\S*.*(newsletter|marketing|promotional|розсилк|рассылк|рекламн)
+    - (do not|don't) (send|e-?mail|contact|subscribe)\b.*(newsletter|marketing|promotional|offers)
+    - не (надсилай|надсилат|присилай|присылат|отправлят|підписуват|подписыват)\S*.*(розсилк|рассылк|рекламн|новин|новост)
+    # A whole-label "Unsubscribe" / "Opt out (of marketing emails)" only: an opt-in or consent text that adds "you can
+    # unsubscribe / opt out at any time", or an EEO note "you may opt out of answering", is NOT an opt-out.
+    - ^(unsubscribe|opt[- ]?out)( (me )?(of|from) .*(newsletter|marketing|promotional|e-?mails?|communications?|mailing))?$
   marketing_opt_in:
     - newsletter
     - marketing (e-?mails?|communications?|messages?|materials?|updates|offers)
@@ -87,7 +96,7 @@ semantics:
     - оплат[аи] праці
   first_name:
     - ^(your |legal |preferred )?(first|given) name$
-    - ^(ваше )?ім['’]я$
+    - ^(ваше )?ім['’ʼ]я$
     - ^(ваше )?имя$
   last_name:
     - ^(your |legal )?(last|family) name$
@@ -98,9 +107,9 @@ semantics:
     - ^(your |legal |applicant'?s? )?(full )?name$
     - ^(first|given) (and|&) (last|family) names?$
     - ^(ваше |ваш )?(піб|фио)$
-    - ^(ваше )?повне ім['’]я$
-    - ^ім['’]я (та|і) прізвище$
-    - ^прізвище,? ім['’]я( (та|і) по батькові)?$
+    - ^(ваше )?повне ім['’ʼ]я$
+    - ^ім['’ʼ]я (та|і) прізвище$
+    - ^прізвище,? ім['’ʼ]я( (та|і) по батькові)?$
     - ^(ваше )?полное имя$
     - ^имя и фамилия$
     - ^фамилия,? имя( (и )?отчество)?$
@@ -114,12 +123,81 @@ semantics:
     - ^mobile( number)?$
     - ^(ваш )?(номер )?телефон\S*$
     - ^номер (мобільного|мобильного)( телефону| телефона)?$
+  # A country picker gets its own fact (Answer::ResolveFact: the `country` fact, else the last part of the location),
+  # matched to the options by MatchOption; a city typed into a country typeahead matches nothing.
+  country:
+    - ^(your |current |home )?country( of (residence|living))?$
+    - ^(ваша )?(країна|страна)( проживання| перебування| проживания| пребывания)?$
   location:
-    - ^(your |current )?(location|city|country)( of residence)?$
+    # A bare "Country" is NOT a location (it is `country`, above): the profile's location string ("Kyiv, Ukraine")
+    # typed into a country picker matches no option.
+    - ^(your |current )?(location|city)( of residence)?$
     - ^(your |current |home )?address$
     - ^where are you (currently )?(located|based)$
-    - ^(ваше |ваша |поточне |поточна )?(місто|країна|локація|адреса|місцезнаходження)( проживання)?$
-    - ^(ваш |ваша )?(город|страна|адрес|локация|местоположение)( проживания)?$
+    - ^(ваше |ваша |поточне |поточна )?(місто|локація|адреса|місцезнаходження)( проживання)?$
+    - ^(ваш |ваша )?(город|адрес|локация|местоположение)( проживания)?$
+# The label of a file input that IS the CV slot (Classify.cv_file?, Classify#file). Besides these, only an unlabelled
+# upload or a REQUIRED one with an unknown label gets `cv`; an optional "Need to share files with us?" is `other`.
+# Only a label from this list implies required (BuildFieldInventory).
+cv_file:
+  - resume
+  - résumé
+  - \bcv\b
+  - curriculum vitae
+  - резюме
+# The label of an upload that is NOT the CV nor a cover letter (Classify#file -> `other`, never implied required):
+# portfolio, "additional files", "other attachments", "Need to share files with us?".
+extra_files:
+  - portfolio
+  - additional (files?|documents?|attachments?|materials?)
+  - other (files?|documents?|attachments?)
+  - supporting (files?|documents?)
+  - share (any )?(files?|documents?)
+  - certificates?
+  - додатков\S* (файл|документ|матеріал)
+  - інш\S* (файл|документ)
+  - портфоліо
+  - дополнительн\S* (файл|документ|материал)
+  - друг\S* (файл|документ)
+  - портфолио
+  - сертифікат
+  - сертификат
+# Resume-parse / import helpers: an upload or button that autofills OTHER fields from a CV or a profile. Never a
+# question of the form (BuildFieldInventory drops it): uploading into it repeats the CV and its parser overwrites
+# fields while FillFields types. Matched against the field's label, question and description.
+helper_controls:
+  - autofill (from|with) (your |a )?(resume|cv|linkedin|profile)
+  - auto-?complete (from|with) (your |a )?(resume|cv|linkedin|profile)
+  - auto-?fill key (application )?fields
+  - (parse|import) (from )?(your |a )?(resume|cv|linkedin)
+  - apply with linkedin
+  - заповнити з (резюме|linkedin)
+  - заполнить из (резюме|linkedin)
+# A control name / placeholder that says nothing about the question (an upload button's verb, a lone
+# "Acknowledge/Confirm" checkbox, "Type here..."): BuildFieldInventory labels such a field by its question instead, and
+# an optional field with nothing else to go by is dropped (each `/`-separated part must be one of these or an `affirm`
+# phrase; trailing punctuation is ignored).
+generic_names:
+  - type here
+  - start typing
+  - enter text
+  - your answer
+  - введіть текст
+  - ваша відповідь
+  - почніть вводити
+  - attach
+  - upload
+  - upload file
+  - browse
+  - choose file
+  - select file
+  - choose
+  - select
+  - завантажити
+  - прикріпити
+  - обрати файл
+  - выбрать файл
+  - загрузить
 affirm:
   - i agree
   - i acknowledge
@@ -129,7 +207,7 @@ affirm:
   - accept
   - acknowledge # Ashby's GDPR checkbox group: "Acknowledge/Confirm" (research/live_probe.md, Preply)
   - confirm
-  - yes
+  - 'yes' # quoted: a bare yes is YAML's boolean true
   - погоджуюсь
   - погоджуюся
   - підтверджую

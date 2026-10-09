@@ -21,6 +21,13 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
     }
   JS
   CSS_ID = /\A[A-Za-z_][\w-]*\z/
+  # The ONE send-the-application lexicon: snapshot.js marks a buttonish element near fields `submit_like` when its
+  # name / class matches it (the Navigator's no-submit guard, Engine::ExecuteAction), and Engine::ClassifyAdvance's
+  # FINAL_LEXICON is built from it. Portable regex source (Ruby and JS read it alike). A bare "apply" is NOT in it:
+  # "Apply now" is how a vacancy page leads to its form. "send" is a whole word, and nothing that sends a CODE / OTP
+  # ("Resend code", "Send verification code", "Надіслати код") counts: an email-verification button beside the fields
+  # is neither the final button nor a send the guard must refuse.
+  SUBMIT_TEXT = /^(?!.*(\b(code|otp)\b|(^|\s)код)).*(submit|\bsend\b|надіслати|відправити|подати|отправить)/i
   STYLED_TYPES = %w[radio checkbox file].freeze
   # Element state that is part of the digest besides the fingerprint: a click that reveals a hidden section, opens an
   # accordion or selects a tab changes the page without adding elements (the Navigator's "did anything change?").
@@ -32,9 +39,15 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
     Digest::SHA1.hexdigest(elements.map { |element| [ element['fingerprint'], *element.values_at(*DIGEST_STATE) ].join('|') }.join("\n"))
   end
 
+  # snapshot.js's argument; every caller of the probe (this operation, a widget's scoped Session#probe(:snapshot))
+  # passes it, so the submit lexicon has one source.
+  def self.probe_arg(markers: [], regions: [])
+    { 'markers' => markers, 'regions' => regions, 'submitText' => SUBMIT_TEXT.source }
+  end
+
   def perform!(driver:, markers: [], regions: [], **)
     skip_authorize
-    raw = driver.evaluate_all_frames(FRAME_JS, { 'markers' => markers, 'regions' => regions })
+    raw = driver.evaluate_all_frames(FRAME_JS, self.class.probe_arg(markers:, regions:))
     paths = frame_paths(raw)
     elements = raw.flat_map { |frame| elements_of(frame, paths.fetch(frame[:index])) }
     self.model = ApplyMate::Client::Browser::Snapshot.new(
@@ -82,14 +95,24 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
 
   def elements_of(frame, path)
     index = frame[:index]
+    seen = Hash.new(0)
     Array(frame.dig(:value, 'snapshot', 'elements')).map do |element|
       element.merge('ref' => "f#{index}:e#{element['index']}", 'frame' => "f#{index}",
-                    'fingerprint' => fingerprint(element, index), 'target' => target(element, path))
+                    'fingerprint' => fingerprint(element, index, seen), 'target' => target(element, path))
     end
   end
 
-  def fingerprint(element, frame_index)
-    "#{element['role'] || element['tag']}|#{element['name'].to_s.downcase}|f#{frame_index}"
+  # "role|name|f<frame>", then "|<scope>" (snapshot.js: 'dialog' / 'form', with "#id" for a stable container id, else "@n") when
+  # the element acts inside a dialog or form, then "#<n>" for the n-th (n >= 1) repeat of that same key. The scope is
+  # the structural discriminator: a modal's "Відгукнутися" never inherits the page launcher's identity (and its
+  # FORBIDDEN entry) wherever the modal is inserted, and the page's own repeats keep their numbers. Two "Apply"
+  # launchers are two things (the Navigator's FORBIDDEN list must not bar the second for the first's sake).
+  def fingerprint(element, frame_index, seen)
+    base = "#{element['role'] || element['tag']}|#{element['name'].to_s.downcase}|f#{frame_index}"
+    base = "#{base}|#{element['scope']}" if element['scope'].present?
+    occurrence = seen[base]
+    seen[base] += 1
+    occurrence.zero? ? base : "#{base}##{occurrence}"
   end
 
   # The field root is the visibility reference only for controls a person never sees themselves (styled radios and

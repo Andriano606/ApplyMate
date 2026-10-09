@@ -9,7 +9,8 @@
 #   -> Stage::DetectPlatform (entry_url overrides applies.entry_url / vacancy.external_url) -> Stage::FetchSchema
 #   -> ONE Session lease: Stage::ReachForm (for an unknown platform the AI Navigator: it may click, press, scroll,
 #      switch tabs and follow links to REACH the form, never types or submits), then Stage::DiscoverFields whenever a
-#      form root was set (Generic included)
+#      form root was set (Generic included; it opens and closes comboboxes to read their options,
+#      Engine::ReadComboboxOptions: clicks and ReadComboboxOptions::KEYS only, nothing typed or picked)
 #   -> report: platform, confidence, captures, probable, http hops, schema size, canonical form URL, navigation ops,
 #      form reached?, AI calls of the attempt, navigator actions, form URL + frame, readiness time (ReachForm), the
 #      field table, the trace events and the halt (a gate firing, the Navigator giving up)
@@ -33,7 +34,7 @@
 class Apply::Operation::SmokeSurvey < ApplyMate::Operation::Base
   RESTORED_COLUMNS = %w[platform platform_match apply_key entry_url landing_url fields form_url navigation].freeze
   STAGES = Apply::Operation::Stage
-  FIELD_COLUMNS = %w[id kind widget label required options frame].freeze
+  FIELD_COLUMNS = %w[id kind widget label placeholder required options frame].freeze
 
   def perform!(apply:, entry_url: nil, out: $stdout, **)
     skip_authorize
@@ -46,8 +47,11 @@ class Apply::Operation::SmokeSurvey < ApplyMate::Operation::Base
     begin
       ctx.persist!(entry_url:) if entry_url.present?
       survey(ctx)
-    rescue Apply::Operation::Engine::Halt => e
-      report[:halt] = { code: e.code, detail: e.detail }
+    rescue Apply::Operation::Engine::Halt, *Apply::Operation::Engine::Run::ERROR_CODES.keys => e
+      # A mapped exception (an AI provider 429 / 503, a browser crash) gets the Runner's halt line, not a stack trace.
+      halt = Apply::Operation::Engine::Run.as_halt(e)
+      detail = halt.equal?(e) ? halt.detail : Apply::Operation::Engine::Redact.call(text: halt.detail).model
+      report[:halt] = { code: halt.code, detail: }
     ensure
       ticker.shutdown
       report[:trace] = ctx.scratch.trace.map { |entry| entry['event'] }
@@ -110,6 +114,7 @@ class Apply::Operation::SmokeSurvey < ApplyMate::Operation::Base
   def field_row(field)
     options = field.options
     { 'id' => field.id, 'kind' => field.kind, 'widget' => field.widget, 'label' => field.label.to_s.truncate(60),
+      'placeholder' => field.placeholder.to_s.truncate(40),
       'required' => field.required ? 'yes' : 'no', 'options' => options.is_a?(Array) ? options.size : options.to_s,
       'frame' => frame_of(field.target) }
   end

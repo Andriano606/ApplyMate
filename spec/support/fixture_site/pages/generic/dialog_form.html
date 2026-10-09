@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <title>Ruby Developer — Acme careers</title>
+</head>
+<body>
+  <!-- An SSR page whose application form is already rendered at landing, with a beacon that keeps the network busy
+       (Goto must not wait out NETWORK_IDLE_MS), an Angular uib-modal (CleverStaff) whose final button is a
+       type=button in .modal-footer OUTSIDE its <form>, and containers with and without stable anchors. -->
+  <header><nav><div><span>Acme</span></div></nav></header>
+  <div class="banner"></div>
+  <main>
+    <div class="job">
+      <h1>Ruby Developer</h1>
+      <button-component role="button"><button type="button" id="launch">Відгукнутися</button></button-component>
+    </div>
+    <section data-testid="careers-form">
+      <div><div class="fields"><input name="city" placeholder="City"></div></div>
+    </section>
+  </main>
+  <div class="modal fade in" role="dialog" uib-modal-window="modal-window" style="display: block">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-body">
+          <form name="sendForm" novalidate>
+            <input-component><div><input type="text" placeholder="Ім'я"></div></input-component>
+            <input-component><div><input type="email" placeholder="Email"></div></input-component>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button">Скасувати</button>
+          <button-component role="button"><button class="N6psR1p0" type="button">Відгукнутися</button></button-component>
+        </div>
+      </div>
+    </div>
+  </div>
+  <form id="newsletter"><input type="email" placeholder="Newsletter"></form>
+  <script>
+    setInterval(() => { fetch('/beacon?t=' + Date.now()).catch(() => {}); }, 200);
+  </script>
+</body>
+</html>

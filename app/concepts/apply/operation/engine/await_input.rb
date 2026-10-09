@@ -4,17 +4,21 @@
 # claimed; this only waits for the confirmation step.
 #
 #   1. expires_at = now + min(MAX_WAIT, ctx.remaining - RESERVE); nothing left -> Halt(:email_code, 'no time to wait').
-#   2. persist stage 'awaiting_input' + input_request {kind, requested_at, expires_at}, input_response nil, broadcast:
+#   2. persist stage STAGE ('awaiting_input') + input_request {kind, requested_at, expires_at}, input_response nil, broadcast:
 #      the UI shows the code box (Apply::Operation::ProvideInput stores the answer).
 #   3. every POLL_INTERVAL: check the fence and read input_response of THIS run (id AND run_token, primary key).
 #      The apply thread is parked here (one thread per browser slot); the heartbeat TimerTask keeps the row alive.
-#   4. no answer by expires_at -> clear the request, back to stage 'submit', Halt(:email_code): the claim rule turns it
-#      into submit_unverified.
+#   4. no answer by expires_at -> close the request with ONE guarded UPDATE (input_response IS NULL, fenced): a code
+#      ProvideInput stored after the last poll leaves it unmatched and is used (the user answered in time); once it is
+#      closed, ProvideInput's guard (stage STAGE, open input_request) refuses a late code. Nothing stored -> back to
+#      stage 'submit', Halt(:email_code): the claim rule turns it into submit_unverified.
 #   5. code received -> clear request + response, write it through SetFieldValue (read-back; a Mismatch is
 #      Halt(:email_code, 'code not accepted')), click the ONE visible submit_like button of the frame (else press
 #      Enter in the input), settle(:submit). Verify then runs as usual.
 # Termination: the loop ends at expires_at <= MAX_WAIT; every pass checks the fence. The code never reaches the trace.
 class Apply::Operation::Engine::AwaitInput < ApplyMate::Operation::Base
+  # The ONE name of the parked stage: ProvideInput's guarded UPDATE and Component::InputRequest read it from here.
+  STAGE = 'awaiting_input'
   POLL_INTERVAL = 3
   MAX_WAIT = 5.minutes
   RESERVE = 60
@@ -38,10 +42,10 @@ class Apply::Operation::Engine::AwaitInput < ApplyMate::Operation::Base
     halt!('no time to wait') if window <= 0
 
     expires_at = now + window
-    ctx.persist!(stage: 'awaiting_input', input_response: nil,
+    ctx.persist!(stage: STAGE, input_response: nil,
                  input_request: { 'kind' => kind, 'requested_at' => now.iso8601, 'expires_at' => expires_at.iso8601 })
     broadcast
-    code = poll(expires_at)
+    code = poll(expires_at) || close_request
     ctx.persist!(input_request: nil, input_response: nil, stage: 'submit')
     broadcast
     halt! if code.nil?
@@ -51,12 +55,24 @@ class Apply::Operation::Engine::AwaitInput < ApplyMate::Operation::Base
   def poll(expires_at)
     while Time.current < expires_at
       ctx.check_fence!
-      response = Apply.where(id: ctx.apply.id, run_token: ctx.run_token).pick(:input_response)
-      return response['code'].to_s if response.present? && response['code'].present?
+      code = stored_code
+      return code if code
 
       sleep POLL_INTERVAL
     end
     nil
+  end
+
+  # Step 4: 0 rows matched (the run still owns the row, FencedUpdate's extra_condition) means a code arrived.
+  def close_request
+    closed = Apply::Operation::Engine::FencedUpdate.call(ctx:, attributes: { input_request: nil, stage: 'submit' },
+                                                        extra_condition: { input_response: nil }).model
+    stored_code if closed.zero?
+  end
+
+  def stored_code
+    response = Apply.where(id: ctx.apply.id, run_token: ctx.run_token).pick(:input_response)
+    response['code'].to_s if response.present? && response['code'].present?
   end
 
   def broadcast

@@ -22,6 +22,37 @@ RSpec.describe Apply::Gate::ClosedPosting do
       }
   end
 
+  [ 'Закрита вакансія', 'Вакансія закрита', 'Вакансия закрыта', 'Закрытая вакансия', 'This job is no longer available',
+    'This position has been filled', 'We are no longer accepting applications' ].each do |heading|
+    it "halts on \"#{heading}\"" do
+      expect { check(frames: [ { outline: [ "h1 #{heading}" ] } ]) }
+        .to raise_error(Apply::Operation::Engine::Halt) { |halt| expect(halt.code).to eq(:closed_posting) }
+    end
+  end
+
+  it 'halts despite a language switcher that already holds a value, but not beside an empty field' do
+    switcher = snapshot_element(role: 'combobox', name: 'Мова', tag: 'select', filled: true)
+    empty = snapshot_element(role: 'textbox', name: 'Email', type: 'email', filled: false)
+
+    expect { check(frames: [ { outline: [ 'h1 Закрита вакансія' ] } ], elements: [ switcher ]) }
+      .to raise_error(Apply::Operation::Engine::Halt)
+    expect(check(frames: [ { outline: [ 'h1 Закрита вакансія' ] } ], elements: [ switcher, empty ])).to be_nil
+  end
+
+  it 'stays silent on filled form controls (after the last fill) beside a closed-wording heading' do
+    filled = snapshot_element(role: 'textbox', name: 'Email', type: 'email', filled: true)
+    switcher = snapshot_element(role: 'combobox', name: 'Мова', tag: 'select', filled: true)
+
+    expect(check(frames: [ { outline: [ 'h1 Закрита вакансія' ] } ], elements: [ switcher, filled ])).to be_nil
+  end
+
+  it 'does not read a jobs filter or a closed-jobs list heading as a closed posting' do
+    frames = [ { outline: [ 'h1 Senior Rubyist', 'tabs Відкриті вакансії* | Закриті вакансії', 'h3 Закриті вакансії',
+                            'h3 Закрытые вакансии' ] } ]
+
+    expect(check(frames:)).to be_nil
+  end
+
   it 'reads the alerts and the Ukrainian wording' do
     expect { check(frames: [ { alerts: [ 'Вакансія закрита' ] } ]) }
       .to raise_error(Apply::Operation::Engine::Halt) { |halt| expect(halt.code).to eq(:closed_posting) }

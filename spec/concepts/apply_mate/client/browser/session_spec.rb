@@ -149,7 +149,8 @@ RSpec.describe ApplyMate::Client::Browser::Session do
         expect(session.probe(:read_value, by_url)['value']).to eq(frame_email)
         expect(session.html(frame_path: by_selector)).to include('Apply for Ruby Developer')
         expect(session.html).not_to include('Apply for Ruby Developer')
-        expect(session.probe(:snapshot, target.css('form#apply', frame_path: by_selector))['elements'])
+        snapshot_arg = ApplyMate::Client::Browser::Operation::SnapshotAll.probe_arg
+        expect(session.probe(:snapshot, target.css('form#apply', frame_path: by_selector), snapshot_arg)['elements'])
           .to include(a_hash_including('tag' => 'input', 'name' => 'Email', 'visible' => true,
                                        'attrs' => a_hash_including('id' => 'email')))
       end
@@ -181,6 +182,33 @@ RSpec.describe ApplyMate::Client::Browser::Session do
         session.switch_to(0)
         expect(session.html).to include('opens in a new tab')
         expect { session.switch_to(5) }.to raise_error(IndexError)
+      end
+    end
+
+    it 'settles a landing whose form is already rendered without waiting out network idle (a beacon page)' do
+      open_session do |session|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        session.goto(FixtureSite.url('/generic/dialog_form.html'))
+        elapsed_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000
+
+        expect(elapsed_ms).to be < ApplyMate::Client::Browser::Operation::Goto::NETWORK_IDLE_MS - 3_000
+      end
+    end
+
+    it 'anchors roots on stable attributes (probe/anchor.js) and finds the dialog a <form> sits in' do
+      open_session do |session|
+        session.goto(FixtureSite.url('/generic/dialog_form.html'))
+        anchor = ->(css) { session.probe(:anchor, target.css(css)) }
+
+        expect(anchor.call('div.modal form')).to eq('selector' => 'form[name="sendForm"]', 'container' => 'div[role=dialog]')
+        expect(anchor.call('#newsletter')).to eq('selector' => '#newsletter', 'container' => nil)
+        expect(anchor.call('section div.fields')['selector']).to eq('section[data-testid="careers-form"] > div:nth-of-type(1) > div:nth-of-type(1)')
+        expect(anchor.call('header > nav > div')['selector']).to be_nil
+
+        # The dialog's footer button reports the container region; the page launcher of the same name does not.
+        snapshot = session.snapshot_all(regions: [ 'div[role=dialog]' ])
+        respond = snapshot.elements.select { |element| element['name'] == 'Відгукнутися' }
+        expect(respond.map { |element| element['regions'] }).to contain_exactly([], [ 'div[role=dialog]' ])
       end
     end
 

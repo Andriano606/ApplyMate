@@ -15,6 +15,33 @@ class ApplyMate::Ai::Client::Base
   # time, nothing is contended. (A taken local Chrome slot is ApplyMate::Client::LocalChrome::Busy.)
   class DeadlineTooShort < StandardError; end
 
+  # A provider failure an API client gives up on (Gemini: every transport / HTTP error out of `complete` and
+  # `list_models`; Ollama is local and keyless and raises its own). The message is "<original class>: <scrubbed message>" (Base.scrub) and
+  # the error is raised with `cause: nil`, so neither the message nor the cause chain (Rails.error.report, logs, the
+  # engine's failure detail) carries the request URL; Gemini's has the API key in its query string.
+  class ProviderError < StandardError; end
+
+  # The provider is overloaded or rate-limits the caller (HTTP 429 / 502 / 503 / timeouts) after the retries the caller
+  # allowed (Request#retries; Apply::Operation::Engine::CallAi owns the engine's own bounded retry). The apply Runner
+  # maps it to the transient Halt(:capacity): nothing about the application is wrong, a later attempt may succeed.
+  class Unavailable < ProviderError; end
+
+  # The provider says the integration's quota is used up for a long period (Gemini: a per-day quota, or a retryDelay
+  # of an hour or more). Never retried: the apply Runner maps it to Halt(:ai_quota_exhausted) (needs_human: retry later
+  # or pick another integration), not to :capacity, whose one auto-resume would fail the same way.
+  class QuotaExhausted < ProviderError; end
+
+  # Credentials in an error message or URL: query/form parameters (`?key=AIza...`, `&api_key=`, `apikey=`,
+  # `access_token=`, `id_token=`, `X-Amz-Signature=`, `sig=`) and bare Google API keys (`AIza` + 35 characters).
+  SECRET_PARAM = /(\b(?:api_?key|key|signature|sig)|token)=[^&?\s"'#;,]+/i
+  GOOGLE_API_KEY = /AIza[0-9A-Za-z_-]{35}/
+
+  # The text with every credential masked; the ONE credential scrubber (client logs and ProviderError messages here,
+  # everything the apply engine stores via Apply::Operation::Engine::Redact, which calls it).
+  def self.scrub(text)
+    text.to_s.gsub(SECRET_PARAM, '\\1=[REDACTED]').gsub(GOOGLE_API_KEY, '[REDACTED]')
+  end
+
   # What the client can do natively. Allowed symbols:
   #   :json_schema    — sends ApplyMate::Ai::Request#json_schema as a native structured-output constraint
   #   :vision         — accepts ApplyMate::Ai::Request#images

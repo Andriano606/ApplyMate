@@ -16,7 +16,7 @@ class Apply::Component::ReviewForm < ApplyMate::Component::Base
   DUPLICATE_CLASSES = 'flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm ' \
                       'text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200'
   TEXT_KINDS = %w[text email tel url number date range].freeze
-  CONSENT_SEMANTICS = %w[consent_required marketing_opt_in].freeze
+  CONSENT_SEMANTICS = %w[consent_required marketing_opt_in marketing_opt_out].freeze
   FORM_ID_PREFIX = 'review_form_'
 
   def initialize(apply:, user: LAZY)

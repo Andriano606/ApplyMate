@@ -293,6 +293,9 @@ widgets); unit specs with fakes cover the pure loops (`WaitQuiet`, `WaitPastClou
   |---|---|
   | `form.html` | `form#apply`: text (`#full_name`, `maxlength=40`), email (`data-qa`), textarea, native select, checkbox, radio pair, styled toggle (`#remote` hidden, `#remote-root` visible), visually hidden (clip 1px) `#cv` file input with a `label.dropzone`, "Submit application"; plus a newsletter form, so `button[type=submit]` matches twice |
   | `trigger.html` + `slow-reveal.js` | "Apply now" button that injects `form#late-form` 1.5 s after the click |
+  | `generic/dialog_form.html` | SSR page with its form already rendered and a 200 ms beacon (Goto's settle must not wait out network idle), an Angular uib-modal whose `type=button "Відгукнутися"` sits in `.modal-footer` outside its `form[name=sendForm]`, and containers with / without stable anchors (probe/anchor.js) |
+  | `generic/send_launcher.html` | a landing page whose form sits in a hidden Bootstrap modal behind a type=button `data-toggle=modal` launcher named with a send verb ("Надіслати резюме"): ExecuteAction must click it (`build_field_inventory_browser_spec`) |
+  | `generic/forms.html` | three id-less `<form>`s (newsletter email, a type=button "Apply", the application form with a "Resend code" button and a type=submit "Submit application"): `scope` `form@1..3`, "Resend code" is not `submit_like` |
   | `iframe.html` | `form.html` in `iframe#embed` (`name="embedded-form"`) |
   | `challenge.html` | "Just a moment..." title + `cf-chl-` marker, replaced by real content after 2 s |
   | `multi.html` | two identical `button.apply` |

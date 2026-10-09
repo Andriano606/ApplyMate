@@ -94,6 +94,7 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
     loop do
       tick!
       snapshot = observe(snapshot)
+      @posting_title ||= posting_title(snapshot)
       return @recipe if handed_over? || deterministic_ready?
 
       guard!(snapshot)
@@ -182,7 +183,7 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
     prompt = Apply::Ai::Prompt::Navigate.new(
       ctx:, snapshot:, previous: @previous, turn: @turn, max_turns: MAX_TURNS, ai_calls: @ai_calls,
       max_ai_calls: Apply::Operation::Engine::CallAi::MAX_AI_CALLS_PER_ATTEMPT, recipe: @recipe, forbidden: @forbidden,
-      heal_hint: @heal_hint, last_action: @last_action, errors: @errors
+      heal_hint: @heal_hint, last_action: @last_action, errors: @errors, posting_title: @posting_title
     )
     @errors = []
     call = Apply::Operation::Engine::CallAi.call(ctx:, prompt:, schema: Apply::Ai::ResponseSchema::Navigate, system: prompt.system)
@@ -191,6 +192,17 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
     ctx.trace(:navigator_turn, turn: @turn, status: decision.status, reason: decision.reason.truncate(300),
                                actions: decision.actions.size)
     decision
+  end
+
+  # The landing page's own name for the vacancy (the first <h1> of the top frame, else its <title>), read once from the
+  # first snapshot: the prompt shows it next to the job board's title when the two differ. Page-controlled text, so
+  # the prompt renders it inside the untrusted block.
+  def posting_title(snapshot)
+    top = snapshot.frames.find { |frame| frame['parent'].nil? }
+    return '' if top.nil?
+
+    heading = Array(top['outline']).find { |line| line.to_s.start_with?('h1 ') }
+    (heading&.delete_prefix('h1 ') || top['title']).to_s.squish
   end
 
   def give_up!(decision)
@@ -268,9 +280,33 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
     return reject_claim(verdict) unless verdict.accepted
 
     ctx.form_root = ApplyMate::Client::Browser::Target.css(css, frame_path:)
-    min_fields = verdict.fillable.clamp(1, WAIT_FOR_MAX_FIELDS)
+    ctx.scratch.claim_left_out = left_out(form, snapshot, elements, css)
+    min_fields = rendered_fields(ctx.form_root).clamp(1, WAIT_FOR_MAX_FIELDS)
     @recipe << Apply::Recipe::Op::WaitFor.new(root: css, frame_path:, min_fields:).to_h
     true
+  end
+
+  # The optional fillable controls inside the accepted root that the Navigator saw (in the prompt's snapshot) and
+  # left out of `field_refs` - an "Autofill from resume" dropzone, a helper upload - by their css path
+  # (BuildFieldInventory.dom_key); Stage::DiscoverFields leaves them out of the first page's inventory. Bounded: a
+  # required control is never left out, and nothing is when the claim listed no field or left out more controls than
+  # it listed (a sloppy claim must not empty the inventory).
+  def left_out(form, snapshot, elements, root)
+    inventory = Apply::Operation::Engine::BuildFieldInventory
+    by_ref = snapshot.elements.index_by { |element| element['ref'] }
+    listed = Array(form['field_refs']).filter_map { |ref| by_ref[ref] && inventory.dom_key(by_ref[ref]) }.to_set
+    shown = snapshot.elements.filter_map { |element| inventory.dom_key(element) if element['visible'] }.to_set
+    left = elements.select { |element| Array(element['regions']).include?(root) && inventory.control?(element) }
+                   .reject { |element| element['required'] }
+                   .filter_map { |element| inventory.dom_key(element) }
+                   .select { |key| shown.include?(key) && listed.exclude?(key) }.to_set
+    listed.empty? || left.size > listed.size ? Set.new : left
+  end
+
+  # The recipe's WaitFor is replayed by Session#ready? (probe/readiness.js), so its min_fields is measured by that same
+  # probe now, not taken from the verdict (AssessFormLikeness counts choosers and groups, which readiness.js does not).
+  def rendered_fields(root)
+    session.probe(:readiness, root, { 'min' => 1 }).to_h['fields'].to_i
   end
 
   # CheckOrigin judges ctx.form_url: the page the form is on, kept only when the claim is accepted.
@@ -290,33 +326,39 @@ class Apply::Operation::Engine::Navigate < ApplyMate::Operation::Base
   # [css, frame_path] of the claimed form root, or nil. A container scope (a dialog) is the root itself; otherwise
   # the root is the closest common ancestor of the scope, field, submit and advance elements in the scope's frame
   # (from their `tag:nth-of-type` css paths), widened to the enclosing <form> when there is one. The snapshot lists
-  # interactive elements only, so a <form> / <div> container never has a ref of its own.
+  # interactive elements only, so a <form> / <div> container never has a ref of its own. Either path is then re-addressed
+  # by #anchored.
   def root_of(form, snapshot)
     by_ref = snapshot.elements.index_by { |element| element['ref'] }
     scope = by_ref[form['scope_ref']]
     return if scope.nil?
 
     frame_path = scope['target'].frame_path
-    css = CONTAINER_ROLES.include?(scope['role']) ? own_css(scope) : common_ancestor(member_paths(form, by_ref, frame_path))
-    css && [ css, frame_path ]
+    path = CONTAINER_ROLES.include?(scope['role']) ? css_path(scope) : enclosing_css(members_of(form, by_ref, frame_path))
+    path && [ anchored(path, frame_path), frame_path ]
   end
 
-  def member_paths(form, by_ref, frame_path)
+  def enclosing_css(members)
+    common_ancestor(members.map { |element| css_path(element) })
+  end
+
+  def members_of(form, by_ref, frame_path)
     refs = [ form['scope_ref'], *Array(form['field_refs']), form['submit_ref'], form['advance_ref'] ].compact.uniq
-    members = refs.filter_map { |ref| by_ref[ref] }.select { |element| element['target'].frame_path == frame_path }
-    members.map { |element| css_path(element) }
+    refs.filter_map { |ref| by_ref[ref] }.select { |element| element['target'].frame_path == frame_path }
   end
 
-  def own_css(element)
-    id = element.dig('attrs', 'id')
-    stable = Array(element['strategies']).any? { |strategy| strategy.dig('attr', 'id') == id }
-    return "##{id}" if id.present? && stable && ApplyMate::Client::Browser::Operation::SnapshotAll::CSS_ID.match?(id)
-
-    css_path(element)
+  # The root as probe/anchor.js re-addresses it: by a stable id / data-* / name / role+label of the root or of its
+  # nearest such ancestor (`#form > div:nth-of-type(2)`), the document's only <form> as `form`; the snapshot's absolute
+  # nth-of-type path only when nothing on the way up is stable. The stored WaitFor replays this selector, and a banner
+  # inserted above the form must not shift it.
+  def anchored(path, frame_path)
+    session.probe(:anchor, ApplyMate::Client::Browser::Target.css(path, frame_path:)).to_h['selector'].presence || path
+  rescue ApplyMate::Client::Browser::TargetNotFound
+    path
   end
 
   def css_path(element)
-    Array(element['strategies']).find { |strategy| strategy['css'].present? }&.fetch('css')
+    Apply::Operation::Engine::BuildFieldInventory.dom_key(element)
   end
 
   def common_ancestor(paths)

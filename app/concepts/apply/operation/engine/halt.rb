@@ -20,6 +20,7 @@ class Apply::Operation::Engine::Halt < StandardError
     wizard_too_long: :unsupported,
     captcha_challenge: :needs_human, email_code: :needs_human, missing_profile_fact: :needs_human,
     session_expired: :needs_human,
+    ai_quota_exhausted: :needs_human, # the AI integration's provider quota is used up: retry later / another integration
     manual_apply_required: :needs_human, # design §18: Google Forms, visible captcha -> "apply yourself"
     already_claimed: :unverified, outcome_unknown: :unverified,
     review: :review, already_applied: :review

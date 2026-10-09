@@ -8,6 +8,12 @@
 #   type not in `allowed`                                     -> 'action_not_allowed'
 #   click / press / scroll / navigate: ref not in the snapshot -> 'unknown_ref' (a hallucinated ref)
 #   click / press on a submit_like or password element        -> 'submit_like' / 'password'
+#   click / press on a file input's chooser link / button      -> 'file_trigger' (snapshot.js file_trigger: it only
+#          opens the OS file dialog; the file field is uploaded by Widget::FileInput)
+#   click / press on what sends the application by NAME       -> 'submit_like' (sends_application?, never on a link
+#          that navigates: a ClassifyAdvance::FINAL_LEXICON verb on an element whose dialog / form scope holds a
+#          visible fillable control, or a SnapshotAll::SUBMIT_TEXT verb outside any scope on a frame with visible
+#          formless fields; a page launcher - "Apply now", "Надіслати резюме" opening a modal - stays clickable)
 #   press: key not in Op::Press::KEYS                         -> 'unknown_key';
 #          Enter on a fillable control                        -> 'implicit_submit' (Enter in a field submits its form)
 #   navigate: no href                                         -> 'no_href'; the href resolved against the element's
@@ -18,8 +24,9 @@
 # Every rejection is traced `action_rejected` (type, ref, reason).
 #
 # Execution: click / press / scroll -> Op::Click / Op::Press / Op::Scroll#perform! (GuardAction: gates first, one
-# obstruction retry); navigate -> session.goto(url) and the recorded op is Op::Click on the link (recipes hold URL
-# templates only, never a literal URL); switch_tab -> Op::SwitchTab; wait -> session.wait_until (max_ms clamped to
+# obstruction retry; a click / press that changed nothing gets one second look, SECOND_LOOK_SECONDS, after which the
+# URL / tab count is read again); navigate -> session.goto(url) and the recorded op is Op::Click on the link (recipes
+# hold URL templates only, never a literal URL); switch_tab -> Op::SwitchTab; wait -> session.wait_until (max_ms clamped to
 # MAX_WAIT_MS) for the page digest to change, nothing recorded. After a click / press the new-tab rule
 # (Engine::AdoptNewTab) may append a SwitchTab.
 #
@@ -31,6 +38,9 @@ class Apply::Operation::Engine::ExecuteAction < ApplyMate::Operation::Base
   REF_TYPES = %w[click press scroll navigate].freeze
   MAX_WAIT_MS = 5_000
   DEFAULT_WAIT_MS = 2_000
+  # The late-render look after a click / press that changed nothing at its settle (second_look).
+  SECOND_LOOK_SECONDS = 2.5
+  SECOND_LOOK_TYPES = %w[click press].freeze
   OPS = { 'click' => Apply::Recipe::Op::Click, 'press' => Apply::Recipe::Op::Press, 'scroll' => Apply::Recipe::Op::Scroll }.freeze
 
   def perform!(ctx:, action:, snapshot:, allowed: ALL_TYPES, **)
@@ -69,9 +79,42 @@ class Apply::Operation::Engine::ExecuteAction < ApplyMate::Operation::Base
   end
 
   def target_rejection
-    return 'submit_like' if element['submit_like']
+    return 'submit_like' if element['submit_like'] || sends_application?
+    # A link / button around or beside a file input (snapshot.js file_trigger) only opens the OS file dialog.
+    return 'file_trigger' if element['file_trigger']
 
     'password' if element['password']
+  end
+
+  # The no-submit guard by name, not only by the probe's submit_like (which needs a buttonish element with fields
+  # nearby): a `<div role=button>Send application</div>` or a hallucinated pick of a dialog's type=button "Відгукнутися"
+  # is refused before the claim. A send / apply verb counts only where it has something to send: inside a dialog / form
+  # scope that holds a visible fillable control, or, outside any scope, on a frame with visible formless fields (an SPA
+  # form without a <form>). Elsewhere ("Apply now", a `data-toggle=modal` "Надіслати резюме" on a landing page) it is
+  # the launcher the Navigator has to click.
+  def sends_application?
+    return false if navigating_link?
+
+    name = element['name'].to_s
+    return false unless name.match?(Apply::Operation::Engine::ClassifyAdvance::FINAL_LEXICON)
+    return scope_has_fields? if element['scope'].present?
+
+    name.match?(ApplyMate::Client::Browser::Operation::SnapshotAll::SUBMIT_TEXT) && scope_has_fields?
+  end
+
+  # An <a> whose href leads somewhere (not "#", not javascript:): following it is a GET, never a form submission.
+  def navigating_link?
+    href = element['href'].to_s.strip
+    element['tag'] == 'a' && href.present? && !href.start_with?('#') && !href.match?(/\Ajavascript:/i)
+  end
+
+  # A visible fillable control in the element's own scope (snapshot.js scopeOf: unique per dialog / form; nil = the
+  # page itself, i.e. formless fields), other than the element itself ("Надіслати резюме" also reads as a CV chooser).
+  def scope_has_fields?
+    @snapshot.elements.any? do |other|
+      other['ref'] != element['ref'] && other['frame'] == element['frame'] && other['scope'] == element['scope'] && other['visible'] &&
+        Apply::Operation::Engine::BuildFieldInventory.control?(other)
+    end
   end
 
   def press_rejection
@@ -121,11 +164,33 @@ class Apply::Operation::Engine::ExecuteAction < ApplyMate::Operation::Base
     @fresh = nil
     ops = act
     fresh = @fresh || session.snapshot_all(markers: Apply::Platform::Registry.dom_markers)
+    navigated = navigated?(before)
+    if !navigated && fresh.digest == @snapshot.digest && SECOND_LOOK_TYPES.include?(action['type'])
+      fresh = second_look(fresh)
+      navigated = navigated?(before) # a delayed JS redirect during the look is a navigation (Navigate re-observes)
+    end
     result[:rejected] = nil
     result[:snapshot] = fresh
-    result[:navigated] = session.current_url != before[:url] || session.pages.size != before[:pages]
-    result[:page_changed] = result[:navigated] || fresh.digest != @snapshot.digest
+    result[:navigated] = navigated
+    result[:page_changed] = navigated || fresh.digest != @snapshot.digest
     self.model = ops
+  end
+
+  # A click / press whose effect renders late (an Angular uib-modal fades in ~1 s after the click, past the network-only
+  # settle): one more look, at most SECOND_LOOK_SECONDS (clamped to the run's time), before "no change" makes the
+  # action FORBIDDEN. Stops at the first changed snapshot or at the timeout, whichever comes first.
+  # `fallback` (the post-action snapshot) stands when no look succeeds (every snapshot raised mid-navigation).
+  def second_look(fallback)
+    @fresh = nil
+    session.wait_until(timeout: ctx.clamp(SECOND_LOOK_SECONDS)) do
+      @fresh = session.snapshot_all(markers: Apply::Platform::Registry.dom_markers)
+      @fresh.digest != @snapshot.digest
+    end
+    @fresh || fallback
+  end
+
+  def navigated?(before)
+    session.current_url != before[:url] || session.pages.size != before[:pages]
   end
 
   def act

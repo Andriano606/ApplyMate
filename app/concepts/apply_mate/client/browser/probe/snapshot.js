@@ -6,6 +6,12 @@
 (root, options) => {
   const doc = root.ownerDocument || document;
   const regions = (options && options.regions) || [];
+  // The ONE send-the-application lexicon (Operation::SnapshotAll::SUBMIT_TEXT, also behind Engine::ClassifyAdvance's
+  // FINAL_LEXICON): every caller passes it (SnapshotAll.probe_arg); a snapshot without it would silently stop marking
+  // submit_like, the Navigator's no-submit guard, so it refuses to run.
+  if (!options || !options.submitText)
+    throw new Error('snapshot.js: options.submitText is required');
+  const SUBMIT_TEXT = new RegExp(options.submitText, 'i');
   const MAX_ELEMENTS = 800;
   const MAX_OPTIONS = 200;
   const CANDIDATE_ROLES = new Set([
@@ -68,16 +74,27 @@
   const UNSTABLE_ID =
     /^:r[0-9a-z]*:|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i;
   const REQUIRED_CLASS = /(^|[_-])required([_-]|$)/i;
-  const SUBMIT_TEXT = /submit|надіслати|відправити|подати заявку/i;
   const UPLOAD_LEXICON =
     /upload|attach|resume|\bcv\b|browse|завантаж|прикріп|резюме|загруз/i;
   const POPUP_ANCESTOR =
     '.el-select, .v-select, .select__control, [class*="select__control"]';
   const CHIP = '[class*=chip], [class*=singleValue], [class*=single-value]';
+  // The list an ARIA-less typeahead fills after typing (Lever's `.dropdown-container > .dropdown-results`).
+  const SUGGEST_CONTAINER =
+    '[class*=dropdown], [class*=suggest], [class*=autocomplete], [class*=typeahead], [class*=results]';
 
   const clean = (value, max = 200) =>
     (value || '').replace(/\s+/g, ' ').trim().slice(0, max);
-  const stripMark = (text) => text.replace(/\s*[*✱]+\s*$/, '').trim();
+  // Required marks: a trailing one ("Email *") and a standalone one mid-label ("Resume/CV ✱ ...").
+  const stripMark = (text) =>
+    text
+      .replace(/\s*[*✱]+\s*$/, '')
+      .replace(/(^|\s)[*✱]+(?=\s)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+  // A captcha's response field (g-recaptcha-response, h-captcha-response, cf-turnstile-response): never a question,
+  // and the evidence of an invisible captcha the page has not framed yet.
+  const CAPTCHA_RESPONSE = /^(g-recaptcha|h-captcha|cf-turnstile)-response/i;
   const typeOf = (el) =>
     (
       el.getAttribute('type') || (el.localName === 'input' ? 'text' : '')
@@ -85,24 +102,45 @@
   const explicitRole = (el) =>
     (el.getAttribute('role') || '').trim().split(/\s+/)[0] || null;
 
-  // Text of a node without the text of controls inside it (a label wrapping a <select> must not read its options).
+  // Text of a node as a person reads it: without the text of controls inside it (a label wrapping a <select> must not
+  // read its options), of a chooser link / button wrapping a control ("ATTACH RESUME/CV" around the file input) and of
+  // CSS-hidden descendants (a typeahead's "No location found", an uploader's "Analyzing resume..." status). Inline
+  // children join without a separator ("the&nbsp;<a>Privacy Policy</a>." stays "the Privacy Policy."), block ones
+  // with a space.
   const ownText = (node) => {
     if (!node) return '';
     const parts = [];
     const visit = (current) => {
+      const hiddenParent = getComputedStyle(current).visibility === 'hidden';
       for (const child of current.childNodes) {
-        if (child.nodeType === 3) parts.push(child.nodeValue);
-        else if (
-          child.nodeType === 1 &&
-          !child.matches(
+        if (child.nodeType === 3) {
+          parts.push(child.nodeValue);
+          continue;
+        }
+        if (
+          child.nodeType !== 1 ||
+          child.matches(
             'select, textarea, input, script, style, [role=listbox], [aria-hidden=true]',
-          )
+          ) ||
+          (child.matches('a, button, [role=button]') &&
+            child.querySelector(FIELD_CONTROLS))
         )
-          visit(child);
+          continue;
+        const style = getComputedStyle(child);
+        if (
+          style.display === 'none' ||
+          (style.visibility === 'hidden' && !hiddenParent)
+        )
+          continue;
+        const block =
+          !style.display.startsWith('inline') && style.display !== 'contents';
+        if (block) parts.push(' ');
+        visit(child);
+        if (block) parts.push(' ');
       }
     };
     visit(node);
-    return clean(parts.join(' '));
+    return clean(parts.join(''));
   };
   const textOf = (el) => (el ? clean(el.innerText || el.textContent) : '');
 
@@ -119,8 +157,20 @@
     if (rect.width <= 1 && rect.height <= 1) return false;
     const style = getComputedStyle(el);
     if (style.clip === 'rect(0px, 0px, 0px, 0px)') return false;
+    // Pushed before the document origin by a negatively offset absolute / fixed box (the classic honeypot
+    // `position:absolute; left:-9999px`): no scroll ever reveals it. A box merely scrolled out of an overflow
+    // container is statically placed and keeps counting.
+    const beforeOrigin =
+      rect.right + scrollX <= 0 || rect.bottom + scrollY <= 0;
     for (let node = el; node; node = node.parentElement) {
-      if (parseFloat(getComputedStyle(node).opacity) === 0) return false;
+      const nodeStyle = getComputedStyle(node);
+      if (parseFloat(nodeStyle.opacity) === 0) return false;
+      if (
+        beforeOrigin &&
+        (nodeStyle.position === 'absolute' || nodeStyle.position === 'fixed') &&
+        (parseFloat(nodeStyle.left) < 0 || parseFloat(nodeStyle.top) < 0)
+      )
+        return false;
     }
     return true;
   };
@@ -263,61 +313,131 @@
     }
     return null;
   };
-  const labelElementOf = (el) => {
-    if (el.labels && el.labels.length) return el.labels[0];
-    const parentLabel = el.closest('label');
-    if (parentLabel) return parentLabel;
-    const fieldset = el.closest('fieldset');
-    return fieldset ? fieldset.querySelector('legend') : null;
+  const TEXT_ENTRY =
+    'input:not([type]), input[type=text], input[type=email], input[type=tel], input[type=url], input[type=number], ' +
+    'textarea, [contenteditable]:not([contenteditable=false]), [role=textbox]';
+  // A <label for> whose control is not rendered (a framework's display:none twin: a Vue phone widget's hidden input,
+  // a rich-text editor's hidden textarea) or does not exist (a dangling `for`), in a container whose ONLY rendered
+  // text-entry control is `el`: the label belongs to what the person sees. Never adopts across a <form> or a second
+  // rendered text control, nor a label of a checkbox / radio / file input.
+  const adoptedLabelOf = (el) => {
+    if (!el.matches(TEXT_ENTRY) || !seen(el)) return null;
+    for (
+      let node = el.parentElement, depth = 0;
+      node && depth < 4 && node !== doc.body && node.localName !== 'form';
+      node = node.parentElement, depth += 1
+    ) {
+      const others = Array.from(node.querySelectorAll(TEXT_ENTRY)).filter(
+        (control) => control !== el && !el.contains(control) && seen(control),
+      );
+      if (others.length) return null;
+      const orphans = Array.from(node.querySelectorAll('label[for]')).filter(
+        (label) =>
+          !label.control ||
+          (label.control !== el &&
+            !seen(label.control) &&
+            !['checkbox', 'radio', 'file'].includes(typeOf(label.control))),
+      );
+      if (orphans.length === 1) return orphans[0];
+      if (orphans.length > 1) return null;
+    }
+    return null;
   };
-  // Text just before the control (a label-like div), never crossing another control or leaving the field root.
-  const nearbyText = (el, fieldRoot) => {
+  // [label element, true when the browser itself names `el` by it (Playwright's getByRole name)].
+  const labelElementOf = (el) => {
+    if (el.labels && el.labels.length) return [el.labels[0], true];
+    const parentLabel = el.closest('label');
+    if (parentLabel) return [parentLabel, true];
+    const fieldset = el.closest('fieldset');
+    const legend = fieldset ? fieldset.querySelector('legend') : null;
+    if (legend) return [legend, false];
+    return [adoptedLabelOf(el), false];
+  };
+  // Text just before the control (a label-like div) - for a checkbox / radio first the text just AFTER it ("[ ] I agree
+  // to ..."), never crossing another control or leaving the field root. Required marks stripped.
+  const nearbyText = (el, fieldRoot, following) => {
     const controls = `${FIELD_CONTROLS}, button`;
+    const scan = (start, step) => {
+      for (let sibling = start; sibling; sibling = step(sibling)) {
+        if (sibling.matches(controls) || sibling.querySelector(controls))
+          return '';
+        const text = stripMark(textOf(sibling));
+        if (text && text.length <= 150) return text;
+      }
+      return '';
+    };
     for (
       let node = el, depth = 0;
       node && depth < 3 && node !== doc.body && node !== fieldRoot;
       node = node.parentElement, depth += 1
     ) {
-      for (
-        let sibling = node.previousElementSibling;
-        sibling;
-        sibling = sibling.previousElementSibling
-      ) {
-        if (sibling.matches(controls) || sibling.querySelector(controls)) break;
-        const text = textOf(sibling);
-        if (text && text.length <= 150) return text;
-      }
+      const text =
+        (following &&
+          scan(node.nextElementSibling, (n) => n.nextElementSibling)) ||
+        scan(node.previousElementSibling, (n) => n.previousElementSibling);
+      if (text) return text;
     }
     return '';
   };
+  // A nameless icon button's purpose from its class tokens (`<div class="close-btn" role="button">`).
+  const CLOSE_CLASS = /(^|[-_\s])(close|dismiss)([-_\s]|$)/i;
 
-  const nameOf = (el, role, labelEl, fieldRoot) => {
+  // { name, accessible }: `name` is what the snapshot reports; `accessible` the name the browser computes (the
+  // {role, name} locator strategy), null when the name came from a heuristic (nearby text, an adopted label, the
+  // field root's question) the browser never sees. A control's title that only repeats its own value is no name.
+  const nameOf = (el, role, labelEl, labelOwn, fieldRoot, question) => {
     const tag = el.localName;
     const type = typeOf(el);
+    const named = (name, accessible) => ({ name, accessible });
     const labelledBy = clean(
       byIds(el, 'aria-labelledby').map(textOf).join(' '),
     );
-    if (labelledBy) return stripMark(labelledBy);
+    if (labelledBy) return named(stripMark(labelledBy), labelledBy);
     const aria = clean(el.getAttribute('aria-label'));
-    if (aria) return stripMark(aria);
+    if (aria) return named(stripMark(aria), aria);
     const control = ['input', 'select', 'textarea'].includes(tag);
+    const title = clean(el.getAttribute('title'));
+    // A custom select's trigger shows its current value ("USD", "Select..."): named by its label, never its content.
     if (
       !control &&
+      !popupTrigger(el) &&
       (NAMED_BY_CONTENT.has(role) || tag === 'button' || tag === 'a')
     ) {
-      const text = textOf(el) || clean(el.getAttribute('title'));
-      if (text) return text;
+      const text = textOf(el) || title;
+      if (text) return named(text, text);
+      // An empty button / link is named by nothing outside itself (a hidden captcha submit must not take the page
+      // heading); a close icon by its class.
+      if (
+        role === 'button' ||
+        role === 'link' ||
+        tag === 'button' ||
+        tag === 'a'
+      )
+        return named(
+          CLOSE_CLASS.test(el.getAttribute('class') || '') ? 'close' : '',
+          null,
+        );
     }
     if (tag === 'input' && ['submit', 'button', 'reset'].includes(type))
-      return clean(el.value);
-    if (tag === 'input' && type === 'image') return clean(el.alt);
+      return named(clean(el.value), clean(el.value));
+    if (tag === 'input' && type === 'image')
+      return named(clean(el.alt), clean(el.alt));
     const label = stripMark(ownText(labelEl));
-    if (label) return label;
-    return (
-      nearbyText(el, fieldRoot) ||
-      clean(el.getAttribute('placeholder')) ||
-      clean(el.getAttribute('title'))
+    if (label) return named(label, labelOwn ? label : null);
+    const placeholder = clean(el.getAttribute('placeholder'));
+    const ownTitle = title && title !== clean(el.value) ? title : '';
+    const fallback = placeholder || ownTitle;
+    const nearby = nearbyText(
+      el,
+      fieldRoot,
+      type === 'checkbox' ||
+        type === 'radio' ||
+        role === 'checkbox' ||
+        role === 'radio',
     );
+    if (nearby) return named(nearby, fallback || null);
+    if (fallback) return named(fallback, fallback);
+    return named(type === 'file' ? question : '', null);
   };
 
   const marksRequired = (node) =>
@@ -338,18 +458,57 @@
     ].filter(Boolean);
   };
 
+  // A custom select's trigger (Headless UI / Radix / MUI: a button or div that pops a listbox up).
+  const popupTrigger = (el) =>
+    el.getAttribute('aria-haspopup') === 'listbox' &&
+    !['select', 'input', 'textarea'].includes(el.localName);
   const comboboxLike = (el, role) => {
     if (role === 'combobox' && el.localName !== 'select') return true;
+    if (popupTrigger(el)) return true;
     if (el.localName !== 'input' || !el.readOnly) return false;
     if (el.hasAttribute('aria-haspopup') || el.closest(POPUP_ANCESTOR))
       return true;
     const box = el.parentElement;
-    return (
-      !!box &&
-      !!box.querySelector(
+    if (
+      box &&
+      box.querySelector(
         'button, [class*=arrow], [class*=suffix], [class*=indicator], [class*=caret]',
       )
-    );
+    )
+      return true;
+    // A readonly input whose wrapper (up to 4 ancestors) holds a list of 2+ options (`[role=option]` / `[data-value]`
+    // items, an Alpine / jQuery select): clicking it opens the list.
+    for (
+      let node = box, depth = 0;
+      node && depth < 4 && node !== doc.body && node.localName !== 'form';
+      node = node.parentElement, depth += 1
+    ) {
+      const items = Array.from(
+        node.querySelectorAll('[role=option], [data-value]'),
+      ).filter((item) => !item.contains(el));
+      if (items.length >= 2) return true;
+    }
+    return false;
+  };
+
+  // An ARIA-less typeahead (Lever's location input): a free-text input beside a suggestion container its script fills
+  // after typing, within 2 ancestors that hold no other field. BuildFieldInventory makes it an `autocomplete` written by
+  // Widget::Typeahead (pick a suggestion, else keep the typed text).
+  const typeaheadLike = (el, role) => {
+    if (el.localName !== 'input' || typeOf(el) !== 'text') return false;
+    if (el.readOnly || role === 'combobox' || el.hasAttribute('list'))
+      return false;
+    for (
+      let node = el.parentElement, depth = 0;
+      node && depth < 2 && node !== doc.body && node.localName !== 'form';
+      node = node.parentElement, depth += 1
+    ) {
+      const others = Array.from(node.querySelectorAll(FIELD_CONTROLS));
+      if (others.some((other) => other !== el)) return false;
+      const boxes = Array.from(node.querySelectorAll(SUGGEST_CONTAINER));
+      if (boxes.some((box) => !box.contains(el))) return true;
+    }
+    return false;
   };
 
   const isButtonish = (el, role) =>
@@ -362,13 +521,39 @@
       (typeOf(el) === 'submit' || (!el.hasAttribute('type') && !!el.form))) ||
     (el.localName === 'input' && ['submit', 'image'].includes(typeOf(el)));
   // A button (or drop area with role=button) that opens the file chooser itself: an upload word in its name and no
-  // file input in its field root (else, without a root, its parent or grandparent) - the input is created on click.
+  // file input in its field root, nor in the uploader around it (up to 4 ancestors, stopping at a <form> or at an
+  // ancestor that holds another kind of field: a dropzone `<div role=presentation>` with its hidden input) - the input
+  // is created on click.
   const choosesFile = (el, name, fieldRoot, buttonish, selfVisible) => {
     if (!buttonish || !selfVisible || isSubmitType(el)) return false;
     if (!UPLOAD_LEXICON.test(name)) return false;
-    const parent = el.parentElement;
-    const scope = fieldRoot || (parent && parent.parentElement) || parent;
-    return !(scope && scope.querySelector('input[type=file]'));
+    if (fieldRoot) return !fieldRoot.querySelector('input[type=file]');
+    for (
+      let node = el.parentElement, depth = 0;
+      node && depth < 4 && node !== doc.body && node.localName !== 'form';
+      node = node.parentElement, depth += 1
+    ) {
+      if (node.querySelector('input[type=file]')) return false;
+      if (node.querySelector(FIELD_CONTROLS)) return true;
+    }
+    return true;
+  };
+  // A link / button that only opens the chooser of a file input it wraps (Lever's "ATTACH RESUME/CV" anchor) or sits
+  // beside under an upload word (Ashby's "Upload file", Greenhouse's "Attach"): part of that file field, never a field
+  // or a link of its own (Prompt::Navigate leaves it out, ExecuteAction refuses to click it).
+  const fileTriggerOf = (el, name, buttonish, chooser) => {
+    if (chooser || !(buttonish || el.localName === 'a') || isSubmitType(el))
+      return false;
+    if (el.querySelector('input[type=file]')) return true;
+    for (
+      let node = el.parentElement, depth = 0;
+      node && depth < 3 && node !== doc.body && node.localName !== 'form';
+      node = node.parentElement, depth += 1
+    ) {
+      const files = node.querySelectorAll('input[type=file]');
+      if (files.length) return files.length === 1 && UPLOAD_LEXICON.test(name);
+    }
+    return false;
   };
   const fieldsNearby = (el) => {
     let scope = el.form || null;
@@ -418,6 +603,34 @@
     return strategies;
   };
 
+  // The container an element acts in, for SnapshotAll's fingerprint and ExecuteAction's no-submit guard: 'dialog'
+  // (an open modal, `<dialog>` / role=dialog / aria-modal), else 'form', plus `#id` when the container has a stable
+  // id, else `@n` (its 1-based position among the same kind of containers in its document / shadow root, so two id-less
+  // forms are two scopes: a newsletter form's email never makes another form's "Apply" a send); null on the page
+  // itself. A modal's "Відгукнутися" is then never the page launcher of the same name, however the modal is inserted
+  // into the DOM.
+  const SCOPE_DIALOG =
+    'dialog, [role=dialog], [role=alertdialog], [aria-modal=true]';
+  const scopeLabels = new Map();
+  const scopeOf = (el) => {
+    const dialog = el.closest(SCOPE_DIALOG);
+    const container = dialog || el.form || el.closest('form');
+    if (!container) return null;
+    if (scopeLabels.has(container)) return scopeLabels.get(container);
+    const kind = dialog ? 'dialog' : 'form';
+    const id = container.id;
+    let label;
+    if (id && !UNSTABLE_ID.test(id)) label = `${kind}#${clean(id, 60)}`;
+    else {
+      const peers = Array.from(
+        container.getRootNode().querySelectorAll(dialog ? SCOPE_DIALOG : 'form'),
+      );
+      label = `${kind}@${peers.indexOf(container) + 1}`;
+    }
+    scopeLabels.set(container, label);
+    return label;
+  };
+
   // The regions `el` (or its field root) sits inside; an invalid selector never matches.
   const regionsOf = (el, fieldRoot) =>
     regions.filter((selector) => {
@@ -439,8 +652,30 @@
     }
   };
   collect(root);
-  const truncated = candidates.length > MAX_ELEMENTS;
-  const picked = candidates.slice(0, MAX_ELEMENTS);
+  // One element per clickable thing: a link / button wrapping exactly one other clickable candidate is ONE target.
+  // `<a href><button>` keeps the link (its href is the action); a custom `[role=button]` host around a native
+  // <button> / <input> keeps the native one (its type and form). Two copies of one name make {role, name} ambiguous.
+  const clickable = (el) =>
+    el.localName === 'button' ||
+    (el.localName === 'a' && el.hasAttribute('href')) ||
+    (el.localName === 'input' &&
+      ['submit', 'button', 'image', 'reset'].includes(typeOf(el))) ||
+    ['button', 'link'].includes(explicitRole(el));
+  const candidateSet = new Set(candidates);
+  const nested = new Set();
+  for (const el of candidates) {
+    if (!clickable(el)) continue;
+    const inner = Array.from(el.querySelectorAll('*')).filter((node) =>
+      candidateSet.has(node),
+    );
+    if (inner.length !== 1 || !clickable(inner[0])) continue;
+    const native = ['button', 'input'].includes(inner[0].localName);
+    const outerNative = ['button', 'input', 'a'].includes(el.localName);
+    nested.add(el.localName === 'a' || !native || outerNative ? inner[0] : el);
+  }
+  const unique = candidates.filter((el) => !nested.has(el));
+  const truncated = unique.length > MAX_ELEMENTS;
+  const picked = unique.slice(0, MAX_ELEMENTS);
 
   const described = picked.map((el, index) => {
     const tag = el.localName;
@@ -448,10 +683,17 @@
     const role = roleOf(el);
     const isField = el.matches(FIELD_CONTROLS);
     const fieldRoot = fieldRootOf(el, isField);
-    const labelEl = labelElementOf(el);
+    const [labelEl, labelOwn] = labelElementOf(el);
     const questionEl = questionElementOf(fieldRoot);
-    const name = nameOf(el, role, labelEl, fieldRoot);
     const question = questionEl ? stripMark(ownText(questionEl)) : '';
+    const { name, accessible } = nameOf(
+      el,
+      role,
+      labelEl,
+      labelOwn,
+      fieldRoot,
+      question,
+    );
     const selfVisible = seen(el);
     let visible = selfVisible;
     if (!visible && type === 'file') visible = dropzoneOf(el).some(seen);
@@ -461,6 +703,14 @@
     )
       visible =
         (!!labelEl && seen(labelEl)) || (!!fieldRoot && seen(fieldRoot));
+    // A required mark the accessible name hides (stripMark drops a trailing `*` from aria-label / labelledby) or a
+    // placeholder carries ("Email *"): frameworks that validate in JS only (Vuetify rules) set no required attribute.
+    const markedName = /[*✱]\s*$/.test(
+      `${el.getAttribute('aria-label') || ''} ${byIds(el, 'aria-labelledby').map(textOf).join(' ')}`.trim(),
+    );
+    const markedPlaceholder = /^\s*[*✱]|[*✱]\s*$/.test(
+      el.getAttribute('placeholder') || '',
+    );
     const ariaRequired = (node) =>
       !!node && node.getAttribute('aria-required') === 'true';
     const userInvalid = (() => {
@@ -485,6 +735,8 @@
       ).filter((button) => !isSubmitType(button)).length >= 2
     )
       group = 'option_group';
+    const chooser = choosesFile(el, name, fieldRoot, buttonish, selfVisible);
+    const fileTrigger = fileTriggerOf(el, name, buttonish, chooser);
     // Site chrome; a nav that is a tablist (Ashby's Overview | Application) is page content.
     const searchLike =
       type === 'search' ||
@@ -509,12 +761,17 @@
         role,
         name,
         question: question || null,
+        // Only something a person answers is required: a link / button inside a required label (Lever's "ATTACH
+        // RESUME/CV" anchor around the file input) is not.
         required:
-          !!el.required ||
-          ariaRequired(el) ||
-          ariaRequired(fieldRoot) ||
-          marksRequired(labelEl) ||
-          marksRequired(questionEl),
+          (isField || !!group || chooser) &&
+          (!!el.required ||
+            ariaRequired(el) ||
+            ariaRequired(fieldRoot) ||
+            marksRequired(labelEl) ||
+            marksRequired(questionEl) ||
+            markedName ||
+            markedPlaceholder),
         invalid: el.getAttribute('aria-invalid') === 'true' || userInvalid,
         checked:
           'checked' in el && (type === 'checkbox' || type === 'radio')
@@ -535,11 +792,20 @@
           !!el.disabled ||
           el.getAttribute('aria-disabled') === 'true' ||
           !!el.closest('fieldset[disabled]'),
-        readonly: !!el.readOnly || el.getAttribute('aria-readonly') === 'true',
+        // A custom select trigger that is no text input (a button / div) takes no typing: AriaCombobox only clicks it.
+        readonly:
+          !!el.readOnly ||
+          el.getAttribute('aria-readonly') === 'true' ||
+          (group === 'combobox' &&
+            !['input', 'textarea'].includes(tag) &&
+            !el.isContentEditable),
         visible,
         self_visible: selfVisible,
         in_viewport: visible && inViewport(selfVisible ? el : fieldRoot || el),
         aria_hidden: !!el.closest('[aria-hidden=true]'),
+        // aria-describedby text: a field named only by its placeholder is told apart by it (Field signature).
+        described_by:
+          clean(byIds(el, 'aria-describedby').map(textOf).join(' ')) || null,
         filled,
         group,
         group_key: null,
@@ -548,12 +814,19 @@
         search_like: searchLike,
         submit_like:
           buttonish &&
+          !group &&
+          !fileTrigger &&
           !fieldRoot &&
           !searchLike &&
           (isSubmitType(el) ||
             SUBMIT_TEXT.test(`${name} ${el.getAttribute('class') || ''}`)) &&
           fieldsNearby(el),
-        chooser: choosesFile(el, name, fieldRoot, buttonish, selfVisible),
+        chooser,
+        file_trigger: fileTrigger,
+        typeahead: !group && typeaheadLike(el, role),
+        captcha_artifact: CAPTCHA_RESPONSE.test(
+          el.getAttribute('name') || el.id || '',
+        ),
         href: tag === 'a' ? clean(el.getAttribute('href'), 500) || null : null,
         options:
           tag === 'select'
@@ -570,9 +843,10 @@
           group === 'combobox' && fieldRoot
             ? textOf(fieldRoot.querySelector(CHIP)) || null
             : null,
-        strategies: strategiesOf(el, role, name),
+        strategies: strategiesOf(el, role, accessible),
         root_strategies: rootStrategiesOf(fieldRoot),
         regions: regionsOf(el, fieldRoot),
+        scope: scopeOf(el),
         attrs: {
           id: el.id || null,
           name: el.getAttribute('name'),
@@ -582,6 +856,7 @@
           accept: el.getAttribute('accept'),
           multiple: el.hasAttribute('multiple'),
           maxlength: el.getAttribute('maxlength'),
+          tabindex: el.getAttribute('tabindex'),
           'aria-autocomplete': el.getAttribute('aria-autocomplete'),
           'aria-haspopup': el.getAttribute('aria-haspopup'),
           value:
@@ -686,6 +961,26 @@
     else if (/captcha-delivery\.com/.test(src)) addCaptcha('datadome');
   }
   if (doc.querySelector('.grecaptcha-badge')) addCaptcha('recaptcha_invisible');
+  // An invisible captcha the page frames only on submit (Lever's hCaptcha): its widget div, response field or script.
+  const unframed = [
+    ['hcaptcha', '.h-captcha[data-sitekey], script[src*="hcaptcha.com"]'],
+    ['recaptcha', '.g-recaptcha[data-sitekey], script[src*="recaptcha/"]'],
+    ['turnstile', '.cf-turnstile[data-sitekey]'],
+  ];
+  for (const [kind, selector] of unframed) {
+    if (captcha.some((found) => found.startsWith(kind))) continue;
+    const response = Array.from(doc.querySelectorAll('input, textarea')).some(
+      (field) =>
+        CAPTCHA_RESPONSE.test(field.getAttribute('name') || field.id || '') &&
+        (field.getAttribute('name') || field.id)
+          .toLowerCase()
+          .startsWith(
+            kind === 'hcaptcha' ? 'h-' : kind === 'recaptcha' ? 'g-' : 'cf-',
+          ),
+    );
+    if (response || doc.querySelector(selector))
+      addCaptcha(`${kind}_invisible`);
+  }
 
   return {
     frame: { url: location.href, title: clean(doc.title) },

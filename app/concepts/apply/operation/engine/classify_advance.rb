@@ -5,7 +5,11 @@
 #
 # Candidates: visible, enabled elements of the form (Engine::FormElements) that are submit_like (probe/snapshot.js), plus
 # - only when the page shows evidence of a further page - buttons named by NEXT_LEXICON (a wizard's Next is often a
-# type=button, which the probe never calls submit_like).
+# type=button, which the probe never calls submit_like). With none of those, the form's buttons named by FINAL_LEXICON
+# (a dialog's type=button "Відгукнутися" in a footer outside its <form>): inside the form root an apply / respond verb
+# is the final button, outside it the same word is the page's launcher, so the snapshot's submit_like never carries it.
+# With none in the form root either: the same rule over the root's nearest dialog / modal container (probe/anchor.js),
+# where a modal keeps its final button in a footer outside the <form> (#dialog_finals).
 #
 #   no candidate          -> model nil (the caller halts target_not_found)
 #   one candidate         -> it
@@ -30,7 +34,9 @@ class Apply::Operation::Engine::ClassifyAdvance < ApplyMate::Operation::Base
 
   # \p{L}* after "наступн": the stem of наступний / наступна / наступне (\b alone would need the bare stem).
   NEXT_LEXICON = /\A\s*(?:next|continue|далі|продовжити|наступн\p{L}*|далее|weiter)\b/i
-  FINAL_LEXICON = /submit|apply|send|надіслати|відправити|подати|отправить/i
+  # The snapshot's submit lexicon (the one source, SnapshotAll::SUBMIT_TEXT) plus the apply / respond verbs: buttons
+  # already inside the form, where "Apply" / "Відгукнутися" / "Откликнуться" is a final button.
+  FINAL_LEXICON = Regexp.union(ApplyMate::Client::Browser::Operation::SnapshotAll::SUBMIT_TEXT, /apply|відгукн|откликн/i)
   STEP_INDICATOR = %r{\b(?:step|крок|шаг|page|сторінка)\s*(\d+)\s*(?:of|з|из|/|від)\s*(\d+)}i
   PROGRESSBAR = %r{\Aprogressbar (\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)\z}
   BUTTON_INPUT_TYPES = %w[submit button image].freeze
@@ -43,6 +49,8 @@ class Apply::Operation::Engine::ClassifyAdvance < ApplyMate::Operation::Base
       element['visible'] && !element['disabled']
     end
     candidates = @buttons.select { |element| element['submit_like'] || (next_button?(element) && more_pages?) }
+    candidates = @buttons.select { |element| final_button?(element) } if candidates.empty?
+    candidates = dialog_finals if candidates.empty?
     self.model = candidates.empty? ? nil : advance(pick(candidates))
   end
 
@@ -69,15 +77,44 @@ class Apply::Operation::Engine::ClassifyAdvance < ApplyMate::Operation::Base
     raise Apply::Operation::Engine::Halt.new(:target_not_found, detail: "submit buttons in the form: #{candidates.size}")
   end
 
+  # The final button of a dialog whose footer sits outside its <form> (an Angular uib-modal: `.modal-footer` with a
+  # type=button "Відгукнутися" next to `.modal-body > form`): the form root's nearest dialog / modal container
+  # (probe/anchor.js `container`), read with one more snapshot only on this path, and its submit_like or FINAL_LEXICON
+  # buttons there. [] when the root is in no dialog or is gone.
+  def dialog_finals
+    container = ctx.session.probe(:anchor, ctx.form_root).to_h['container']
+    return [] if container.blank?
+
+    excluded = Array(ctx.platform&.excluded_regions)
+    snapshot = ctx.session.snapshot_all(markers: Apply::Platform::Registry.dom_markers, regions: [ container, *excluded ])
+    snapshot.elements.select do |element|
+      regions = Array(element['regions'])
+      element['target'].frame_path == ctx.form_root.frame_path && regions.include?(container) &&
+        !regions.intersect?(excluded) && element['visible'] && !element['disabled'] &&
+        (element['submit_like'] || final_button?(element))
+    end
+  rescue ApplyMate::Client::Browser::TargetNotFound
+    []
+  end
+
   def next_name?(name)
     name.to_s.match?(NEXT_LEXICON)
   end
 
   # A button (not an answer button of an option group) named like a Next.
   def next_button?(element)
+    button?(element) && next_name?(element['name'])
+  end
+
+  # A form button (not an answer button) named like the final one.
+  def final_button?(element)
+    button?(element) && element['name'].to_s.match?(FINAL_LEXICON)
+  end
+
+  def button?(element)
     button = element['tag'] == 'button' || element['role'] == 'button' ||
              (element['tag'] == 'input' && BUTTON_INPUT_TYPES.include?(element['type']))
-    button && element['group'].nil? && next_name?(element['name'])
+    button && element['group'].nil?
   end
 
   # Looked up only when a button is named like a Next: the step indicator needs one HTML read of the frame.

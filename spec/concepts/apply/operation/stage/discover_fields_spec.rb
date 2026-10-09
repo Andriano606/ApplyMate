@@ -103,6 +103,16 @@ RSpec.describe Apply::Operation::Stage::DiscoverFields do
         expect(described_class.call(ctx:)[:step_result]).to eq('fields' => 3)
         expect(ctx.fields.map(&:label)).to eq([ 'Full name', 'Email', 'Phone' ])
       end
+
+      it "leaves out what the Navigator's accepted claim left out, in the survey only" do
+        ctx.scratch.claim_left_out = Set[Apply::Operation::Engine::BuildFieldInventory.dom_key(generic_page.elements.last)]
+
+        described_class.call(ctx:)
+        expect(ctx.fields.map(&:label)).to eq([ 'Full name', 'Email' ])
+
+        described_class.call(ctx:, reconcile: true)
+        expect(ctx.fields.map(&:label)).to eq([ 'Full name', 'Email', 'Phone' ])
+      end
     end
 
     context 'when the root now holds an e-mail-only box' do

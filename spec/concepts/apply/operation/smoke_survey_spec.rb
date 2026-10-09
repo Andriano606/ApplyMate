@@ -48,11 +48,11 @@ RSpec.describe Apply::Operation::SmokeSurvey do
                               canonical_form_url: canonical, form_url: canonical, form_frame: 'top',
                               navigation: [ { 'op' => 'unwrap', 'url_template' => '{canonical_form_url}' } ])
     expect(report).not_to have_key(:halt)
-    expect(report[:fields].size).to eq(15)
+    expect(report[:fields].size).to eq(14)
     expect(report[:fields].pluck('id')).to all(start_with('ashby:'))
     expect(report[:fields].pluck('widget')).to include('text', 'aria_combobox', 'option_group', 'file_input')
     expect(out.string).to include('platform:   ashby', 'schema api: 0 field(s)', "form url:   #{canonical}",
-                                  'fields (15):', 'id ', 'ashby:_systemfield_email')
+                                  'fields (14):', 'id ', 'ashby:_systemfield_email')
     expect(session.open_options).to contain_exactly(include(humanize: false, identity: apply.hashid))
     expect(session.calls_of(:goto)).to eq([ [ canonical ] ])
   end
@@ -67,7 +67,9 @@ RSpec.describe Apply::Operation::SmokeSurvey do
   it 'never fills, answers or submits and ends the apply cancelled with its engine columns restored' do
     call
 
-    %i[fill type select check uncheck upload press].each { |method| expect(session.calls_of(method)).to be_empty }
+    %i[fill type select check uncheck upload].each { |method| expect(session.calls_of(method)).to be_empty }
+    # Only the keys that open and close a combobox to read its options (Engine::ReadComboboxOptions), never Enter.
+    expect(session.calls_of(:press).map(&:last)).to all(satisfy { |key| Apply::Operation::Engine::ReadComboboxOptions::KEYS.include?(key) })
     expect(Apply::Operation::Engine::ClaimSubmit).not_to have_received(:call)
     expect(apply.reload).to have_attributes(state: 'cancelled', stage: nil, platform: nil, platform_match: nil,
                                             apply_key: nil, entry_url: nil, landing_url: nil, fields: nil, form_url: nil, answers: nil)

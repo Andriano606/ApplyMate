@@ -153,11 +153,72 @@ RSpec.describe ApplyMate::Ai::Client::Gemini do
       expect(a_request(:post, endpoint)).to have_been_made.once
     end
 
-    it 'does not retry a 400' do
+    it 'raises Unavailable for a quota 429, with the API key scrubbed from the message and the log' do
+      stub_gemini({ status: 429, body: '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}' })
+      allow(Rails.logger).to receive(:error)
+
+      expect { client.complete(request) }.to raise_error(ApplyMate::Ai::Client::Base::Unavailable) { |error|
+        expect(error.message).to include('429').and include('key=[REDACTED]')
+        expect(error.message).not_to include('test-key')
+      }
+      expect(Rails.logger).to have_received(:error).with(satisfy { |line| !line.include?('test-key') })
+    end
+
+    it 'does not retry a 400: a ProviderError naming the Faraday class, scrubbed, with no cause chain' do
       stub_gemini({ status: 400, body: '{"error":{"code":400}}' })
 
-      expect { client.complete(request) }.to raise_error(Faraday::BadRequestError)
+      expect { client.complete(request) }.to raise_error(ApplyMate::Ai::Client::Base::ProviderError) { |error|
+        expect(error).not_to be_a(ApplyMate::Ai::Client::Base::Unavailable)
+        expect(error.message).to start_with('Faraday::BadRequestError:').and(satisfy { |message| !message.include?('test-key') })
+        expect(error.cause).to be_nil
+      }
       expect(a_request(:post, endpoint)).to have_been_made.once
+    end
+
+    context 'with a real-shaped API key' do
+      subject(:client) { described_class.new(api_key: google_key, model: 'gemini-2.5-flash') }
+
+      let(:google_key) { "AIza#{SecureRandom.alphanumeric(35)}" }
+      let(:endpoint) { %r{generativelanguage\.googleapis\.com/v1beta/models/gemini-2\.5-flash:generateContent} }
+
+      it 'keeps the key out of the message, the cause chain and the log of a 5xx the gem wraps' do
+        stub_gemini({ status: 500, body: '{"error":{"code":500,"status":"INTERNAL"}}' })
+        allow(Rails.logger).to receive(:error)
+
+        expect { client.complete(request) }.to raise_error(ApplyMate::Ai::Client::Base::Unavailable) { |error|
+          expect(error.full_message(highlight: false)).not_to include(google_key)
+          expect(error.cause).to be_nil
+        }
+        expect(Rails.logger).to have_received(:error).with(satisfy { |line| !line.include?(google_key) })
+      end
+
+      it 'raises QuotaExhausted without retrying when the daily quota is used up' do
+        body = { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota.',
+                          details: [ { violations: [ { quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' } ] },
+                                     { retryDelay: '67247s' } ] } }.to_json
+        stub_gemini({ status: 429, body: })
+
+        expect { client.complete(retrying) }.to raise_error(ApplyMate::Ai::Client::Base::QuotaExhausted) { |error|
+          expect(error.message).to include('PerDay').and(satisfy { |message| !message.include?(google_key) })
+        }
+        expect(a_request(:post, endpoint)).to have_been_made.once
+      end
+
+      it 'treats a long retryDelay as an exhausted quota and a per-minute limit as transient' do
+        stub_gemini({ status: 429, body: { error: { code: 429, details: [ { retryDelay: '7200s' } ] } }.to_json })
+        expect { client.complete(request) }.to raise_error(ApplyMate::Ai::Client::Base::QuotaExhausted)
+
+        stub_gemini({ status: 429, body: { error: { code: 429, details: [ { quotaId: 'GenerateRequestsPerMinutePerProjectPerModel' },
+                                                                            { retryDelay: '27s' } ] } }.to_json })
+        expect { client.complete(request) }.to raise_error(ApplyMate::Ai::Client::Base::Unavailable)
+      end
+
+      it 'validates the key with the x-goog-api-key header, never in the URL' do
+        stub_request(:get, 'https://generativelanguage.googleapis.com/v1beta/models')
+          .with(headers: { 'x-goog-api-key' => google_key }).to_return(status: 200, body: '{"models":[]}')
+
+        expect { described_class.validate_api_key!(api_key: google_key) }.not_to raise_error
+      end
     end
 
     it 'raises naming finishReason when the candidate has no text' do

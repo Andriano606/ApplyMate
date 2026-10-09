@@ -53,7 +53,7 @@ class Apply::Widget::Autocomplete < Apply::Widget::Base
     session.fill(target, '')
     mark = session.dom_mark(target)
     session.type(target, prefix)
-    session.wait_for_listbox(since: mark, timeout: ctx.clamp(MAX_WAIT))
+    session.wait_for_listbox(since: mark, timeout: ctx.clamp(self.class::MAX_WAIT))
   end
 
   def matching(options, wanted)
