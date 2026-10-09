@@ -92,13 +92,33 @@ RSpec.describe ApplyMate::Client::Browser::Operation::SnapshotAll do
     expect(targets['Country']).to have_attributes(root: [ { 'css' => 'div.select' } ], readonly: true) # transparent
   end
 
-  it 'aggregates evidence over frames and digests the fingerprints' do
+  it 'passes the chooser flag through and targets a chooser button itself (it is seen, so no field root)' do
+    zone = probe_element(2, 'button', 'Upload resume', type: 'button', root: [ { 'css' => 'div.zone' } ])
+                         .merge('tag' => 'button', 'chooser' => true)
+    frames[1][:value]['snapshot']['elements'] << zone
+    chooser = snapshot.elements.find { |element| element['name'] == 'Upload resume' }
+
+    expect(chooser).to include('chooser' => true, 'ref' => 'f1:e2')
+    expect(chooser['target']).to have_attributes(strategies: [ { 'attr' => { 'id' => 'upload-resume' } } ], root: nil)
+  end
+
+  it 'aggregates evidence over frames and digests the fingerprints with their state' do
     expect(snapshot.evidence).to eq(
       frame_urls: frames.pluck(:url),
       script_srcs: [ 'https://jobs.ashbyhq.com/preply/embed?version=2' ],
       iframe_srcs: [ 'https://jobs.ashbyhq.com/preply/jid?embed=js' ],
       dom_markers: { '.ashby-application-form-field-entry' => 15 }
     )
-    expect(snapshot.digest).to eq(Digest::SHA1.hexdigest(snapshot.elements.pluck('fingerprint').join("\n")))
+    expect(snapshot.digest).to eq(described_class.digest_of(snapshot.elements)).and match(/\A\h{40}\z/)
+  end
+
+  it 'changes the digest when an element only changes its state (a revealed section, a selected tab), never on a value' do
+    elements = snapshot.elements
+    revealed = elements.map { |element| element.merge('visible' => false) }
+    typed = elements.map { |element| element.merge('filled' => true) }
+
+    expect(described_class.digest_of(revealed)).not_to eq(snapshot.digest)
+    expect(described_class.digest_of(elements.map { |element| element.merge('selected' => true) })).not_to eq(snapshot.digest)
+    expect(described_class.digest_of(typed)).to eq(snapshot.digest)
   end
 end

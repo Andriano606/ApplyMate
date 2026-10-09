@@ -37,10 +37,24 @@ RSpec.describe ApplyMate::Ai::Request do
       expect(request).to have_attributes(system: 'Be brief', images: [ image ], json_schema: schema)
     end
 
+    {
+      navigate: 0, answers: 2, verify: 0, cv: 2
+    }.each do |kind, retries|
+      it "retries a #{kind} request #{retries} time(s) by default" do
+        expect(described_class.for(kind:, text: 'hi').retries).to eq(retries)
+      end
+    end
+
+    it 'takes timeout and retries overrides, nil meaning the kind default' do
+      expect(described_class.for(kind: :answers, text: 'x', timeout: 12, retries: 0)).to have_attributes(timeout: 12, retries: 0)
+      expect(described_class.for(kind: :answers, text: 'x', timeout: nil, retries: nil)).to have_attributes(timeout: 90, retries: 2)
+    end
+
     it 'covers every declared kind in both tables' do
       expect(described_class::MAX_OUTPUT_TOKENS.keys).to eq(described_class::KINDS)
       expect(described_class::TIMEOUTS.keys).to eq(described_class::KINDS)
       expect(described_class::THINKING_BUDGETS.keys).to eq(described_class::KINDS)
+      expect(described_class::RETRIES.keys).to eq(described_class::KINDS)
     end
 
     it 'raises KeyError on an unknown kind' do

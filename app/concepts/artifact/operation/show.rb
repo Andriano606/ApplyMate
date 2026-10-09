@@ -12,6 +12,9 @@ class Artifact::Operation::Show < ApplyMate::Operation::Base
   }.freeze
 
   URL_TTL = 5.minutes
+  # Stored page snapshots (CaptureArtifact's failure HTML): always a download, never rendered on our origin, even
+  # though SanitizeHtml already made them inert.
+  DOWNLOAD_ONLY = %r{\A(?:text/html|application/xhtml\+xml)\b}i
 
   def perform!(params:, current_user:, **)
     owner = OWNERS.fetch(params[:owner].to_s) { raise ActiveRecord::RecordNotFound }
@@ -19,7 +22,7 @@ class Artifact::Operation::Show < ApplyMate::Operation::Base
     authorize! record, owner[:policy_query]
     attachment = find_attachment(record, owner[:names], params[:name].to_s)
 
-    disposition = params[:disposition] == 'attachment' ? 'attachment' : 'inline'
+    disposition = params[:disposition] == 'attachment' || DOWNLOAD_ONLY.match?(attachment.content_type.to_s) ? 'attachment' : 'inline'
     self.model = ApplyMate::Operation::Struct.new(url: attachment.url(expires_in: URL_TTL, disposition:))
   end
 

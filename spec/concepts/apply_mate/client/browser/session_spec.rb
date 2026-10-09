@@ -14,6 +14,41 @@ RSpec.describe ApplyMate::Client::Browser::Session do
     end
   end
 
+  describe '.open lease sizing' do
+    let(:driver) { instance_double(ApplyMate::Client::Browser::Driver::Playwright, start: nil, close: nil) }
+    let(:deadline) { 20.minutes.from_now }
+
+    def open_with(expires_at)
+      lease = instance_double(ApplyMate::Client::Browser::Lease, expires_at:)
+      allow(ApplyMate::Client::Browser::Operation::AcquireLease).to receive(:call)
+        .and_return(instance_double(ApplyMate::Operation::Result, model: lease))
+      allow(ApplyMate::Client::Browser::Driver::Playwright).to receive(:new).and_return(driver)
+      described_class.open(deadline:, owner: 'host:1:x') { |session| session }
+    end
+
+    it 'asks browserd for a TTL of the deadline plus LEASE_MARGIN_S' do
+      freeze_time do
+        open_with(deadline + 2.minutes)
+
+        expect(ApplyMate::Client::Browser::Operation::AcquireLease).to have_received(:call)
+          .with(owner: 'host:1:x', humanize: false, identity: nil, ttl_s: 20.minutes.to_i + described_class::LEASE_MARGIN_S)
+        expect(ApplyMate::Client::Browser::Driver::Playwright).to have_received(:new).with(lease: anything, deadline:)
+      end
+    end
+
+    it 'cuts its own deadline to the lease expiry minus the margin when browserd granted less' do
+      freeze_time do
+        expires_at = 10.minutes.from_now
+        session = open_with(expires_at)
+
+        expect(ApplyMate::Client::Browser::Driver::Playwright).to have_received(:new)
+          .with(lease: anything, deadline: expires_at - described_class::LEASE_MARGIN_S)
+        allow(driver).to receive(:deadline).and_return(expires_at - described_class::LEASE_MARGIN_S)
+        expect(session.deadline).to eq(expires_at - described_class::LEASE_MARGIN_S)
+      end
+    end
+  end
+
   describe 'against browserd', :browser do
     let(:owner) { "#{ApplyMate::Client::Browser::Browserd.owner_prefix}#{Process.pid}:session-spec" }
 
@@ -117,6 +152,35 @@ RSpec.describe ApplyMate::Client::Browser::Session do
         expect(session.probe(:snapshot, target.css('form#apply', frame_path: by_selector))['elements'])
           .to include(a_hash_including('tag' => 'input', 'name' => 'Email', 'visible' => true,
                                        'attrs' => a_hash_including('id' => 'email')))
+      end
+    end
+
+    it 'lists the tabs, switches to a new one and rebinds the network tracker to it' do
+      open_session do |session|
+        session.goto(FixtureSite.url('/new_tab.html'))
+        link = target.css('a#open-form')
+        expect(session.probe(:opens_tab, link)).to be(true)
+        expect(session.probe(:opens_tab, target.css('h1'))).to be(false)
+        session.network_watch(%r{/newsletter\z})
+
+        session.click(link)
+        expect(session.wait_until(timeout: 5) { session.pages.size == 2 }).to be(true)
+        expect(session.pages.last).to eq('url' => FixtureSite.url('/form.html'))
+        expect(session.current_url).to eq(FixtureSite.url('/new_tab.html')) # a new tab never takes the session itself
+
+        session.switch_to(1)
+        expect(session.current_url).to eq(FixtureSite.url('/form.html'))
+        expect(session.frames).to eq([ { 'url' => FixtureSite.url('/form.html'), 'name' => '' } ])
+
+        mark = session.network_mark
+        session.click(target.css('#newsletter button'))
+        session.settle(:click)
+        expect(session.network_since(mark, bodies: true)) # the watch registered on the first tab carried over
+          .to contain_exactly(a_hash_including(method: 'POST', url: FixtureSite.url('/newsletter'), status: 404, body: 'not found'))
+
+        session.switch_to(0)
+        expect(session.html).to include('opens in a new tab')
+        expect { session.switch_to(5) }.to raise_error(IndexError)
       end
     end
 
@@ -306,19 +370,27 @@ RSpec.describe ApplyMate::Client::Browser::Session do
 
           expect(session.screenshot(mask_fillable: true)).to start_with("\x89PNG".b)
 
-          session.network_watch(%r{/ashby/api/non-user-graphql})
+          session.network_watch(%r{/ashby/api/non-user-graphql\?op=ApiSubmit})
           network_mark = session.network_mark
           session.click(target.css('button.ashby-application-form-submit-button'))
           session.settle(:submit)
+          # The fixture submits ~1 s after the click (the reCAPTCHA token), past the settle, with a dozen unrelated
+          # POSTs (ApiSetFormValue, a RUM beacon) at the same moment. requestfinished may reach Ruby after the page
+          # rendered its answer, so wait for both.
+          submitted = session.wait_until(timeout: 10) do
+            session.html(frame_path: []).include?('ashby-application-form-success-container') &&
+              session.network_since(network_mark).any? { |record| record[:url].include?('op=ApiSubmit') }
+          end
+          expect(submitted).to be_truthy
 
-          expect(session.network_since(network_mark, bodies: true)).to contain_exactly(
-            a_hash_including(method: 'POST', status: 200, body: '{"data":{"submitApplicationForm":{"success":true}}}')
-          )
-          expect(session.network_since(network_mark).sole[:body]).to be_nil
-          expect(FixtureSite.submissions.sole).to include(op: 'SubmitApplicationForm')
+          records = session.network_since(network_mark, bodies: true)
+          submit, others = records.partition { |record| record[:url].include?('op=ApiSubmitSingleApplicationFormAction') }
+          expect(submit.sole).to include(method: 'POST', status: 200, body: FixtureSite::ASHBY_SUBMIT_ANSWERS[:success], body_error: nil)
+          expect(others).to be_present.and all(include(body: nil, body_error: nil)) # unwatched: never read
+          expect(session.network_since(network_mark).pluck(:body)).to all(be_nil)
+          expect(FixtureSite.submissions.sole).to include(op: 'ApiSubmitSingleApplicationFormAction')
           expect(JSON.parse(FixtureSite.submissions.sole[:body]).dig('variables', 'values'))
             .to include('_systemfield_name' => 'Test Applicant', '9f2c7a14-5e3b-4d6a-8c1f-0a2b3c4d5e04' => 'LinkedIn')
-          expect(session.html(frame_path: [])).to include('Thank you for applying')
         end
       end
 

@@ -125,9 +125,16 @@ class Apply::Platform::Base
     nil
   end
 
-  # Readiness, or nil (=> engine default).
+  # Readiness, or nil (=> engine default), or :ai_only (Generic: only the Navigator's R2-accepted form_reached says
+  # the form is there).
   def readiness
     nil
+  end
+
+  # True when nothing deterministic tells this platform's form has rendered (readiness :ai_only): Engine::ReachForm
+  # never polls WaitReady for it, Engine::Navigate never hands back on readiness, DiscoverFields checks R2.
+  def ai_only?
+    readiness == :ai_only
   end
 
   # Canonical identity of the posting for cross-board duplicates, or nil (=> CheckApplyKey's normalized form URL).
@@ -159,9 +166,11 @@ class Apply::Platform::Base
     fields
   end
 
-  # Positive evidence of an accepted submit only (Verifier): texts / url_patterns (Regexps), submit_request
-  # { url: Regexp, body_ok: ->(json) { bool } } or nil, and how many independent signals must agree.
+  # Positive evidence of an accepted submit only (Engine::VerifySubmit): texts / url_patterns (Regexps), submit_request
+  # { url: Regexp, body_ok: ->(json) { bool } } or nil, and how many independent signals must agree. Optional:
+  # selectors (CSS of the confirmation view in the form-root frame: the success_dom signal) and failure_selectors
+  # (CSS of a "could not submit" view there: vetoes :submitted).
   def success_evidence
-    { texts: [], url_patterns: [], submit_request: nil, min_signals: 1 }
+    { texts: [], url_patterns: [], selectors: [], failure_selectors: [], submit_request: nil, min_signals: 1 }
   end
 end

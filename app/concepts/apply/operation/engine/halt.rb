@@ -19,7 +19,7 @@ class Apply::Operation::Engine::Halt < StandardError
     no_application_path: :unsupported, external_messenger: :unsupported, private_address: :unsupported,
     wizard_too_long: :unsupported,
     captcha_challenge: :needs_human, email_code: :needs_human, missing_profile_fact: :needs_human,
-    session_expired: :needs_human, ai_integration_cannot_navigate: :needs_human,
+    session_expired: :needs_human,
     manual_apply_required: :needs_human, # design §18: Google Forms, visible captcha -> "apply yourself"
     already_claimed: :unverified, outcome_unknown: :unverified,
     review: :review, already_applied: :review

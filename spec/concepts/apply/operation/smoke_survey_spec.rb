@@ -20,6 +20,7 @@ RSpec.describe Apply::Operation::SmokeSurvey do
     ApplyMate::Client::Browser::Operation::SnapshotAll.call(driver:, regions:).model
   end
   let(:session) { FakeSession.new(html: '', final_url: canonical, snapshot:) }
+  let(:landing_html) { '<html><body>Google Forms</body></html>' }
 
   def call
     described_class.call(apply:, entry_url:, out:)
@@ -31,7 +32,7 @@ RSpec.describe Apply::Operation::SmokeSurvey do
     pages = {
       entry_url => ApplyMate::Client::Response.new('', { 'location' => redirect_to }, 302, nil),
       job_url => ApplyMate::Client::Response.new('<html><body><div id="root"></div></body></html>', {}, 200, nil),
-      redirect_to => ApplyMate::Client::Response.new('<html><body>Google Forms</body></html>', {}, 200, nil)
+      redirect_to => ApplyMate::Client::Response.new(landing_html, {}, 200, nil)
     }
     allow(http).to receive(:get) { |url, **| pages.fetch(url) }
     allow(Open3).to receive(:capture3)
@@ -87,6 +88,103 @@ RSpec.describe Apply::Operation::SmokeSurvey do
     expect(Apply::IN_PROGRESS_STATES).not_to include(apply.state)
     expect(apply.run_token).not_to eq(run_token)
     expect { Apply::Operation::Engine::StartContext.call(apply:) }.to raise_error(Apply::Operation::Engine::NotStartable)
+  end
+
+  # The surveyed row is `running` with no job behind it; a Navigator may outlast STALE_AFTER, and a reaped row is
+  # auto-resumed into the FULL engine. The beat keeps it alive and stops before the cancelling write.
+  it 'heartbeats the running row for the whole survey and stops the ticker before cancelling it' do
+    ticker = nil
+    shut_down_at_restore = nil
+    allow(Apply::Operation::Engine::Heartbeat).to receive(:call).and_wrap_original do |original, **kwargs|
+      original.call(**kwargs).tap { |result| ticker = result.model }
+    end
+    allow(Apply::Operation::Engine::FencedUpdate).to receive(:call).and_wrap_original do |original, **kwargs|
+      shut_down_at_restore = ticker.shutdown? if kwargs[:attributes][:state] == :cancelled
+      original.call(**kwargs)
+    end
+    call
+
+    expect(Apply::Operation::Engine::Heartbeat).to have_received(:call).once
+    expect(shut_down_at_restore).to be(true)
+  end
+
+  it 'beats with the survey run token, so a long survey never looks stale to ReapStale' do
+    beat = nil
+    allow(Apply::Operation::Engine::Heartbeat).to receive(:call).and_wrap_original do |original, ctx:|
+      beat = -> { Apply::Operation::Engine::Heartbeat::Tick.call(ctx:).model }
+      original.call(ctx:)
+    end
+    session.on(:goto) do
+      apply.update_columns(heartbeat_at: 10.minutes.ago, updated_at: 10.minutes.ago)
+      expect(beat.call).to be(true)
+      expect(apply.reload.heartbeat_at).to be > 1.minute.ago
+    end
+    call
+
+    expect(session.calls_of(:goto)).not_to be_empty
+  end
+
+  context 'when the entry URL leads to a site no adapter knows (Generic: the AI Navigator)' do
+    let(:redirect_to) { 'https://acme.example/careers/1' }
+    let(:landing_html) { '<html><body><h1>Senior Ruby developer</h1><button>Apply now</button></body></html>' }
+    let(:form_css) { 'body > main > form' }
+    let(:job_page) do
+      build_snapshot(frames: [ { url: redirect_to } ], elements: [ snapshot_element(role: 'button', name: 'Apply now') ])
+    end
+    let(:form_page) do
+      build_snapshot(frames: [ { url: redirect_to } ], elements: [
+        snapshot_element(role: 'button', name: 'Apply now', expanded: true),
+        *[ [ 'Full name', 'text' ], [ 'Email', 'email' ], [ 'Phone', 'tel' ] ].each_with_index.map { |(name, type), index|
+          snapshot_element(name:, type:, css: "#{form_css} > input:nth-of-type(#{index + 1})", regions: [ form_css ])
+        },
+        snapshot_element(role: 'button', name: 'Send application', submit_like: true, css: "#{form_css} > button",
+                         regions: [ form_css ])
+      ])
+    end
+    let(:session) { FakeSession.new(html: '', final_url: redirect_to, snapshot: job_page) }
+    let(:answers) do
+      [ { status: 'continue', reason: 'open the form', form: nil, give_up_code: nil,
+          actions: [ { type: 'click', ref: 'f0:e0', key: nil, index: nil, max_ms: nil } ] },
+        { status: 'form_reached', reason: 'name, email, phone', actions: [], give_up_code: nil,
+          form: { frame: 'f0', scope_ref: 'f0:e1', field_refs: %w[f0:e1 f0:e2 f0:e3], submit_ref: 'f0:e4', advance_ref: nil } } ]
+    end
+
+    before do
+      allow(session).to receive(:current_url).and_return('about:blank', redirect_to)
+      session.on(:click) { session.show(form_page) }
+      stub_request(:post, %r{generativelanguage\.googleapis\.com.*generateContent})
+        .to_return(*answers.map { |answer| gemini_json_response(answer.to_json) })
+    end
+
+    it 'navigates to the form, reports the AI calls and the navigator and reads the fields from the DOM' do
+      report = call.model
+
+      expect(report).to include(platform: 'generic', form_reached: true, ai_calls: 2, navigator_actions: 1,
+                                form_url: redirect_to, form_frame: 'top')
+      expect(report[:navigation].pluck('op')).to eq(%w[goto click wait_for])
+      expect(report[:fields].pluck('label')).to eq([ 'Full name', 'Email', 'Phone' ])
+      expect(out.string).to include('navigator:  1 action(s), form reached yes', 'ai calls:   2', 'fields (3):')
+    end
+
+    it 'only moves through pages: never types, selects, checks, uploads, presses or submits' do
+      call
+
+      %i[fill type select set_checked upload press trial_click].each { |method| expect(session.calls_of(method)).to be_empty }
+      expect(session.calls_of(:click).map(&:first)).to eq([ job_page.elements.first['target'] ])
+      expect(Apply::Operation::Engine::ClaimSubmit).not_to have_received(:call)
+      expect(apply.reload).to have_attributes(state: 'cancelled', navigation: nil, fields: nil)
+    end
+
+    it 'reports the give-up as the halt with form reached no' do
+      stub_request(:post, %r{generativelanguage\.googleapis\.com.*generateContent}).to_return(gemini_json_response(
+        { status: 'give_up', reason: 'sign-in first', actions: [], form: nil, give_up_code: 'login_required' }.to_json
+      ))
+
+      report = call.model
+
+      expect(report).to include(halt: include(code: :login_required), form_reached: false, ai_calls: 1, fields: [])
+      expect(out.string).to include('navigator:  0 action(s), form reached no', 'halt:       login_required')
+    end
   end
 
   context 'when the entry URL redirects to a Google Form' do

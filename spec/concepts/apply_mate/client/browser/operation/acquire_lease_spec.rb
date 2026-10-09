@@ -27,6 +27,14 @@ RSpec.describe ApplyMate::Client::Browser::Operation::AcquireLease, type: :opera
     expect(ApplyMate::Client::Browser::Clock).not_to have_received(:sleep_ms)
   end
 
+  it 'asks for the lease TTL when given one' do
+    stub_request(:post, leases_url).to_return(created)
+    described_class.call(owner: 'host:42:abc', ttl_s: 1260)
+
+    expect(a_request(:post, leases_url).with(body: { owner: 'host:42:abc', humanize: false, identity: nil, ttl_s: 1260 }.to_json))
+      .to have_been_made.once
+  end
+
   it 'never prints the ws_endpoint capability' do
     stub_request(:post, leases_url).to_return(created)
 

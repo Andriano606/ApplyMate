@@ -103,15 +103,57 @@ RSpec.describe Apply::Platform::Ashby do
       expect(described_class.throttle[:key].call(ctx)).to eq('ashby:preply')
     end
 
-    it 'needs two success signals and accepts only an error-free submit response' do
-      success = adapter.success_evidence
-      body_ok = success.dig(:submit_request, :body_ok)
+    describe 'success evidence' do
+      let(:success) { adapter.success_evidence }
+      let(:body_ok) { success.dig(:submit_request, :body_ok) }
+      let(:accepted) do
+        { 'data' => { 'submitApplicationFormAction' => { 'applicationFormResult' => { '__typename' => 'FormSubmitSuccess', '_' => nil },
+                                                         'messages' => { 'blockMessageForCandidateHtml' => nil } } } }
+      end
 
-      expect(success[:min_signals]).to eq(2)
-      expect(success.dig(:submit_request, :url)).to match('https://jobs.ashbyhq.com/api/non-user-graphql?op=Submit')
-      expect(body_ok.call('data' => { 'submit' => { 'success' => true } })).to be(true)
-      expect(body_ok.call('data' => nil, 'errors' => [ { 'message' => 'invalid' } ])).to be(false)
-      expect(success[:texts]).to include(match('Thank you for applying'))
+      def result(typename, block: nil, surveys: nil)
+        action = { 'applicationFormResult' => { '__typename' => typename }, 'messages' => { 'blockMessageForCandidateHtml' => block } }
+        action['surveyFormResults'] = surveys.map { |name| { '__typename' => name } } if surveys
+        { 'data' => { 'submitMultipleFormsAction' => action } }
+      end
+
+      it 'needs two signals: the confirmation view, the submit mutation, the copy; a failure view vetoes' do
+        expect(success[:min_signals]).to eq(2)
+        expect(success[:selectors]).to eq([ '.ashby-application-form-success-container' ])
+        expect(success[:failure_selectors]).to contain_exactly('.ashby-application-form-failure-container',
+                                                               '.ashby-application-form-blocked-application-container')
+      end
+
+      it 'watches only the submit mutations, never the other GraphQL ops' do
+        url = success.dig(:submit_request, :url)
+
+        expect(url).to match('https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction')
+        expect(url).to match('https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiSubmitMultipleFormsAction')
+        %w[ApiSetFormValue ApiSetFormValueToFile ApiCreateFileUploadHandle ApiJobPosting ApiSubmitSingleApplicationFormActionX].each do |op|
+          expect(url).not_to match("https://jobs.ashbyhq.com/api/non-user-graphql?op=#{op}")
+        end
+        expect(url).not_to match('https://evil.example/?u=https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiSubmitMultipleFormsAction')
+      end
+
+      it 'accepts only FormSubmitSuccess for every form, without errors or a block message' do
+        expect(body_ok.call(accepted)).to be(true)
+        expect(body_ok.call(result('FormSubmitSuccess', surveys: %w[FormSubmitSuccess]))).to be(true)
+        expect(body_ok.call(result('FormRender'))).to be(false) # validation re-render, HTTP 200
+        expect(body_ok.call(result('FormSubmitSuccess', surveys: %w[FormSubmitSuccess FormRender]))).to be(false)
+        expect(body_ok.call(result('FormSubmitSuccess', block: '<p>Not eligible</p>'))).to be(false)
+        expect(body_ok.call(accepted.merge('errors' => [ { 'message' => 'invalid' } ]))).to be(false)
+        expect(body_ok.call('data' => { 'setFormValue' => { '_' => nil } })).to be(false)
+        expect(body_ok.call('data' => nil)).to be(false)
+      end
+
+      it "matches Ashby's default copy and Preply's own, never a bare heading" do
+        texts = [ "Success Your application was successfully submitted. We'll contact you if there are next steps.",
+                  'Success Application received! Thank you for taking the first step in powering people’s progress with us.',
+                  'Thank you for your application' ]
+        texts.each { |text| expect(success[:texts]).to be_any { |pattern| pattern.match?(text) }, text }
+        expect(success[:texts]).to be_none { |pattern| pattern.match?('Success') }
+        expect(success[:texts]).to be_none { |pattern| pattern.match?('Submit Application') }
+      end
     end
 
     it 'traces an unavailable schema and returns nil (the DOM is read instead)' do
@@ -155,7 +197,7 @@ RSpec.describe Apply::Platform::Ashby do
       url = "http://host.docker.internal:4567/ashby/preply/#{'1' * 8}-1111-4111-8111-#{'1' * 12}/application"
 
       expect(fixture_ashby.job_url.match(url)[:slug]).to eq('preply')
-      expect(fixture_ashby.graphql_url).to match('http://host.docker.internal:4567/ashby/api/non-user-graphql?op=X')
+      expect(fixture_ashby.submit_url).to match('http://host.docker.internal:4567/ashby/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction')
       expect(fixture_ashby.signals.find { |signal| signal.kind == :host }.pattern).to match('host.docker.internal')
       expect(described_class.job_url).not_to match(url)
     end

@@ -154,6 +154,33 @@ RSpec.describe Apply::Operation::Engine::BuildFieldInventory do
       end
     end
 
+    context 'with the widget-specific controls' do
+      let(:elements) do
+        [
+          element('#zone', 'Upload resume', tag: 'button', type: 'button', role: 'button', chooser: true),
+          element('#plain', 'Upload', tag: 'button', type: 'button', role: 'button', chooser: false),
+          element('#school', 'School', role: 'combobox', group: 'combobox', attrs: { 'aria-autocomplete' => 'list' }),
+          element('#country', 'Country', role: 'combobox', group: 'combobox',
+                                         attrs: { 'aria-autocomplete' => 'list', 'aria-haspopup' => 'true' }),
+          element('#cover', 'Cover letter', tag: 'div', type: nil),
+          element('#birth', 'Birth date', attrs: { 'placeholder' => 'dd.mm.yyyy' }),
+          element('#start', 'Start date', type: 'date'),
+          element('#years', 'Years of experience', type: 'range', role: 'slider')
+        ]
+      end
+
+      it 'maps each to its kind and driver: a chooser button is a dropzone file, a plain button no field' do
+        expect(fields.map { |field| [ field.label, field.kind, field.widget ] }).to eq(
+          [
+            [ 'Upload resume', 'file', 'dropzone' ], [ 'School', 'autocomplete', 'autocomplete' ],
+            [ 'Country', 'combobox', 'aria_combobox' ], [ 'Cover letter', 'rich_text', 'content_editable' ],
+            [ 'Birth date', 'date', 'date_input' ], [ 'Start date', 'date', 'date_input' ],
+            [ 'Years of experience', 'range', 'range' ]
+          ]
+        )
+      end
+    end
+
     context 'when the platform key gives two controls the same id' do
       let(:elements) do
         [ element('#a', 'First', attrs: { 'data-field-path' => 'same' }), element('#b', 'Second', attrs: { 'data-field-path' => 'same' }) ]

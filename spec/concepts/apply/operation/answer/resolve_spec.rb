@@ -208,6 +208,25 @@ RSpec.describe Apply::Operation::Answer::Resolve do
         .to have_been_made.once
     end
 
+    it 'goes through CallAi (budgeted, token-counted), never AiHandler.call directly' do
+      stub_ai('why' => { 'value' => 'Because', 'confidence' => 0.9 }, 'remote' => { 'value' => 'Yes', 'confidence' => 0.8 })
+      expect(ApplyMate::Ai::AiHandler).not_to receive(:call)
+
+      resolved
+
+      expect(apply.reload).to have_attributes(ai_calls: 1, ai_calls_total: 1)
+    end
+
+    it 'answers only the given subset of fields' do
+      stub_ai('remote' => { 'value' => 'Yes', 'confidence' => 0.8 })
+      subset = ctx.field_list.select { |field| %w[e remote].include?(field.id) }
+      outcome = described_class.call(ctx:, fields: subset)
+
+      expect(outcome.model.keys).to contain_exactly('e', 'remote')
+      expect(outcome[:fields].map(&:id)).to eq(%w[e remote])
+      expect(outcome[:fields].map(&:semantic)).to all(be_present)
+    end
+
     it 'retries once with the error list when the answer set is invalid' do
       stub_ai({ 'why' => { 'value' => 'x', 'confidence' => 0.9 }, 'remote' => { 'value' => 'perhaps', 'confidence' => 0.9 } },
               { 'why' => { 'value' => 'x', 'confidence' => 0.9 }, 'remote' => { 'value' => 'No', 'confidence' => 0.9 } })
@@ -219,10 +238,25 @@ RSpec.describe Apply::Operation::Answer::Resolve do
     end
 
     it 'halts with invalid_ai_output after a second invalid answer' do
-      stub_ai({ 'why' => { 'value' => nil, 'confidence' => 0.9 } })
+      stub_ai({ 'why' => { 'value' => 'x', 'confidence' => 0.9 }, 'remote' => { 'value' => 'perhaps', 'confidence' => 0.9 } })
 
       expect { resolved }.to raise_error(Apply::Operation::Engine::Halt) { |halt| expect(halt.code).to eq(:invalid_ai_output) }
       expect(a_request(:post, gemini_url)).to have_been_made.twice
+    end
+
+    it 'halts required_field_unfillable when the AI leaves a required field blank twice (it cannot answer it)' do
+      stub_ai({ 'why' => { 'value' => nil, 'confidence' => 0.9 }, 'remote' => { 'value' => 'Yes', 'confidence' => 0.9 } })
+
+      expect { resolved }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+        expect(halt).to have_attributes(code: :required_field_unfillable, detail: 'why')
+      }
+      expect(a_request(:post, gemini_url)).to have_been_made.twice
+    end
+
+    it 'halts invalid_ai_output when a blank required field comes with an invalid one' do
+      stub_ai({ 'why' => { 'value' => '', 'confidence' => 0.9 }, 'remote' => { 'value' => 'perhaps', 'confidence' => 0.9 } })
+
+      expect { resolved }.to raise_error(Apply::Operation::Engine::Halt) { |halt| expect(halt.code).to eq(:invalid_ai_output) }
     end
 
     it 'treats an answer that breaks the schema like an invalid one' do
@@ -257,6 +291,24 @@ RSpec.describe Apply::Operation::Answer::Resolve do
       stub_ai('src' => { 'value' => 'Other', 'confidence' => 0.9 }, 'other' => { 'value' => 'a blog', 'confidence' => 0.9 })
 
       expect(resolved.model.keys).to match_array(%w[src other])
+    end
+
+    context 'when only the conditional field is resolved (a wizard follow-up, Engine::AnswerFollowups)' do
+      let(:subset) { described_class.call(ctx:, fields: fields.drop(1)) }
+
+      before { stub_ai('other' => { 'value' => 'a blog', 'confidence' => 0.9 }) }
+
+      it 'judges the condition by the stored answer of the field outside the subset' do
+        apply.update!(answers: { 'src' => answer_entry('Other', source: 'ai', confidence: 0.9) })
+
+        expect(subset.model).to eq('other' => { 'value' => 'a blog', 'source' => 'ai', 'confidence' => 0.9 })
+      end
+
+      it 'gives no answer when that stored answer does not meet it' do
+        apply.update!(answers: { 'src' => answer_entry('Friend', source: 'ai', confidence: 0.9) })
+
+        expect(subset.model).to eq({})
+      end
     end
   end
 

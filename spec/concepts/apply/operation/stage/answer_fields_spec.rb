@@ -25,6 +25,12 @@ RSpec.describe Apply::Operation::Stage::AnswerFields do
     expect(I18n.t("apply.stage.#{described_class.stage}", locale: :en)).to eq('Preparing answers')
   end
 
+  it 'refuses to run inside a session scope (a browser-backed AI must never run in a lease)' do
+    ctx.open_scope!(:survey, FakeSession.new(html: '', final_url: 'https://example.test/'), 5.minutes.from_now)
+
+    expect { described_class.call(ctx:) }.to raise_error(ArgumentError, /outside a session scope/)
+  end
+
   it 'persists the answers and the fields with their semantics' do
     run_engine_step(apply, described_class)
 

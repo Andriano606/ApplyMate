@@ -204,6 +204,20 @@ RSpec.describe Apply::Operation::Engine::Run, type: :job do
       expect(apply.failure).to include('code' => 'deadline')
     end
 
+    it 'maps a busy local Chrome slot (GeminiScraping, the Grover render) to a transient capacity halt' do
+      raise_in_prepare(ApplyMate::Client::LocalChrome::Busy.new('slot taken'))
+      run
+
+      expect(apply.failure).to include('code' => 'capacity', 'kind' => 'transient')
+    end
+
+    it 'maps an AI timeout too short for the client to deadline, not capacity' do
+      raise_in_prepare(ApplyMate::Ai::Client::Base::DeadlineTooShort.new('20 s left'))
+
+      expect { run }.to have_enqueued_job(Apply::Job::Apply)
+      expect(apply.failure).to include('code' => 'deadline', 'kind' => 'transient')
+    end
+
     it 'maps TargetNotFound to a failed target_not_found without auto-resume' do
       raise_in_prepare(ApplyMate::Client::Browser::TargetNotFound.new(nil, 'no element for #send'))
 

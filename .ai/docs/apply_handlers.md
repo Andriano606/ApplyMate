@@ -19,7 +19,10 @@ Resolved once in `Apply::Job::Apply`:
 ```ruby
 class Apply::Job::Apply < ApplicationJob
   queue_as :apply
-  limits_concurrency to: 1, key: ->(apply_id) { "apply:#{apply_id}" }, duration: 45.minutes
+  # the longest run any AI integration gets (54 min with GeminiScraping) + 15 min: 69 min, see apply_engine.md
+  CONCURRENCY_SLACK = 15.minutes
+  limits_concurrency to: 1, key: ->(apply_id) { "apply:#{apply_id}" },
+                     duration: Apply::Operation::Engine::StartContext.max_run_seconds.seconds + CONCURRENCY_SLACK
 
   def perform(apply_id)
     apply = Apply.find(apply_id)
@@ -68,12 +71,13 @@ steps can be restored from one earlier attempt, otherwise re-runs all of them; d
 "Runner"). `if:` is evaluated once before the lease is opened (falsy: no rows); scopes do not nest. The scope named
 `:submit` opens its Session with `humanize: true`. `scope_conditions` holds `{ name => lambda or nil }`.
 
-`engine!(detect_if: nil, if: nil)` declares the phase 3a engine pipeline: `DetectPlatform` (guarded by `detect_if`
-only, it must run for a still unknown platform), `FetchSchema`, scope `:survey` (`ReachForm`, `DiscoverFields`; only
-while `ctx.survey_needed?`), `AnswerFields`, `Ai::GeneratePdfCv` (same prompt/schema options as the legacy
-pipeline), `ReviewGate`, `AcquireHostSlot`, scope `:submit` (`ReachForm replay: true`, `DiscoverFields reconcile:
-true`, `FillFields`, `Submit`, `Verify`). `if:` is AND-ed into every other step and scope condition (Handler::Dou
-passes `ctx.apply.external? && ctx.platform_known?`). Recipe learning arrives in phase 6.
+`engine!(if: nil)` declares the engine pipeline: `DetectPlatform`, `FetchSchema`, scope `:survey` (`ReachForm`,
+`DiscoverFields`; only while `ctx.survey_needed?`), `AnswerFields`, `Ai::GeneratePdfCv` (same prompt/schema options
+as the internal pipeline), `ReviewGate`, `AcquireHostSlot`, scope `:submit` (`ReachForm replay: true`,
+`DiscoverFields reconcile: true`, `FillFields`, `Submit`, `Verify`). `if:` (the handler's routing guard; Handler::Dou
+passes `ctx.apply.external?`) is put on every step and AND-ed into every scope condition; nothing depends on the
+platform: a platform no adapter knows stays `generic` and is reached by the AI Navigator inside `ReachForm`. Recipe
+learning arrives in phase 6.
 
 ## The Runner wraps the steps
 
@@ -124,15 +128,13 @@ end
 | `FetchApplyType` | `fetch_apply_type` | scraper returns `nil` → `applyble: false`, `no_application_path` |
 | `FetchDetails` | `fetch_details` | — |
 | `FetchInternalForm` | `fetch_form` | blank vacancy page → `not_a_form` (detail `empty vacancy page`) |
-| `Ai::FetchExternalForm` | `fetch_form` | no `vacancy.external_url` → `no_application_path`; AI finds no form / trigger / form URL → `not_a_form`; empty rendered page, trigger not on the page (`TargetNotFound`) or revealing nothing, empty form URL page → `target_not_found`; an AI `form_url` (resolved against the page URL) on a non-public address → `ApplyMate::Net::UnsafeUrlError` from `ResolvePublicAddress` → `private_address` (`unsupported`, Runner mapping). Renders in a `Session` (`humanize: false`); the trigger click is `click(Target.css(ai_selector))` → `settle(:click)` → `ready?(form, timeout: 10)` (a `false` is ignored: the AI re-check decides); the AI selector is stored as `trigger_selector` as-is |
 | `Ai::FillForm` | `fill_form` | AI returned an empty payload → `invalid_ai_output` |
 | `Ai::GeneratePdfCv` | `generate_cv` | — (must equal the stage `Apply.with_cv_or_generating_cv` lists as a CV placeholder) |
 | `SendApply::Http` | `submit` | see "Submit and the claim" |
-| `SendApply::Browser` | `submit` | see "Submit and the claim" |
 | `Stage::DetectPlatform` | `detect` | `no_application_path`, `already_applied`, HTTP gates (`manual_apply_required` / `google_forms`, `external_messenger`, `login_required`, `bot_wall`, `private_address`) |
 | `Stage::FetchSchema` | `schema` | — |
-| `Stage::ReachForm` | `navigate` (`navigate:survey`, `navigate:replay:submit`) | `not_a_form`, `already_applied`, rendered gates (`manual_apply_required` / `captcha`, ...) |
-| `Stage::DiscoverFields` | `discover` (`discover:survey`, `discover:submit`) | after_goto gates |
+| `Stage::ReachForm` | `navigate` (`navigate:survey`, `navigate:replay:submit`) | `not_a_form`, `already_applied`, rendered gates (`manual_apply_required` / `captcha`, `login_required`, `bot_wall`, `closed_posting`, `email_code`, ...), the Navigator's `stuck` / `budget_exhausted` / `deadline` / `invalid_ai_output` / give-up codes |
+| `Stage::DiscoverFields` | `discover` (`discover:survey`, `discover:submit`) | after_goto gates, `not_a_form` (Generic inventory fails R2) |
 | `Stage::AnswerFields` | `answer` | `invalid_ai_output` (Runner mapping) |
 | `Stage::ReviewGate` | `review` | `review` → `needs_review` |
 | `Stage::AcquireHostSlot` | `throttle` | raises `Engine::Throttled` → `waiting_capacity` |
@@ -140,8 +142,7 @@ end
 | `Stage::Submit` | `submit` (`submit:submit`) | `deadline`, before-submit gates, `target_not_found`; after the claim → `submit_unverified` |
 | `Stage::Verify` | `verify` (`verify:submit`) | `validation_rejected`, `outcome_unknown` |
 
-The engine stages (`Apply::Operation::Stage::*`) with their scopes and input digests: `apply_engine.md`, "Stages of
-phase 3a".
+The engine stages (`Apply::Operation::Stage::*`) with their scopes and input digests: `apply_engine.md`, "Stages".
 
 Exceptions without a `halt!` keep their Runner mapping: `FormExtractor`'s "No form found" is `unexpected_error`,
 an AI `EmptyResponse` / `InvalidResponse` is `invalid_ai_output`.
@@ -152,10 +153,12 @@ failed — is removed explicitly, because the Runner clears `applies.stage` only
 
 ## Submit and the claim
 
-Both submit steps take the claim with `Apply::Operation::Engine::ClaimSubmit.call(ctx:)` after everything that can
-fail without side effects and immediately before the irreversible action. After the claim every halt lands in
-`submit_unverified` (claim rule, `apply_engine.md`), except `session_expired` / `validation_rejected` raised with
-`definitive: true`, which release the claim.
+Both submit steps (`SendApply::Http` on the internal path, `Stage::Submit` in the engine's `:submit` scope) take the
+claim with `Apply::Operation::Engine::ClaimSubmit.call(ctx:)` after everything that can fail without side effects and
+immediately before the irreversible action. After the claim every halt lands in `submit_unverified` (claim rule,
+`apply_engine.md`), except `session_expired` / `validation_rejected` raised with `definitive: true`, which release
+the claim. `Stage::Submit` (trial click, `ClassifyAdvance`, claim, click) and `Stage::Verify` (deterministic signals,
+AI corroboration only next to one of them): `apply_engine.md`, "Submit and Verify".
 
 **`SendApply::Http`** — cookies, headers and `handler.build_payload(apply)` (CV download) first, then the claim, then
 `client.post_multipart`:
@@ -167,30 +170,6 @@ fail without side effects and immediately before the irreversible action. After 
 | redirect matching `/login`, `/signin`, `/auth` | `session_expired`, `definitive: true` → claim released, `needs_human` ("refresh your session") |
 | redirect to the vacancy page without `applied` in the query | `outcome_unknown` (detail: location) → `submit_unverified` |
 | any other status | `outcome_unknown` (`HTTP <status>`) → `submit_unverified` |
-
-**`SendApply::Browser`** — one `Session.open(..., humanize: true)` (the only humanized lease, design §19): `goto`, the
-trigger (`click(Target.css(trigger))`, `TargetNotFound` → `target_not_found`, no claim; then `settle(:click)` and
-`ready?(Target.css('form'), timeout: 10)`), fill, CV upload, the submit-button check
-`present?(submit_target, visibility: :required)` (missing → `target_not_found`, no claim, `failed`), claim, `click`
-(a `TargetNotFound` now → `target_not_found` after the claim → `submit_unverified`), `settle(:submit)`, full-page
-screenshot and HTML; the lease is released before the verdict call (`CheckSubmitResult`).
-
-- **Fill:** every `filled_inputs` entry with a value except `file` / `hidden` / `checkbox` / `radio` (hidden inputs
-  belong to the page; option widgets come with phase 3). Target strategies: the stored selector, then
-  `FORM_CONTROLS_CSS` with `nth: form_index` (position). `select` tags → `session.select(value:)`, the rest
-  `session.fill`; then `settle(:key)` and a read-back through `probe(:read_value)`: a value that does not read back
-  (whitespace-squished compare) → `required_field_unfillable` before the claim. A field that is not on the page →
-  `target_not_found` (Runner mapping), also before the claim.
-- **CV:** `upload` to the file input (stored selector, `input[type="file"]`, position) + `settle(:file)`.
-- **Submit target:** strategies `{css: submit_selector, has_text: submit_text}` then `{css: submit_selector}`; each
-  must match exactly one visible element (`Locate`).
-- No reCAPTCHA token refresh: input is trusted (Camoufox) and nothing injects tokens.
-
-| Verdict | Outcome |
-|---|---|
-| `success: true` | returns → `completed` |
-| `success: false` | `validation_rejected` (detail: reason), **not** definitive → `submit_unverified`, claim kept |
-| no text (`EmptyResponse`) or unparseable (`InvalidResponse`) | not rescued in the step: the Runner maps it to `invalid_ai_output` (`Run::ERROR_CODES`), the claim rule makes it `submit_unverified` |
 
 An AI verdict alone never releases a claim (design §11.4). A claimed apply is not startable again (`StartContext`
 only starts `queued` / `waiting_capacity` / stale `running`), so a second run never submits twice; the user resolves
@@ -215,41 +194,36 @@ end
 ## DOU Handler
 
 DOU supports both internal (in-platform) and external (company site) apply flows, distinguished by
-`apply.apply_type`. External applies to a platform the registry knows run the phase 3a engine; any other external
-apply keeps the legacy browser path until phase 3b:
+`apply.apply_type`. Every external apply runs the engine, whatever the platform: a known one through its adapter,
+anything else as `generic` through the AI Navigator, with whatever AI integration the user chose. The internal apply
+keeps the HTTP steps until phase 4:
 
 ```ruby
 class Apply::Handler::Dou < Apply::Handler::Base
   add_step Apply::Operation::CheckApplyable
   add_step Apply::Operation::FetchApplyType
-  engine! detect_if: ->(ctx) { ctx.apply.external? }, if: ->(ctx) { ctx.apply.external? && ctx.platform_known? }
-  # TEMPORARY legacy external path for platforms the registry does not know: deleted in phase 3b.
-  add_step Apply::Operation::Ai::FetchExternalForm, if: ->(ctx) { ctx.apply.external? && !ctx.platform_known? }
-  add_step Apply::Operation::FetchInternalForm,      if: ->(ctx) { ctx.apply.internal? }
-  add_step Apply::Operation::Ai::FillForm, if: ->(ctx) { ctx.apply.internal? || !ctx.platform_known? },
+  engine! if: ->(ctx) { ctx.apply.external? }
+  add_step Apply::Operation::FetchInternalForm, if: ->(ctx) { ctx.apply.internal? }
+  add_step Apply::Operation::Ai::FillForm, if: ->(ctx) { ctx.apply.internal? },
                                            prompt_class: Apply::Ai::Prompt::FillForm,
                                            schema_class: Apply::Ai::ResponseSchema::FillForm
-  add_step Apply::Operation::Ai::GeneratePdfCv, if: ->(ctx) { ctx.apply.internal? || !ctx.platform_known? },
+  add_step Apply::Operation::Ai::GeneratePdfCv, if: ->(ctx) { ctx.apply.internal? },
                                                 prompt_class: Apply::Ai::Prompt::GenerateCv,
                                                 schema_class: Apply::Ai::ResponseSchema::GenerateCv
-  add_step Apply::Operation::SendApply::Browser, if: ->(ctx) { ctx.apply.external? && !ctx.platform_known? }
-  add_step Apply::Operation::SendApply::Http,    if: ->(ctx) { ctx.apply.internal? }
+  add_step Apply::Operation::SendApply::Http, if: ->(ctx) { ctx.apply.internal? }
 end
 ```
 
 | Apply | Step keys of one attempt |
 |---|---|
-| external, known platform (Ashby; or generic with a probable known platform that the survey identifies) | `check_applyable fetch_apply_type detect schema [navigate:survey discover:survey] answer generate_cv review throttle navigate:replay:submit discover:submit fill:submit submit:submit verify:submit` |
-| external, unknown platform (`generic`, e.g. PeopleForce) | `check_applyable fetch_apply_type detect fetch_form fill_form generate_cv submit` (legacy, unchanged behaviour) |
+| external (Ashby, Generic, any platform) | `check_applyable fetch_apply_type detect schema [navigate:survey discover:survey] answer generate_cv review throttle navigate:replay:submit discover:submit fill:submit submit:submit verify:submit` (the `:survey` scope only while `ctx.survey_needed?`: skipped when the schema and canonical URL already give the fields) |
 | internal | `check_applyable fetch_apply_type fetch_form fill_form generate_cv submit` |
 
-- `ctx.platform_known?` is false before `detect` ran and for `generic`, so a known platform never touches
-  `FetchExternalForm` / `SendApply::Browser`, and an unknown one never runs the engine stages after `detect`.
-- `generate_cv` is declared by `engine!` and by the legacy list; the conditions exclude each other (one CV per
-  attempt; `apply_steps` is unique on `(apply_id, attempt, key)`). `dou_spec.rb` "step conditions" checks every
-  external/known/probable combination.
+- `generate_cv` is declared by `engine!` and by the internal list; the conditions exclude each other (one CV per
+  attempt; `apply_steps` is unique on `(apply_id, attempt, key)`). `dou_spec.rb` "step conditions" checks both apply
+  types.
 - Routing details, the engine stage table and the read-only smoke task (`apply:smoke`): `apply_engine.md`
-  ("Handler::Dou routing", "Stages of phase 3a", "Smoke survey").
+  ("Handler::Dou routing", "Stages", "Navigator (Generic)", "Smoke survey").
 
 ## CheckApplyable vs FetchApplyType
 

@@ -5,8 +5,9 @@ require 'rails_helper'
 RSpec.describe ApplyMate::Ai::Client::Gemini do
   subject(:client) { described_class.new(api_key: 'test-key', model: 'gemini-2.5-flash') }
 
-  let(:endpoint) { %r{generativelanguage\.googleapis\.com/v1/models/gemini-2\.5-flash:generateContent\?key=test-key} }
+  let(:endpoint) { %r{generativelanguage\.googleapis\.com/v1beta/models/gemini-2\.5-flash:generateContent\?key=test-key} }
   let(:request) { ApplyMate::Ai::Request.for(kind: :verify, text: 'Did it work?') }
+  let(:retrying) { ApplyMate::Ai::Request.for(kind: :verify, text: 'Did it work?', retries: 2) }
   let(:sent_bodies) { [] }
 
   before do
@@ -134,15 +135,22 @@ RSpec.describe ApplyMate::Ai::Client::Gemini do
     it 'retries a 503 and returns the following 200' do
       stub_gemini({ status: 503, body: '{"error":{"code":503}}' }, gemini_json_response('recovered'))
 
-      expect(client.complete(request).text).to eq('recovered')
+      expect(client.complete(retrying).text).to eq('recovered')
       expect(client).to have_received(:sleep).with(2).once
     end
 
     it 'gives up after two retries' do
       stub_gemini({ status: 503, body: '' })
 
-      expect { client.complete(request) }.to raise_error(/503/)
+      expect { client.complete(retrying) }.to raise_error(/503/)
       expect(a_request(:post, endpoint)).to have_been_made.times(3)
+    end
+
+    it 'does not retry a 503 when the request says retries: 0 (the default of a verify request)' do
+      stub_gemini({ status: 503, body: '' })
+
+      expect { client.complete(request) }.to raise_error(/503/)
+      expect(a_request(:post, endpoint)).to have_been_made.once
     end
 
     it 'does not retry a 400' do

@@ -32,12 +32,12 @@ end
 Apply operations that need raw requests call `Source#http_client(**options)`, which builds the same `http_client_class` with the given options: `source.http_client(request_timeout: 30)` in `SendApply::Http`, `source.http_client` in `FetchInternalForm`. `SyncVacancies` builds `scraper_class.http_client_class.new(proxy:, request_timeout:, connect_timeout:)` for each leased proxy. The client class is not sourced from the database. The session cookie is sent through `scraper.session_headers(session_id)`, and its name comes from `Scraper.session_cookie_name` (`Source#session_cookie_name` for callers without a scraper).
 
 **Browser is for operations, not scrapers.**
-`ApplyMate::Client::Browser::Session` is used only in `Apply::Operation::*` (today `Ai::FetchExternalForm` and
-`SendApply::Browser`) for pages that need real interaction. Every use is a block:
+`ApplyMate::Client::Browser::Session` is used only in `Apply::Operation::*` (the apply engine's session scopes, see
+`.ai/docs/apply_engine.md`, and the read-only `SmokeSurvey`) for pages that need real interaction. Every use is a block:
 `Session.open(deadline: ctx.scope_deadline, owner: Session.owner_for(apply), humanize:, identity: apply.hashid) { |session| … }`;
 the lease is released in `ensure`, so hold the block only while the page is needed (run AI calls and DB writes after
 it when they do not need the page). `humanize: true` only for the submit lease. The API, leases and isolation are in
-`.ai/docs/browser.md`; Ferrum remains only inside `ApplyMate::Ai::Client::GeminiScraping` (its own local Chrome).
+`.ai/docs/browser.md`; Ferrum remains only inside `ApplyMate::Ai::Client::GeminiScraping` (its own local Chrome, under `ApplyMate::Client::LocalChrome`).
 
 **Handler resolution is name-based.**
 The handler class is derived from the source's scraper class name:
@@ -78,7 +78,7 @@ Two Solid Queue queues exist:
 | `default` | general worker (`SQ_THREADS`, `SQ_PROCESSES`, default 2x2) | everything that neither launches a browser nor calls AI |
 | `apply`   | one apply worker, 1 process, `APPLY_SLOTS` threads         | browser and AI jobs                                     |
 
-**Rule:** every job that may launch a browser (Grover, GeminiScraping, a future Camoufox lease) or call AI runs on `:apply` (`queue_as :apply` plus `limits_concurrency ... duration:`); everything else stays on `:default`. The jobs on `:apply` are `Apply::Job::Apply` (key `apply:<id>`, 45 min), `VacancyCv::Job::Create` (key `vacancy_cv:<id>`, 15 min), `VacancyQuestion::Job::Create` (key `vacancy_question:<id>`, 10 min) and `UserProfile::Job::ExtractFacts` (key `user_profile_facts:<id>`, 10 min; enqueued by `UserProfile::Operation::Create`/`Update` when the CV changed); each key prefix follows the record's own id space.
+**Rule:** every job that may launch a browser (Grover, GeminiScraping, a Camoufox lease) or call AI runs on `:apply` (`queue_as :apply` plus `limits_concurrency ... duration:`), so the one process-wide `ApplyMate::Client::LocalChrome` slot of the apply worker bounds every local Chrome; everything else stays on `:default`. The jobs on `:apply` are `Apply::Job::Apply` (key `apply:<id>`, `StartContext.max_run_seconds + CONCURRENCY_SLACK` = 69 min), `VacancyCv::Job::Create` (key `vacancy_cv:<id>`, 15 min), `VacancyQuestion::Job::Create` (key `vacancy_question:<id>`, 10 min) and `UserProfile::Job::ExtractFacts` (key `user_profile_facts:<id>`, 10 min; enqueued by `UserProfile::Operation::Create`/`Update` when the CV changed); each key prefix follows the record's own id space.
 
 `SQ_ROLE` picks the workers a process starts. `config/queue.yml` reads it only through `Apply::Operation::AssertQueueTopology.role`, which raises `Violation` for anything but `general | apply | all` (a typo such as `generl` would otherwise render both workers and start a second apply worker beside the `apply_worker` container):
 

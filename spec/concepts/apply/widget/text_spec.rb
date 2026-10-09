@@ -9,6 +9,11 @@ RSpec.describe Apply::Widget::Text, :browser do
     Apply::Operation::Engine::SetFieldValue.call(ctx:, field:, value:).model
   end
 
+  it 'leaves dates to Widget::DateInput' do
+    expect(described_class::KINDS).not_to include('date')
+    expect(described_class.handles?(answer_field(kind: 'date'))).to be(false)
+  end
+
   it 'fills a text input and reads the value back' do
     on_fixture_form(ctx, FixtureSite.url('/form.html'), form_root: 'form#apply') do |_session, fields|
       field = fixture_field(fields, 'Full name')

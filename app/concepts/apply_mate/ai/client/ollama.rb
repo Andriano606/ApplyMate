@@ -2,9 +2,10 @@
 
 class ApplyMate::Ai::Client::Ollama < ApplyMate::Ai::Client::Base
   TAGS_PATH = '/api/tags'
-  # Context window requested per call. Prompts carry ~20k chars of minimised HTML plus the
-  # full CV and vacancy text; Ollama's server-side default context is far smaller and
-  # silently truncates the prompt head instead of failing.
+  # Context window requested per call. Prompts carry a page snapshot's element lines
+  # (Navigate, RecoverField) or the full CV and vacancy text (GenerateCv, AnswerFields);
+  # Ollama's server-side default context is far smaller and silently truncates the prompt
+  # head instead of failing.
   NUM_CTX = 16_384
 
   # Vision depends on the pulled model (llava, gemma3, …), so it is not declared in phase 0.

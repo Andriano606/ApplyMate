@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Job application</title>
+    <!-- A third-party application widget embedded cross-origin by generic/careers.html (no adapter, no platform
+         markers). "Overview" is the selected tab; clicking "Apply" renders a two-page wizard into div#application-form
+         after 300 ms, the way a Vue app mounts a view:
+           page 1  Full name, Email, Phone, a readonly Element-UI-like select "How did you hear about us?" (.el-select;
+                   its dropdown is pre-rendered hidden at the end of <body>, no ARIA roles), "Step 1 of 2", Next
+                   (type=button; validates page 1 and keeps its values in script state)
+           page 2  a contenteditable "Cover letter", a file input "Resume", the consent checkbox "I agree to the privacy
+                   policy", "Step 2 of 2", "Submit application" (type=button)
+         Submit validates page 2, then fetch()es POST {{ALT_ORIGIN}}/generic/submit with every value as JSON (FixtureSite
+         records it) and replaces the form root with the thank-you text. Nothing is posted by Next. -->
+    <style>
+      body { font-family: sans-serif; margin: 1rem; }
+      [role=tablist] button { padding: 0.5rem 1rem; border: 0; background: #eee; }
+      [role=tablist] button[aria-selected=true] { background: #335; color: #fff; }
+      .field { margin: 0.75rem 0; }
+      .field label { display: block; }
+      .step { color: #555; }
+      .error { color: #b00; }
+      .el-input__inner { width: 16rem; cursor: pointer; }
+      .el-select-dropdown { position: absolute; z-index: 20; background: #fff; border: 1px solid #888; }
+      .el-select-dropdown__list { list-style: none; margin: 0; padding: 0; }
+      .el-select-dropdown__item { padding: 0.25rem 0.5rem; cursor: pointer; }
+      .editor { border: 1px solid #888; min-height: 4rem; padding: 0.25rem; width: 30rem; }
+    </style>
+  </head>
+  <body>
+    <nav role="tablist" aria-label="Vacancy">
+      <button type="button" role="tab" id="tab-overview" aria-selected="true" aria-controls="overview">Overview</button>
+      <button type="button" role="tab" id="tab-apply" aria-selected="false" aria-controls="application-form">Apply</button>
+    </nav>
+
+    <section id="overview" role="tabpanel" aria-labelledby="tab-overview">
+      <h2>About the role</h2>
+      <p>You will animate characters for our AI products together with a small, friendly team.</p>
+    </section>
+
+    <div id="application-form" role="tabpanel" aria-labelledby="tab-apply" hidden></div>
+
+    <template id="page-1">
+      <p class="step">Step 1 of 2</p>
+      <div class="field">
+        <label for="full_name">Full name</label>
+        <input id="full_name" name="full_name" type="text" required />
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required />
+      </div>
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" />
+      </div>
+      <div class="field">
+        <label for="source-input">How did you hear about us?</label>
+        <div class="el-select">
+          <div class="el-input el-input--suffix">
+            <input id="source-input" type="text" readonly class="el-input__inner" placeholder="Select" autocomplete="off" />
+            <span class="el-input__suffix"><i class="el-select__caret el-icon-arrow-up"></i></span>
+          </div>
+        </div>
+      </div>
+      <p class="error" role="alert" hidden></p>
+      <button type="button" id="next">Next</button>
+    </template>
+
+    <template id="page-2">
+      <p class="step">Step 2 of 2</p>
+      <div class="field" role="group" aria-labelledby="cover-label">
+        <span id="cover-label">Cover letter</span>
+        <div id="cover" contenteditable="true" aria-labelledby="cover-label" class="editor"></div>
+      </div>
+      <div class="field">
+        <label for="resume">Resume</label>
+        <input id="resume" name="resume" type="file" accept=".pdf,.doc,.docx" />
+      </div>
+      <div class="field">
+        <label><input id="consent" name="consent" type="checkbox" value="1" required /> I agree to the privacy policy</label>
+      </div>
+      <p class="error" role="alert" hidden></p>
+      <button type="button" id="submit">Submit application</button>
+    </template>
+
+    <div class="el-select-dropdown el-popper" style="display: none">
+      <ul class="el-select-dropdown__list">
+        <li class="el-select-dropdown__item">LinkedIn</li>
+        <li class="el-select-dropdown__item">DOU</li>
+        <li class="el-select-dropdown__item">Friend</li>
+      </ul>
+    </div>
+
+    <script>
+      (() => {
+        const root = document.getElementById('application-form');
+        const overview = document.getElementById('overview');
+        const tabs = { overview: document.getElementById('tab-overview'), apply: document.getElementById('tab-apply') };
+        const dropdown = document.querySelector('.el-select-dropdown');
+        const values = {};
+
+        const show = (id) => root.replaceChildren(document.getElementById(id).content.cloneNode(true));
+        const fail = (message) => {
+          const error = root.querySelector('.error');
+          error.textContent = message;
+          error.hidden = false;
+        };
+
+        const mountSelect = () => {
+          const input = document.getElementById('source-input');
+          input.addEventListener('click', () => {
+            const rect = input.getBoundingClientRect();
+            dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+            dropdown.style.left = `${rect.left + window.scrollX}px`;
+            dropdown.style.display = 'block';
+          });
+        };
+        dropdown.querySelectorAll('.el-select-dropdown__item').forEach((item) =>
+          item.addEventListener('click', () => {
+            const input = document.getElementById('source-input');
+            if (input) input.value = item.textContent;
+            dropdown.style.display = 'none';
+          }),
+        );
+
+        const submit = async () => {
+          const cover = document.getElementById('cover').innerText.trim();
+          const files = Array.from(document.getElementById('resume').files, (file) => file.name);
+          const consent = document.getElementById('consent').checked;
+          if (!cover || !files.length || !consent) return fail('Please complete every field.');
+
+          Object.assign(values, { cover_letter: cover, resume: files[0], consent });
+          await fetch('{{ALT_ORIGIN}}/generic/submit', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(values),
+          });
+          root.replaceChildren();
+          const thanks = document.createElement('p');
+          thanks.textContent = 'Thank you for applying! We received your application.';
+          root.appendChild(thanks);
+        };
+
+        const next = () => {
+          const name = document.getElementById('full_name');
+          const email = document.getElementById('email');
+          const source = document.getElementById('source-input');
+          if (!name.checkValidity() || !email.checkValidity() || !source.value) return fail('Please fill in every required field.');
+
+          Object.assign(values, {
+            full_name: name.value, email: email.value, phone: document.getElementById('phone').value, source: source.value,
+          });
+          show('page-2');
+          document.getElementById('submit').addEventListener('click', submit);
+        };
+
+        tabs.apply.addEventListener('click', () => {
+          if (tabs.apply.getAttribute('aria-selected') === 'true') return;
+          tabs.apply.setAttribute('aria-selected', 'true');
+          tabs.overview.setAttribute('aria-selected', 'false');
+          overview.hidden = true;
+          setTimeout(() => {
+            show('page-1');
+            mountSelect();
+            document.getElementById('next').addEventListener('click', next);
+            root.hidden = false;
+          }, 300);
+        });
+        tabs.overview.addEventListener('click', () => {
+          tabs.overview.setAttribute('aria-selected', 'true');
+          tabs.apply.setAttribute('aria-selected', 'false');
+          overview.hidden = false;
+          root.hidden = true;
+        });
+      })();
+    </script>
+  </body>
+</html>

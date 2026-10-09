@@ -9,5 +9,6 @@
 #             'fingerprint' ("role|name|f<frame>") and 'target' (a Target: frame_path + strategies, plus the field
 #             root for styled / hidden controls whose visibility is judged on it, and readonly)
 # - evidence: { frame_urls:, script_srcs:, iframe_srcs:, dom_markers: { selector => count over all frames } }
-# - digest:   SHA1 of the fingerprints in order (did the page change between two snapshots?)
+# - digest:   Operation::SnapshotAll.digest_of(elements): SHA1 of the fingerprints and their visible / expanded /
+#             selected / pressed / checked / disabled state, in order (did the page change between two snapshots?)
 ApplyMate::Client::Browser::Snapshot = Data.define(:frames, :elements, :evidence, :digest)

@@ -7,8 +7,10 @@
 #   profile facts -> consent (ResolveConsent) -> cv (FileRef); another file field: missing (never the AI) ->
 #   the rest in ONE AI call.
 # The sensitive semantics never reach the AI. Answers of an earlier review (source 'user') are kept as they are. The AI
-# answers are validated field by field (CoerceValue); an invalid set is asked once more with the error list, a second
-# failure is Halt(:invalid_ai_output). A field whose `condition` is unmet gets no answer.
+# answers are validated field by field (CoerceValue); an invalid set is asked once more with the error list. A second
+# failure is Halt(:required_field_unfillable, detail: id) when the only problem left is a required field the AI left
+# blank (it cannot answer it: nothing is wrong with the output), else Halt(:invalid_ai_output). A field whose
+# `condition` is unmet gets no answer.
 #
 # model   { field_id => { 'value' =>, 'source' =>, 'confidence' => } }
 # result[:fields]   the field list with `semantic` filled in
@@ -16,11 +18,15 @@ class Apply::Operation::Answer::Resolve < ApplyMate::Operation::Base
   MAX_ATTEMPTS = 2
   ASK_AI = :ask_ai
 
-  def perform!(ctx:, **)
+  # fields: a subset to answer (a wizard page's follow-up fields, Engine::AnswerFollowups); the model is then the answers
+  # for those fields only, and a condition on a field outside the subset is judged by that field's stored answer.
+  def perform!(ctx:, fields: nil, **)
     skip_authorize
+    @ctx = ctx
     @apply = ctx.apply
     @platform = ctx.platform
-    fields = ctx.field_list.map { |field| field.with(semantic: classify(field)) }
+    @outside_answers = fields ? (apply.answers || {}) : {}
+    fields = (fields || ctx.field_list).map { |field| field.with(semantic: classify(field)) }
     answers, open_fields = resolve_known(fields)
     answers.merge!(ask_ai(open_fields)) if open_fields.any?
     drop_unmet_conditions(fields, answers)
@@ -31,7 +37,7 @@ class Apply::Operation::Answer::Resolve < ApplyMate::Operation::Base
 
   private
 
-  attr_reader :apply, :platform
+  attr_reader :ctx, :apply, :platform
 
   def classify(field)
     Apply::Operation::Answer::Classify.call(field:, platform:).model
@@ -130,38 +136,47 @@ class Apply::Operation::Answer::Resolve < ApplyMate::Operation::Base
   # ---------- AI ----------
 
   def ask_ai(fields)
-    errors = []
+    errors = {}
+    blank = []
     MAX_ATTEMPTS.times do
-      answers, errors = attempt(fields, errors)
+      answers, errors, blank = attempt(fields, errors.values)
       return answers if errors.empty?
     end
-    halt(:invalid_ai_output, errors.first(5).join('; '))
+    # Only required fields the AI left blank, twice: it cannot answer them; nothing is wrong with its output.
+    halt(:required_field_unfillable, errors.keys.first) if errors.keys.all? { |id| blank.include?(id) }
+    halt(:invalid_ai_output, errors.values.first(5).join('; '))
   end
 
   def attempt(fields, previous_errors)
-    raw = ApplyMate::Ai::AiHandler.call(
-      prompt_instance:       Apply::Ai::Prompt::AnswerFields.new(apply:, fields:, platform:, errors: previous_errors),
-      response_schema_class: Apply::Ai::ResponseSchema::AnswerFields,
-      ai_integration:        apply.ai_integration
-    )
+    raw = Apply::Operation::Engine::CallAi.call(
+      ctx:, prompt: Apply::Ai::Prompt::AnswerFields.new(apply:, fields:, platform:, errors: previous_errors),
+      schema: Apply::Ai::ResponseSchema::AnswerFields
+    ).model
     validate_answers(fields, raw)
   rescue ApplyMate::Ai::ResponseSchema::Json::InvalidResponse => e
-    [ {}, [ e.message ] ]
+    [ {}, { nil => e.message }, [] ]
   end
 
+  # [answers, { field id => error line }, ids of the rejected fields the AI left without any value].
   def validate_answers(fields, raw)
     answers = {}
-    errors = []
+    errors = {}
+    blank = []
     fields.each do |field|
       entry = raw[field.id].to_h.with_indifferent_access
       coerced = Apply::Operation::Answer::CoerceValue.call(field:, value: entry[:value])
       if coerced[:error]
-        errors << "#{field.id}: #{coerced[:error]}"
+        errors[field.id] = "#{field.id}: #{coerced[:error]}"
+        blank << field.id if blank_value?(entry[:value])
       elsif !coerced.model.nil?
         answers[field.id] = { 'value' => coerced.model, 'source' => 'ai', 'confidence' => entry[:confidence].to_f.clamp(0.0, 1.0) }
       end
     end
-    [ answers, errors ]
+    [ answers, errors, blank ]
+  end
+
+  def blank_value?(value)
+    value.nil? || (value.respond_to?(:empty?) && value.empty?) || (value.is_a?(String) && value.blank?)
   end
 
   # ---------- conditions ----------
@@ -171,7 +186,7 @@ class Apply::Operation::Answer::Resolve < ApplyMate::Operation::Base
     condition = field.condition
     return false if condition.blank?
 
-    given = answers.dig(condition['field'], 'value')
+    given = (answers[condition['field']] || @outside_answers[condition['field']])&.fetch('value', nil)
     return unknown if given.nil?
 
     Array(given).none? { |value| Apply::Operation::Engine::MatchOption.same?(value.to_s, condition['equals']) }

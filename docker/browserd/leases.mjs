@@ -3,7 +3,7 @@
 //
 // Lifecycle of one lease:
 //   acquire()      -> state 'launching', slot + ports reserved (counts against the cap)
-//   markReady()    -> state 'active', TTL starts (expiresAt), never-connected grace starts
+//   markReady()    -> state 'active', TTL starts (expiresAt = now + the lease's own ttlMs), never-connected grace starts
 //   beginRelease() -> state 'releasing' (still holds the slot: the browser is being killed)
 //   release()      -> slot freed; only called once the browser process and proxy are gone
 //
@@ -18,6 +18,8 @@ export const NEVER_CONNECTED_GRACE_MS = 60_000;
 // Upstream (127.0.0.1-only) Playwright server port = wsPortBase + UPSTREAM_PORT_OFFSET + slot.
 // entrypoint.sh opens exactly this range to uid browserd in iptables; keep them in sync.
 export const UPSTREAM_PORT_OFFSET = 10;
+// Shortest lease a client may ask for (POST /leases ttl_s); the longest is the table's ttlSeconds (LEASE_TTL_S).
+export const MIN_TTL_S = 60;
 
 export class LeaseTable {
   constructor({ maxBrowsers, ttlSeconds, wsPortBase }) {
@@ -35,7 +37,8 @@ export class LeaseTable {
     this.byId = new Map();
   }
 
-  // Returns the new lease, or null when every slot is taken (caller answers 503).
+  // Returns the new lease, or null when every slot is taken (caller answers 503). meta.ttlSeconds (optional, the
+  // client's ttl_s) is clamped to [MIN_TTL_S, ttlSeconds]; without it the lease lives ttlSeconds.
   acquire(owner, meta = {}, now = Date.now()) {
     const slot = this.slots.indexOf(null);
     if (slot === -1) return null;
@@ -44,6 +47,7 @@ export class LeaseTable {
       id: crypto.randomUUID(),
       owner,
       meta,
+      ttlMs: this.#ttlMs(meta.ttlSeconds),
       slot,
       port: this.wsPortBase + slot,
       upstreamPort: this.wsPortBase + UPSTREAM_PORT_OFFSET + slot,
@@ -75,7 +79,7 @@ export class LeaseTable {
 
     lease.state = 'active';
     lease.readyAt = now;
-    lease.expiresAt = now + this.ttlMs;
+    lease.expiresAt = now + lease.ttlMs;
     return lease;
   }
 
@@ -125,6 +129,11 @@ export class LeaseTable {
 
     lease.processExited = true;
     return lease;
+  }
+
+  #ttlMs(requested) {
+    if (requested === undefined || requested === null) return this.ttlMs;
+    return Math.min(Math.max(requested, MIN_TTL_S) * 1000, this.ttlMs);
   }
 
   // Active leases past their hard TTL.

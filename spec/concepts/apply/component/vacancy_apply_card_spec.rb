@@ -32,6 +32,21 @@ RSpec.describe Apply::Component::VacancyApplyCard, type: :component do
     expect(html.to_s).not_to include('/rails/active_storage')
   end
 
+  it 'shows the code box of an apply waiting for an e-mail code' do
+    request = { 'kind' => 'email_code', 'requested_at' => Time.current.iso8601, 'expires_at' => 10.minutes.from_now.iso8601 }
+    apply = create(:apply, :running, user:, vacancy:, stage: 'awaiting_input', input_request: request)
+    html = card(apply)
+
+    expect(html.text).to include(I18n.t('apply.input_request.email_code.title'), I18n.t('apply.stage.awaiting_input'))
+    expect(html.at_css("form[action*='provide_input'] input[name=code]")).to be_present
+  end
+
+  it 'hides the code box for a running apply that waits for nothing' do
+    html = card(create(:apply, :running, user:, vacancy:))
+
+    expect(html.at_css("form[action*='provide_input']")).to be_nil
+  end
+
   it 'shows the failure notice and the exit buttons of a failed apply, with the timeline open' do
     apply = create(:apply, :failed, user:, vacancy:)
     html = card(apply)

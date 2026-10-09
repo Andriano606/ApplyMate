@@ -21,7 +21,7 @@ class Apply::Operation::Engine::Lifecycle::Decide < ApplyMate::Operation::Base
   Decision = Data.define(:state, :auto_resume, :release_claim, :failure) do
     # Attributes for the UPDATE that records the decision (state as the enum integer).
     def attributes
-      attributes = { state: Apply.states.fetch(state), failure:, stage: nil }
+      attributes = { state: Apply.states.fetch(state), failure:, stage: nil, input_request: nil }
       attributes[:submit_claimed_at] = nil if release_claim
       attributes
     end

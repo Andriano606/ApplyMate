@@ -7,9 +7,12 @@
 #
 #   StartContext (the apply must be startable: queued / waiting_capacity / stale running)
 #   -> Stage::DetectPlatform (entry_url overrides applies.entry_url / vacancy.external_url) -> Stage::FetchSchema
-#   -> ONE Session lease: Stage::ReachForm, then Stage::DiscoverFields when the platform is known
+#   -> ONE Session lease: Stage::ReachForm (for an unknown platform the AI Navigator: it may click, press, scroll,
+#      switch tabs and follow links to REACH the form, never types or submits), then Stage::DiscoverFields whenever a
+#      form root was set (Generic included)
 #   -> report: platform, confidence, captures, probable, http hops, schema size, canonical form URL, navigation ops,
-#      form URL + frame, readiness time (ReachForm), the field table, the trace events and the halt (a gate firing)
+#      form reached?, AI calls of the attempt, navigator actions, form URL + frame, readiness time (ReachForm), the
+#      field table, the trace events and the halt (a gate firing, the Navigator giving up)
 #   The run's HTTP client is ApplyMate::Client::ImpersonateHttp::ReadOnly: every Ruby-side POST is refused before
 #   curl runs, so the adapter's fetch_schema (for Ashby the ApiJobPosting GraphQL POST) fails like an unreachable
 #   endpoint, is traced as schema_unavailable and the fields come from the DOM. The survey never POSTs to a
@@ -23,7 +26,10 @@
 # startable (StartContext refuses it) and the rotated run_token fences any job already in flight. So the survey must
 # be pointed at a THROWAWAY apply; create a new one to apply for real.
 #
-# No heartbeat runs: a survey takes well under Apply::STALE_AFTER.
+# The Runner's Heartbeat ticker runs for the whole survey (shut down before the cancelling write): the row is `running`
+# with no Solid Queue job behind it, and a Navigator alone may take MAX_SECONDS (= STALE_AFTER) plus its slow-AI
+# allowance. Without the beat ReapStale would judge a long survey lost and auto-resume it, i.e. enqueue the FULL engine
+# (fill + submit) on this throwaway row.
 class Apply::Operation::SmokeSurvey < ApplyMate::Operation::Base
   RESTORED_COLUMNS = %w[platform platform_match apply_key entry_url landing_url fields form_url navigation].freeze
   STAGES = Apply::Operation::Stage
@@ -36,12 +42,14 @@ class Apply::Operation::SmokeSurvey < ApplyMate::Operation::Base
     ctx.scratch.http = ApplyMate::Client::ImpersonateHttp::ReadOnly.new(
       request_timeout: Apply::Operation::Engine::Context::HTTP_TIMEOUT
     )
+    ticker = Apply::Operation::Engine::Heartbeat.call(ctx:).model
     begin
       ctx.persist!(entry_url:) if entry_url.present?
       survey(ctx)
     rescue Apply::Operation::Engine::Halt => e
       report[:halt] = { code: e.code, detail: e.detail }
     ensure
+      ticker.shutdown
       report[:trace] = ctx.scratch.trace.map { |entry| entry['event'] }
       restore!(ctx, original)
     end
@@ -69,17 +77,20 @@ class Apply::Operation::SmokeSurvey < ApplyMate::Operation::Base
       report[:form_url] = ctx.form_url
       report[:navigation] = ctx.apply.navigation
       report[:form_frame] = frame_of(ctx.form_root)
-      STAGES::DiscoverFields.call(ctx:) if ctx.platform_known? && ctx.form_root
+      STAGES::DiscoverFields.call(ctx:) if ctx.form_root
     end
+  ensure
+    report[:form_reached] = !ctx.form_root.nil?
+    report[:ai_calls] = ctx.apply.reload.ai_calls
+    report[:navigator_actions] = ctx.scratch.trace.count { |entry| entry['event'] == 'navigate' }
     report[:fields] = Array(ctx.fields).map { |field| field_row(field) }
   end
 
   # The same lease the Runner opens for the :survey scope.
   def in_lease(ctx)
-    deadline = ctx.scope_deadline
-    ApplyMate::Client::Browser::Session.open(deadline:, owner: ApplyMate::Client::Browser::Session.owner_for(ctx.apply),
+    ApplyMate::Client::Browser::Session.open(deadline: ctx.scope_deadline, owner: ApplyMate::Client::Browser::Session.owner_for(ctx.apply),
                                              humanize: false, identity: ctx.apply.hashid) do |session|
-      ctx.open_scope!(:survey, session, deadline)
+      ctx.open_scope!(:survey, session, session.deadline)
       yield
     end
   ensure
@@ -121,6 +132,8 @@ class Apply::Operation::SmokeSurvey < ApplyMate::Operation::Base
     out.puts "schema api: #{report[:schema_api].to_i} field(s)"
     out.puts "canonical:  #{report[:canonical_form_url] || '-'}"
     out.puts "navigation: #{Array(report[:navigation]).map { |op| op['op'] }.join(' -> ').presence || '-'}"
+    out.puts "navigator:  #{report[:navigator_actions].to_i} action(s), form reached #{report[:form_reached] ? 'yes' : 'no'}"
+    out.puts "ai calls:   #{report[:ai_calls].to_i}"
     out.puts "form url:   #{report[:form_url] || '-'} (frame #{report[:form_frame] || '-'})"
     out.puts "readiness:  #{report[:readiness_seconds] ? "#{report[:readiness_seconds]} s" : '-'}"
     out.puts "halt:       #{report[:halt] ? "#{report[:halt][:code]} (#{report[:halt][:detail]})" : 'none'}"

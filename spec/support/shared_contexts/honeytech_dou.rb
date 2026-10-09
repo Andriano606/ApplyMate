@@ -5,8 +5,19 @@ module HoneytechDou
   VACANCY_URL     = 'https://jobs.dou.ua/companies/honeytech/vacancies/354709/'
   DOU_REDIRECT    = 'https://dou.ua/goto/vacancy/?id=354709'
   PEOPLEFORCE_URL = 'https://honeytech.peopleforce.io/careers/v/202646-ai-animator-motion-designer'
+  # The PeopleForce form in the scripted page (peopleforce_form_html / peopleforce_form_snapshot).
+  PEOPLEFORCE_FORM = 'body > main > form'
+  PEOPLEFORCE_SUBMIT = "#{PEOPLEFORCE_FORM} > button".freeze
+  PEOPLEFORCE_THANKS = 'Дякуємо за вашу заявку! Ми зв\'яжемося з вами найближчим часом.'
 end
 
+# A DOU external apply to HoneyTech's PeopleForce posting: a platform no adapter knows, so the engine runs it as
+# `generic` and the AI Navigator reaches the form (design §6). Shared by the handler / job specs (FakeSession, the
+# scripted PeopleForce page below) and the :browser e2e specs (which re-stub Session.open with the real browser).
+#
+# The Gemini stub is a ROUTER (stub_gemini_router): it reads every prompt and answers by its kind, with refs PARSED
+# from the Navigate prompt text, never hard-coded, so the AI sees exactly what production would show it. Each call is
+# recorded in gemini_prompts as [kind, prompt text]; kinds: :navigate, :answers, :cv, :verify.
 RSpec.shared_context 'honeytech dou' do
   # ── Fixtures ──────────────────────────────────────────────────────────────────
   let(:dou_vacancy_html)     { File.read(HoneytechDou::FIXTURES_DIR.join('dou_honeytech_vacancy_page.html')) }
@@ -40,8 +51,8 @@ RSpec.shared_context 'honeytech dou' do
                           auth_method: :session_id, session_id: 'test-session-id')
   end
 
-  # Facts already extracted for this CV, so Stage::AnswerFields makes no extraction call (the ordered AI replies of the
-  # handler specs stay the answers / CV ones; the inline extraction is covered in answer_fields_spec.rb).
+  # Facts already extracted for this CV, so Stage::AnswerFields makes no extraction call (the AI calls of the handler
+  # specs stay the routed ones; the inline extraction is covered in answer_fields_spec.rb).
   let(:user_profile) do
     cv = 'Senior Motion Designer with 5 years of experience in AI animation.'
     UserProfile.create!(user:, name: 'Jane Doe', cv:, facts_cv_digest: Digest::SHA256.hexdigest(cv))
@@ -57,10 +68,54 @@ RSpec.shared_context 'honeytech dou' do
     Apply.create!(user:, vacancy:, source_profile:, user_profile:, ai_integration:)
   end
 
-  # ── Browser session (spec/support/fake_session.rb) ────────────────────────────
-  # One scripted page for both browser steps: FetchExternalForm renders it, SendApply::Browser fills and submits it
-  # (the submit verdict is the stubbed Gemini answer, so the page after the click needs no script).
-  let(:session) { FakeSession.new(html: honeytech_apply_html, final_url: HoneytechDou::PEOPLEFORCE_URL) }
+  # ── The scripted PeopleForce page (spec/support/fake_session.rb, spec/support/snapshot_builder.rb) ─────────────
+  # The application form as probe/snapshot.js reports it (the labels of honeytech_apply_page.html): f0:e0..e6 the
+  # controls (the cover letter is PeopleForce's Froala contenteditable div), f0:e7 the "Застосувати" submit button.
+  let(:peopleforce_form_snapshot) do
+    form = HoneytechDou::PEOPLEFORCE_FORM
+    control = ->(index, **options) { { css: "#{form} > *:nth-child(#{index})", regions: [ form ], required: true, **options } }
+    build_snapshot(frames: [ { url: HoneytechDou::PEOPLEFORCE_URL, outline: [ 'AI Animator / Motion Designer' ] } ], elements: [
+      snapshot_element(name: "Повне ім'я", id: 'career_application_form_full_name', **control.call(1)),
+      snapshot_element(name: 'Електронна пошта', id: 'career_application_form_email', **control.call(2)),
+      snapshot_element(name: 'Номер телефону', type: 'tel', **control.call(3)),
+      snapshot_element(name: 'Супровідний лист', tag: 'div', **control.call(4, required: false)),
+      snapshot_element(role: nil, name: 'Резюме', type: 'file', id: 'career_application_form_resume', **control.call(5)),
+      snapshot_element(name: "Ім'я користувача Telegram", **control.call(6)),
+      snapshot_element(name: 'Посилання', **control.call(7)),
+      snapshot_element(role: 'button', name: 'Застосувати', type: 'submit', submit_like: true,
+                       css: HoneytechDou::PEOPLEFORCE_SUBMIT, regions: [ form ])
+    ])
+  end
+
+  let(:peopleforce_form_html) do
+    <<~HTML
+      <html><body><main><form id="new_career_application_form">
+        <input type="text"><input type="text"><input type="tel"><div contenteditable="true"></div>
+        <input type="file"><input type="text"><input type="text"><button type="submit">Застосувати</button>
+      </form></main></body></html>
+    HTML
+  end
+
+  # What PeopleForce shows after the submit: the form is replaced by the thank-you alert.
+  let(:peopleforce_thanks_snapshot) { build_snapshot(frames: [ { url: HoneytechDou::PEOPLEFORCE_URL } ]) }
+  let(:peopleforce_thanks_html) do
+    "<html><body><main><div class=\"alert\">#{HoneytechDou::PEOPLEFORCE_THANKS}</div></main></body></html>"
+  end
+
+  # One scripted tab for both leases (the survey and the submit scope): it starts blank like a fresh lease, the
+  # landing goto shows the PeopleForce form, a click on "Застосувати" shows the thank-you.
+  let(:session) do
+    FakeSession.new(html: '', final_url: 'about:blank').tap do |fake|
+      fake.on(:goto) do
+        fake.show(peopleforce_form_snapshot, url: HoneytechDou::PEOPLEFORCE_URL, html: peopleforce_form_html)
+      end
+      fake.on(:click) do |target|
+        next unless target.strategies.any? { |strategy| strategy['css'] == HoneytechDou::PEOPLEFORCE_SUBMIT }
+
+        fake.show(peopleforce_thanks_snapshot, html: peopleforce_thanks_html)
+      end
+    end
+  end
 
   before { stub_browser_session(session) }
 
@@ -73,7 +128,7 @@ RSpec.shared_context 'honeytech dou' do
   end
 
   # DetectPlatform's redirect walk (Handler::Dou runs it for every external apply): dou.ua/goto -> 302 -> the
-  # PeopleForce page, which no adapter knows (generic, no probable platform), so the legacy external path runs.
+  # PeopleForce page, which no adapter knows (generic, no probable platform), so the Navigator reaches its form.
   # Hosts resolve through FixtureSite.resolution (no DNS); ImpersonateHttp shells out to curl, so it is stubbed at
   # the client level like the vacancy page.
   def stub_honeytech_redirect_walk
@@ -86,55 +141,91 @@ RSpec.shared_context 'honeytech dou' do
       .and_return(ApplyMate::Client::Response.new(honeytech_apply_html, {}, 200, HoneytechDou::PEOPLEFORCE_URL))
   end
 
-  # ── Canned Gemini responses ───────────────────────────────────────────────────
-  let(:gemini_check_form_page) do
-    gemini_json_response(
-      '```json' "\n" \
-      '{"has_form":true,"trigger_selector":null,"form_url":null,"form_selector":"form"}' "\n" \
-      '```'
-    )
+  # ── The Gemini router ─────────────────────────────────────────────────────────
+  let(:gemini_prompts) { [] }
+  let(:cover_letter) { 'I animate characters with AI tools and would love to join HoneyTech.' }
+  # AnswerFields answers by label (a label not listed is answered null). The quote the verify answer cites must be
+  # in the page text after the submit.
+  let(:answers_by_label) do
+    { "Повне ім'я" => 'Jane Doe', 'Електронна пошта' => user_email, 'Номер телефону' => user_phone,
+      'Супровідний лист' => cover_letter, "Ім'я користувача Telegram" => '@janedoe',
+      'Посилання' => 'https://github.com/janedoe' }
+  end
+  let(:verify_quote) { 'Дякуємо за вашу заявку!' }
+
+  # Every Gemini API call is answered by gemini_route and recorded in gemini_prompts.
+  def stub_gemini_router
+    stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/).to_return do |request|
+      body = JSON.parse(request.body)
+      parts = [ body.dig('system_instruction', 'parts'), *body['contents'].map { |content| content['parts'] } ]
+      text = parts.flatten.compact.pluck('text').join("\n")
+      gemini_json_response(gemini_route(text))
+    end
   end
 
-  let(:gemini_check_submit_result) do
-    gemini_json_response(
-      '```json' "\n" \
-      '{"success":true,"reason":"Thank-you confirmation detected on the page."}' "\n" \
-      '```'
-    )
+  # The answer text for one prompt (also what a stubbed browser-backed client's `complete` returns).
+  def gemini_route(text)
+    kind, answer =
+      if text.include?('GOAL') then [ :navigate, gemini_navigate(text) ]
+      elsif text.include?('Form fields to answer') then [ :answers, gemini_answers(text) ]
+      elsif text.include?('```html') then [ :cv, gemini_cv ]
+      elsif text.include?('submission') then [ :verify, gemini_verify_ok ]
+      else raise "unrouted prompt: #{text.first(200)}"
+      end
+    gemini_prompts << [ kind, text ]
+    answer
   end
 
-  let(:gemini_fill_form) do
-    gemini_json_response(
-      '```json' "\n" \
-      '{"career_application_form[full_name]":"Jane Doe",' \
-      "\"career_application_form[email]\":\"#{user_email}\"," \
-      "\"career_application_form[phone_numbers][]\":\"#{user_phone}\"," \
-      '"career_application_form[cover_letter]":"I am an experienced motion designer ' \
-      'passionate about AI-driven animation.",' \
-      '"career_application_form[telegram_username]":"@janedoe",' \
-      '"career_application_form[urls][]":"https://github.com/janedoe"}' "\n" \
-      '```'
-    )
+  def gemini_prompt_kinds
+    gemini_prompts.map(&:first)
   end
 
-  # Canonical set of PeopleForce fields filled by AI for this vacancy.
-  let(:filled_inputs) do
-    [
-      { 'name' => 'career_application_form[full_name]',
-        'selector' => '[name="career_application_form[full_name]"]',
-        'tag' => 'input', 'type' => 'text', 'form_index' => 0,
-        'label' => "Повне ім'я", 'placeholder' => '', 'value' => 'Jane Doe' },
-      { 'name' => 'career_application_form[email]',
-        'selector' => '[name="career_application_form[email]"]',
-        'tag' => 'input', 'type' => 'email', 'form_index' => 1,
-        'label' => 'Електронна пошта', 'placeholder' => '', 'value' => user_email },
-      { 'name' => 'career_application_form[resume]',
-        'selector' => '[name="career_application_form[resume]"]',
-        'tag' => 'input', 'type' => 'file', 'form_index' => 4,
-        'label' => 'Резюме', 'placeholder' => '', 'value' => '' }
-    ]
+  # A Navigate turn decided from the prompt: a frame listing >= 3 fillable controls -> form_reached with exactly those
+  # refs (and its "Next" button as advance_ref); otherwise click the "Apply" tab, or wait while it is already selected
+  # (the widget mounts the form a moment later).
+  def gemini_navigate(prompt)
+    fillable = prompt.scan(/\[(f\d+:e\d+)\][^\n]*<(?:empty|filled)>/).flatten.group_by { |ref| ref.split(':').first }
+    frame, field_refs = fillable.find { |_frame, refs| refs.size >= 3 }
+    if field_refs
+      return gemini_navigate_form_reached(frame:, scope_ref: field_refs.first, field_refs:,
+                                          advance_ref: prompt[/\[(#{frame}:e\d+)\] button "Next"/, 1])
+    end
+
+    tab, selected = prompt.match(/\[(f\d+:e\d+)\] tab "Apply"( selected)?/)&.captures
+    raise "no form and no Apply tab in the prompt:\n#{prompt}" if tab.nil?
+
+    selected ? gemini_navigate_wait : gemini_navigate_click(ref: tab)
   end
 
-  # Same fields as filled_inputs but with blank values — the state before AI filling.
-  let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
+  def gemini_navigate_click(ref:)
+    navigate_answer('continue', actions: [ { type: 'click', ref:, key: nil, index: nil, max_ms: nil } ])
+  end
+
+  def gemini_navigate_wait(max_ms: 2_000)
+    navigate_answer('continue', actions: [ { type: 'wait', ref: nil, key: nil, index: nil, max_ms: } ])
+  end
+
+  def gemini_navigate_form_reached(scope_ref:, field_refs:, frame: scope_ref.split(':').first, submit_ref: nil, advance_ref: nil)
+    navigate_answer('form_reached', form: { frame:, scope_ref:, field_refs:, submit_ref:, advance_ref: })
+  end
+
+  # Answers every "- id: ... label: ..." block of the AnswerFields prompt by its label (answers_by_label).
+  def gemini_answers(prompt)
+    answers = prompt.scan(/^- id: (\S+)\n  kind: \S+\n  label: (.*)$/).to_h do |id, label|
+      [ id, { value: answers_by_label[label.strip], confidence: 0.95 } ]
+    end
+    "```json\n#{answers.to_json}\n```"
+  end
+
+  def gemini_cv
+    "```html\n<html><body><h1>Jane Doe</h1><p>AI Animator / Motion Designer</p></body></html>\n```"
+  end
+
+  def gemini_verify_ok
+    "```json\n#{{ submitted: true, confidence: 0.95, quote: verify_quote }.to_json}\n```"
+  end
+
+  def navigate_answer(status, actions: [], form: nil)
+    "```json\n#{{ status:, reason: 'test router', actions:, form:, give_up_code: nil }.to_json}\n```"
+  end
 end

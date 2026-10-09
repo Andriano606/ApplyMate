@@ -2,11 +2,22 @@
 
 # Drives the Gemini web UI via Ferrum (no public API key needed) and returns the
 # rendered markdown answer for a prompt. Capabilities: :browser_backed only — no
-# native JSON schema, no images (images raise CapabilityMissing), no token usage.
+# native JSON schema (callers run in text mode: format_instructions + ResponseSchema::Json
+# parsing), no images (images raise CapabilityMissing), no token usage. Slow: CALL_SECONDS
+# per call (.call_seconds), which AiHandler gives a request without its own timeout.
+#
+# Resource bound: its Chrome runs under ApplyMate::Client::LocalChrome (at most ONE local
+# Chrome per process, shared with the Grover CV render). The apply worker runs APPLY_SLOTS
+# threads that may each ask while holding a browserd lease. A call waits for the slot only
+# while its own Request#timeout still leaves SETUP_SECONDS, then raises LocalChrome::Busy;
+# a timeout shorter than SETUP_SECONDS raises DeadlineTooShort at once (no time, not a busy
+# slot). The answer wait is cut to what is left of the timeout. Nothing here waits without
+# a deadline.
 #
 # Manual smoke test:
 #   client = ApplyMate::Ai::Client::GeminiScraping.new
-#   request = ApplyMate::Ai::Request.for(kind: :verify, text: "Say hello in Ukrainian")
+#   request = ApplyMate::Ai::Request.for(kind: :verify, text: "Say hello in Ukrainian",
+#                                        timeout: ApplyMate::Ai::Client::GeminiScraping::CALL_SECONDS)
 #   puts client.complete(request).text
 
 class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
@@ -14,12 +25,19 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   # #message is hardcoded), this preserves the diagnostic context we attach.
   class ResponseTimeoutError < StandardError; end
 
-  # The web UI has no API timeout semantics: Request#timeout is ignored and the answer
-  # gets its own polling deadline.
+  # Longest answer wait (polling the web UI). Request#timeout caps it further.
   RESPONSE_TIMEOUT = 180
+  # Chrome launch + gemini.google.com load + input ready on a Pi 5, before the answer wait.
+  SETUP_SECONDS = 60
+  # Worst case of one call once the slot is held.
+  CALL_SECONDS = SETUP_SECONDS + RESPONSE_TIMEOUT
 
   def self.capabilities
     %i[browser_backed].freeze
+  end
+
+  def self.call_seconds(_kind)
+    CALL_SECONDS
   end
 
   def self.validate_api_key!(api_key:)
@@ -30,10 +48,13 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
   def initialize(**)
   end
 
+  # The whole call (slot wait + Chrome + answer) ends within request.timeout seconds.
   def complete(request)
     assert_request!(request)
     prompt = [ request.system, *request.messages.map { |message| message[:content] } ].compact.join("\n\n")
-    ApplyMate::Ai::Response.new(text: scrape_answer(prompt), usage: ApplyMate::Ai::Usage::UNKNOWN)
+    deadline = monotonic + request.timeout
+    text = with_slot(deadline) { scrape_answer(prompt, deadline) }
+    ApplyMate::Ai::Response.new(text:, usage: ApplyMate::Ai::Usage::UNKNOWN)
   end
 
   def list_models
@@ -48,7 +69,19 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
 
   private
 
-  def scrape_answer(text)
+  # The slot wait is what the timeout leaves beyond SETUP_SECONDS. No such time at all is the caller's deadline, not
+  # a busy slot: DeadlineTooShort before the slot is touched.
+  def with_slot(deadline, &)
+    wait = deadline - monotonic - SETUP_SECONDS
+    if wait.negative?
+      raise ApplyMate::Ai::Client::Base::DeadlineTooShort,
+            "#{self.class.name}: #{(deadline - monotonic).round} s left, a call needs more than #{SETUP_SECONDS} s"
+    end
+
+    ApplyMate::Client::LocalChrome.hold(wait:, &)
+  end
+
+  def scrape_answer(text, deadline)
     browser = launch_browser
     context = browser.contexts.create
     page = context.create_page
@@ -58,7 +91,7 @@ class ApplyMate::Ai::Client::GeminiScraping < ApplyMate::Ai::Client::Base
     page.execute('arguments[0].innerText = arguments[1]', input_field, text)
     input_field.type(:Enter)
 
-    result = wait_for_response(page, timeout: RESPONSE_TIMEOUT)
+    result = wait_for_response(page, timeout: [ RESPONSE_TIMEOUT, deadline - monotonic ].min)
     if result.blank?
       raise '[ApplyMate::Ai::Client::GeminiScraping] No results found'
     end

@@ -5,7 +5,9 @@
     <title>Widgets</title>
     <!-- Custom controls the widget drivers meet outside Ashby: a react-select-like combobox whose menu is portaled to
          <body>, a readonly Element UI select (el-select) with a pre-rendered hidden dropdown, yes/no aria-pressed
-         buttons, and a cookie overlay that appears after 3 s and intercepts every click until accepted. -->
+         buttons, a typeahead (suggestions after 2 typed characters), a contenteditable cover letter, a native and a
+         masked (dd.mm.yyyy) date, a range slider, a chooser-only dropzone (the file input is created on click), and a
+         cookie overlay that appears after 3 s and intercepts every click until accepted. -->
     <style>
       body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; }
       .field { margin: 1rem 0; }
@@ -20,6 +22,10 @@
       button[aria-pressed=true] { background: #335; color: #fff; }
       #cookie-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.4); }
       #cookie-overlay .box { background: #fff; margin: 30vh auto; padding: 1rem; width: 20rem; }
+      .suggestions { list-style: none; margin: 0; padding: 0; width: 20rem; }
+      .suggestions li { padding: 0.25rem; cursor: pointer; border: 1px solid #ccc; }
+      .editor { border: 1px solid #888; min-height: 3rem; padding: 0.25rem; }
+      .dropzone { border: 2px dashed #888; padding: 1rem; }
       .spacer { height: 1600px; }
     </style>
   </head>
@@ -53,6 +59,39 @@
       <span id="permit-question">Do you have a work permit?</span>
       <button type="button" aria-pressed="false">Yes</button>
       <button type="button" aria-pressed="false">No</button>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="school-label" id="school-field">
+      <label id="school-label" for="school-input">School</label>
+      <input id="school-input" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="school-listbox" autocomplete="off" />
+      <ul id="school-listbox" role="listbox" class="suggestions"></ul>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="cover-label" id="cover-field">
+      <span id="cover-label">Cover letter</span>
+      <div id="cover" contenteditable="true" aria-labelledby="cover-label" class="editor">Dear hiring manager, an old draft.</div>
+    </div>
+
+    <div class="field" role="group" id="start-date-field">
+      <label for="start-date">Start date</label>
+      <input id="start-date" type="date" />
+    </div>
+
+    <div class="field" role="group" id="birth-date-field">
+      <label for="birth-date">Birth date</label>
+      <input id="birth-date" type="text" placeholder="dd.mm.yyyy" inputmode="numeric" maxlength="10" />
+    </div>
+
+    <div class="field" role="group" id="experience-field">
+      <label for="experience">Years of experience</label>
+      <input id="experience" type="range" min="0" max="10" step="1" value="0" aria-valuenow="0" aria-valuemin="0" aria-valuemax="10" />
+      <output id="experience-output" for="experience">0</output>
+    </div>
+
+    <div class="field" role="group" aria-labelledby="resume-zone-label" id="resume-zone-field">
+      <span id="resume-zone-label">Resume</span>
+      <button type="button" id="resume-zone" class="dropzone">Upload resume</button>
+      <span id="resume-zone-name"></span>
     </div>
 
     <button type="button" id="continue">Continue</button>
@@ -141,6 +180,63 @@
           document.querySelectorAll('#permit-field button').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
         }),
       );
+
+      // Typeahead: suggestions render into the sibling listbox only once 2+ characters are typed (no ArrowDown).
+      const SCHOOLS = [
+        'Kyiv Polytechnic Institute',
+        'Kyiv-Mohyla Academy',
+        'Taras Shevchenko National University of Kyiv',
+        'Lviv Polytechnic National University',
+        'Kharkiv National University of Radio Electronics',
+      ];
+      const schoolInput = document.getElementById('school-input');
+      const schoolList = document.getElementById('school-listbox');
+      const suggest = () => {
+        schoolList.replaceChildren();
+        const query = schoolInput.value.trim().toLowerCase();
+        const hits = query.length < 2 ? [] : SCHOOLS.filter((school) => school.toLowerCase().includes(query));
+        hits.forEach((label, index) => {
+          const option = document.createElement('li');
+          option.setAttribute('role', 'option');
+          option.id = `school-option-${index}`;
+          option.textContent = label;
+          option.addEventListener('mousedown', (event) => event.preventDefault());
+          option.addEventListener('click', () => {
+            schoolInput.value = label;
+            schoolList.replaceChildren();
+            schoolInput.setAttribute('aria-expanded', 'false');
+          });
+          schoolList.appendChild(option);
+        });
+        schoolInput.setAttribute('aria-expanded', String(hits.length > 0));
+      };
+      schoolInput.addEventListener('input', suggest);
+
+      // Masked date: digits only, dots inserted as you type (dd.mm.yyyy).
+      const birthDate = document.getElementById('birth-date');
+      birthDate.addEventListener('input', () => {
+        const digits = birthDate.value.replace(/\D/g, '').slice(0, 8);
+        let text = digits.slice(0, 2);
+        if (digits.length > 2) text += `.${digits.slice(2, 4)}`;
+        if (digits.length > 4) text += `.${digits.slice(4)}`;
+        birthDate.value = text;
+      });
+
+      const experience = document.getElementById('experience');
+      experience.addEventListener('input', () => {
+        experience.setAttribute('aria-valuenow', experience.value);
+        document.getElementById('experience-output').textContent = experience.value;
+      });
+
+      // Chooser-only dropzone: no file input in the DOM; a detached one is created and opened on click.
+      document.getElementById('resume-zone').addEventListener('click', () => {
+        const picker = document.createElement('input');
+        picker.type = 'file';
+        picker.addEventListener('change', () => {
+          document.getElementById('resume-zone-name').textContent = Array.from(picker.files, (file) => file.name).join(', ');
+        });
+        picker.click();
+      });
 
       const overlay = document.getElementById('cookie-overlay');
       setTimeout(() => (overlay.style.display = 'block'), 3000);

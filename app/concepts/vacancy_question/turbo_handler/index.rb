@@ -10,8 +10,8 @@ class VacancyQuestion::TurboHandler::Index < ApplyMate::TurboHandler::Base
   end
 
   # Renders exactly what VacancyQuestionsController#index renders, through the same operation.
-  # Callers: VacancyQuestionsController#create (new question), Apply::Operation::FetchInternalForm and
-  # Apply::Operation::Ai::FetchExternalForm (new form → new suggestions), Apply::Operation::Destroy.
+  # Callers: VacancyQuestionsController#create (new question), Apply::Operation::FetchInternalForm (new form → new
+  # suggestions), Apply::Operation::Destroy.
   def self.broadcast(vacancy, user)
     result = VacancyQuestion::Operation::Index.call(params: { vacancy_id: vacancy.id }, current_user: user)
     html = ApplicationController.renderer.render_to_string(

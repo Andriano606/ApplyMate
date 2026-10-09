@@ -218,7 +218,37 @@ class ApplyMate::Client::Browser::Driver::Playwright
     @page.url
   end
 
+  # URLs of the context's pages (tabs), in the order they opened: index 0 is the lease's first page, a tab a click
+  # opened (target=_blank, window.open) is appended.
+  def pages
+    guard { @context.pages.map(&:url) }
+  end
+
+  # Makes the page at `index` (of #pages) the one every other method reads and acts on: frames, content, snapshots,
+  # screenshots, current_url and the NetTracker all follow @page. The tracker is per page, so a new one is bound to
+  # the new page (watch patterns carried over) and marks taken before the switch are void for #network_since.
+  # Waits for the page's DOMContentLoaded (a fresh tab is still about:blank right after the click), at most
+  # ACTION_TIMEOUT_MS; a page that is still loading is switched to anyway. IndexError for an unknown index.
+  def switch_to(index)
+    page = guard { @context.pages.fetch(index) }
+    guard { page.bring_to_front }
+    wait_loaded(page)
+    watched = @tracker.watched
+    @tracker.dispose
+    @page = page
+    @tracker = ApplyMate::Client::Browser::NetTracker.new(@page)
+    watched.each { |pattern| @tracker.watch(pattern) }
+    self
+  end
+
   private
+
+  def wait_loaded(page)
+    timeout = clamp_ms(ACTION_TIMEOUT_MS)
+    guard { page.wait_for_load_state(state: 'domcontentloaded', timeout:) }
+  rescue ::Playwright::TimeoutError
+    nil
+  end
 
   attr_reader :lease
 

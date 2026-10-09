@@ -3,41 +3,32 @@
 require 'rails_helper'
 
 RSpec.describe Apply::Handler::Dou do
-  context 'DOU external apply (HoneyTech)' do
+  context 'DOU external apply (HoneyTech: PeopleForce, a platform no adapter knows)' do
     include_context 'honeytech dou'
 
-    # ── HTTP stubs ───────────────────────────────────────────────────────────────
-    before do
-      # DOU vacancy page — used by CheckApplyable, FetchApplyType, FetchDetails.
-      # Dou's scraper client is ImpersonateHttp (Chrome TLS to clear Cloudflare); it shells
-      # out to curl-impersonate and bypasses WebMock, so stub it at the client level.
-      allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
-        .with(HoneytechDou::VACANCY_URL, any_args)
-        .and_return(
-          ApplyMate::Client::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL)
-        )
-      stub_honeytech_redirect_walk
+    let(:engine_keys) do
+      %w[check_applyable fetch_apply_type detect schema navigate:survey discover:survey answer generate_cv review throttle
+         navigate:replay:submit discover:submit fill:submit submit:submit verify:submit]
+    end
+    let(:claimed_at_click) { [] }
 
-      # Gemini API — stubbed in call order:
-      #   1. CheckFormPage  (FetchExternalForm — does the PeopleForce page have a form?)
-      #   2. FillForm       (AI fills career_application_form fields)
-      #   3. GenerateCv     (AI produces HTML → Grover converts to PDF)
-      #   4. CheckSubmitResult (verifies the submit was successful)
-      stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
-        .to_return(
-          gemini_check_form_page,
-          gemini_fill_form,
-          gemini_json_response(
-            '```html' "\n" \
-            "<!DOCTYPE html>\n<html>\n<body>\n<h1>Jane Doe</h1>\n" \
-            "<p>AI Animator / Motion Designer</p>\n</body>\n</html>" \
-            "\n" '```'
-          ),
-          gemini_check_submit_result
-        )
+    def submit_click?(target)
+      target.strategies.any? { |strategy| strategy['css'] == HoneytechDou::PEOPLEFORCE_SUBMIT }
     end
 
-    # ── Examples ─────────────────────────────────────────────────────────────────
+    before do
+      # DOU vacancy page — used by CheckApplyable, FetchApplyType. Dou's scraper client is ImpersonateHttp (Chrome
+      # TLS to clear Cloudflare); it shells out to curl-impersonate and bypasses WebMock, so stub it at the client level.
+      allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
+        .with(HoneytechDou::VACANCY_URL, any_args)
+        .and_return(ApplyMate::Client::Response.new(dou_vacancy_html, {}, 200, HoneytechDou::VACANCY_URL))
+      stub_honeytech_redirect_walk
+      # Gemini answers by prompt kind: Navigate (form_reached with the refs listed in the prompt), AnswerFields,
+      # GenerateCv, VerifySubmit.
+      stub_gemini_router
+      session.on(:click) { |target| claimed_at_click << Apply.find(apply.id).submit_claimed_at if submit_click?(target) }
+    end
+
     describe '#call' do
       subject(:run_handler) { described_class.new(apply:).call }
 
@@ -51,75 +42,88 @@ RSpec.describe Apply::Handler::Dou do
         expect(vacancy.reload.external_url).to eq(HoneytechDou::DOU_REDIRECT)
       end
 
-      it 'extracts PeopleForce form fields from the HoneyTech apply page' do
+      it 'detects PeopleForce as generic and reaches its form with the Navigator in one non-humanized survey lease' do
         run_handler
-        field_names = apply.reload.inputs.map { |i| i['name'] }
-        expect(field_names).to include(
-          'career_application_form[full_name]',
-          'career_application_form[email]',
-          'career_application_form[cover_letter]'
-        )
+        reloaded = apply.reload
+
+        expect(reloaded).to have_attributes(platform: 'generic', entry_url: HoneytechDou::DOU_REDIRECT, apply_key: nil,
+                                            form_url: HoneytechDou::PEOPLEFORCE_URL)
+        expect(reloaded.platform_match).to include('key' => 'generic', 'probable' => nil)
+        detect = reloaded.apply_steps.find_by!(key: 'detect')
+        expect(detect.result.dig('evidence', 'hops')).to eq([ HoneytechDou::DOU_REDIRECT, HoneytechDou::PEOPLEFORCE_URL ])
+        expect(session.open_options.first).to include(humanize: false)
+        expect(gemini_prompt_kinds.first).to eq(:navigate)
+        expect(gemini_prompt_kinds.count(:navigate)).to eq(1) # the form is on the landing page: one form_reached turn
+        expect(reloaded.navigation.pluck('op')).to eq(%w[goto wait_for])
+        expect(reloaded.navigation.first).to eq('op' => 'goto', 'url_template' => '{landing_url}')
+        expect(reloaded.navigation.last).to include('root' => HoneytechDou::PEOPLEFORCE_FORM)
       end
 
-      it 'stores AI-filled values in filled_inputs' do
+      it 'discovers the PeopleForce fields from the snapshot and answers them' do
         run_handler
-        filled = apply.reload.filled_inputs
-        expect(filled).to include(
-          hash_including('name' => 'career_application_form[full_name]',
-                         'value' => 'Jane Doe'),
-          hash_including('name' => 'career_application_form[email]',
-                         'value' => user_email)
-        )
+        fields = apply.reload.field_list.index_by(&:label)
+
+        expect(fields.keys).to include("Повне ім'я", 'Електронна пошта', 'Номер телефону', 'Супровідний лист', 'Резюме')
+        expect(fields['Супровідний лист'].widget).to eq('content_editable')
+        expect(fields['Резюме'].widget).to eq('file_input')
+        expect(apply.answers.values.pluck('value')).to include(user_email, user_phone, cover_letter)
       end
 
-      it 'attaches a generated CV' do
-        run_handler
-        expect(apply.reload.cv).to be_attached
-      end
-
-      it 'completes through the Runner with one succeeded step row per applicable step' do
+      it 'completes through the Runner: the engine steps only, the claim before the submit click, then verified' do
         run_handler
         reloaded = apply.reload
 
         expect(reloaded).to have_attributes(state: 'completed', stage: nil, failure: nil, submitted_via: 'engine')
-        expect(reloaded.submit_claimed_at).to be_present
+        expect(reloaded.apply_steps.chronological.map { |step| [ step.key, step.state, step.attempt ] })
+          .to eq(engine_keys.map { |key| [ key, 'succeeded', 1 ] })
+        expect(reloaded.inputs).to be_nil # the internal HTTP steps never ran
+        expect(claimed_at_click).to contain_exactly(be_present)
         expect(reloaded.submit_claimed_at).to be <= reloaded.submitted_at
-        expect(reloaded.apply_steps.chronological.map { |step| [ step.key, step.state, step.attempt ] }).to eq(
-          %w[check_applyable fetch_apply_type detect fetch_form fill_form generate_cv submit].map { |key| [ key, 'succeeded', 1 ] }
-        )
+        expect(reloaded.cv).to be_attached
+        expect(gemini_prompt_kinds).to eq(%i[navigate answers cv verify])
+        expect(reloaded.ai_calls).to eq(3) # Navigate, AnswerFields, VerifySubmit go through CallAi; the CV does not
       end
 
-      it 'detects PeopleForce as an unknown platform first, then keeps the legacy external path' do
-        run_handler
-        reloaded = apply.reload
-
-        expect(reloaded).to have_attributes(platform: 'generic', entry_url: HoneytechDou::DOU_REDIRECT, apply_key: nil)
-        expect(reloaded.platform_match).to include('key' => 'generic', 'probable' => nil)
-        detect = reloaded.apply_steps.find_by!(key: 'detect')
-        expect(detect.result.dig('evidence', 'hops')).to eq([ HoneytechDou::DOU_REDIRECT, HoneytechDou::PEOPLEFORCE_URL ])
-        expect(detect.position).to be < reloaded.apply_steps.find_by!(key: 'fetch_form').position
-      end
-
-      it 'runs no engine stage after detection for an unknown platform (no schema read, no survey lease)' do
-        run_handler
-
-        engine_keys = %w[schema navigate:survey discover:survey answer review throttle navigate:replay:submit
-                         discover:submit fill:submit submit:submit verify:submit]
-        expect(apply.apply_steps.where(key: engine_keys)).to be_empty
-        expect(session.open_options.size).to eq(2) # FetchExternalForm + SendApply::Browser
-      end
-
-      it 'renders the form, then submits in a separate humanized session at the DOU redirect URL' do
+      it 'opens the survey lease, then a separate humanized submit lease, each landing on the redirect walk\'s final URL' do
         run_handler
         expect(session.open_options.map { |options| options[:humanize] }).to eq([ false, true ])
-        expect(session.calls_of(:goto)).to eq([ [ HoneytechDou::DOU_REDIRECT ], [ HoneytechDou::DOU_REDIRECT ] ])
+        expect(session.calls_of(:goto)).to eq([ [ HoneytechDou::PEOPLEFORCE_URL ], [ HoneytechDou::PEOPLEFORCE_URL ] ])
       end
 
-      it 'clicks the submit button with the Ukrainian label, once' do
+      it 'fills with read-back and clicks the submit button with the Ukrainian label, once' do
         run_handler
-        target = session.calls_of(:click).sole.first
-        expect(target.strategies.first).to match('css' => a_string_starting_with('button[type="submit"]'),
-                                                 'has_text' => a_string_including('Застосувати'))
+        expect(session.calls_of(:fill).map(&:last) + session.calls_of(:type).map { |call| call[1] })
+          .to include('Jane Doe', user_email, user_phone, cover_letter)
+        expect(session.calls_of(:upload).sole.second).to end_with('.pdf')
+        expect(session.calls_of(:click).map(&:first).count { |target| submit_click?(target) }).to eq(1)
+      end
+
+      # Owner decision 2026-10-09: no integration is refused; a browser-backed one runs the Navigator in text mode,
+      # inside a lease too.
+      context 'with a GeminiScraping integration (browser-backed, text mode)' do
+        let(:scraping_client) { instance_double(ApplyMate::Ai::Client::GeminiScraping) }
+
+        before do
+          ai_integration.update!(provider: 'gemini_scraping')
+          allow(ApplyMate::Ai::Client::GeminiScraping).to receive(:new).and_return(scraping_client)
+          allow(scraping_client).to receive(:complete) do |request|
+            prompt = [ request.system, *request.messages.map { |message| message[:content] } ].compact.join("\n\n")
+            ApplyMate::Ai::Response.new(text: gemini_route(prompt), usage: ApplyMate::Ai::Usage::UNKNOWN)
+          end
+        end
+
+        it 'is not halted at detect: the Navigator runs and the apply completes with the browser-backed AI' do
+          run_handler
+          reloaded = apply.reload
+
+          expect(reloaded.failure).to be_nil
+          expect(reloaded).to have_attributes(state: 'completed', platform: 'generic')
+          expect(reloaded.apply_steps.chronological.map { |step| [ step.key, step.state ] })
+            .to eq(engine_keys.map { |key| [ key, 'succeeded' ] })
+          expect(gemini_prompt_kinds).to eq(%i[navigate answers cv verify])
+          expect(scraping_client).to have_received(:complete).exactly(4).times
+          expect(a_request(:post, /generativelanguage/)).not_to have_been_made
+        end
       end
 
       context 'when the vacancy page has no reply button' do
@@ -127,7 +131,7 @@ RSpec.describe Apply::Handler::Dou do
           allow_any_instance_of(ApplyMate::Scraper::Dou).to receive(:fetch_applyble).and_return(false)
         end
 
-        it 'ends unsupported at check_applyable without fetching the form' do
+        it 'ends unsupported at check_applyable without opening a browser' do
           run_handler
 
           expect(apply.reload).to be_unsupported
@@ -176,40 +180,67 @@ RSpec.describe Apply::Handler::Dou do
       expect(reloaded.field_list.size).to eq(15)
       expect(reloaded.answers.keys).to include('ashby:_systemfield_email', 'ashby:6257e5b0-1d2a-4c55-9a51-3f0f2a6c1e01')
       expect(session.open_options).to be_empty
-      expect(reloaded.inputs).to be_nil # Ai::FetchExternalForm never ran
+      expect(reloaded.inputs).to be_nil # the internal HTTP steps never ran
+    end
+
+    context 'with a GeminiScraping integration (a known platform: the deterministic route asks no AI in the lease)' do
+      let(:scraping_client) { instance_double(ApplyMate::Ai::Client::GeminiScraping) }
+
+      before do
+        ai_integration.update!(provider: 'gemini_scraping')
+        allow(ApplyMate::Ai::Client::GeminiScraping).to receive(:new).and_return(scraping_client)
+        # In call order: AnswerFields, GenerateCv; each asserts no browser lease is open while the AI is asked.
+        texts = [ fixture_ashby_answers_json(email: user_email, phone: user_phone),
+                  "```html\n<html><body><h1>Jane Doe</h1></body></html>\n```" ]
+        allow(scraping_client).to receive(:complete) do
+          expect(session.open_options).to be_empty
+          ApplyMate::Ai::Response.new(text: texts.shift, usage: ApplyMate::Ai::Usage::UNKNOWN)
+        end
+      end
+
+      it 'is not halted at detect and reaches the answers, the CV and the review (deterministic navigation)' do
+        described_class.new(apply:).call
+        reloaded = apply.reload
+
+        expect(reloaded).to have_attributes(state: 'needs_review', platform: 'ashby')
+        expect(reloaded.failure).to include('code' => 'review', 'stage' => 'review')
+        steps = reloaded.apply_steps.chronological.map { |step| [ step.key, step.state ] }
+        expect(steps).to eq(%w[check_applyable fetch_apply_type detect schema answer generate_cv].map { |key| [ key, 'succeeded' ] } +
+                            [ %w[review failed] ]) # review_policy: :always stops the run before the submit scope
+        expect(reloaded.answers.keys).to include('ashby:_systemfield_email')
+        expect(reloaded.cv).to be_attached
+        expect(scraping_client).to have_received(:complete).twice
+      end
     end
   end
 
   describe 'step conditions' do
-    # apply_steps is unique on (apply_id, attempt, key): for every apply type and detection outcome the steps that
-    # may run share no key, and the CV is generated by exactly one generate_cv step (the engine's or the legacy one).
-    def active_keys(external:, known:, probable:)
+    # apply_steps is unique on (apply_id, attempt, key): for both apply types the steps that may run share no key, and
+    # the CV is generated by exactly one generate_cv step (the engine's or the internal one).
+    def active_keys(external:)
       ctx = instance_double(Apply::Operation::Engine::Context,
-                            apply: instance_double(Apply, external?: external, internal?: !external),
-                            platform_known?: known, platform_reachable?: known || probable, survey_needed?: true)
+                            apply: instance_double(Apply, external?: external, internal?: !external), survey_needed?: true)
       described_class.steps.select do |step|
         scope_condition = step.scope && described_class.scope_conditions[step.scope]
         [ step.condition, scope_condition ].compact.all? { |condition| condition.call(ctx) }
       end.map(&:key)
     end
 
-    [ true, false ].product([ true, false ], [ true, false ]).each do |external, known, probable|
-      it "never runs two steps with one key (external: #{external}, known: #{known}, probable: #{probable})" do
-        keys = active_keys(external:, known:, probable:)
+    [ true, false ].each do |external|
+      it "never runs two steps with one key (external: #{external})" do
+        keys = active_keys(external:)
 
         expect(keys).to eq(keys.uniq)
         expect(keys.count('generate_cv')).to eq(1)
       end
     end
 
-    it 'routes a known external platform through the engine only and an unknown one through the legacy steps' do
-      legacy = %w[fetch_form fill_form submit]
-
-      expect(active_keys(external: true, known: true, probable: false)).to include('detect', 'answer', 'verify:submit')
-      expect(active_keys(external: true, known: true, probable: false) & legacy).to be_empty
-      expect(active_keys(external: true, known: false, probable: false))
-        .to eq(%w[check_applyable fetch_apply_type detect fetch_form fill_form generate_cv submit])
-      expect(active_keys(external: false, known: false, probable: false))
+    it 'routes every external apply through the engine and an internal one through the HTTP steps' do
+      expect(active_keys(external: true)).to eq(
+        %w[check_applyable fetch_apply_type detect schema navigate:survey discover:survey answer generate_cv review
+           throttle navigate:replay:submit discover:submit fill:submit submit:submit verify:submit]
+      )
+      expect(active_keys(external: false))
         .to eq(%w[check_applyable fetch_apply_type fetch_form fill_form generate_cv submit])
     end
   end

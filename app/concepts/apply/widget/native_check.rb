@@ -44,8 +44,7 @@ class Apply::Widget::NativeCheck < Apply::Widget::Base
 
   def label_target
     id = target.strategies.filter_map { |strategy| strategy.dig('attr', 'id') }.first
-    path = target.strategies.filter_map { |strategy| strategy['css'] }.last
-    parent = path&.split(' > ')&.then { |segments| segments[0..-2].join(' > ') if segments.size > 1 }
+    parent = parent_css
     selectors = [
       ("label[for=#{css_string(id)}]" if id),
       (parent if parent&.split(' > ')&.last&.start_with?('label')),

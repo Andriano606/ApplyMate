@@ -6,16 +6,20 @@
 #
 # - In-flight requests (every method) feed #pending / #last_event_at, which Operation::WaitQuiet polls.
 # - Every finished or failed non-GET request whose host is not in IGNORED_HOSTS is recorded as
-#   { url:, method:, status:, at:, frame_url:, body: } (status nil when it failed; at = monotonic ms when it
-#   started). #mark / #since(mark) return what an action caused; #in_flight_since(mark) counts the non-GET requests
+#   { url:, method:, status:, at:, frame_url:, body:, body_error: } (status nil when it failed; at = monotonic ms
+#   when it started). #mark / #since(mark) return what an action caused; #in_flight_since(mark) counts the non-GET requests
 #   it started that have not ended yet. At most MAX_RECORDS are kept, oldest dropped.
 #   Request bodies are never stored (they carry the applicant's answers).
 # - Response bodies: only for finished requests whose URL matches a pattern registered with #watch (the platform's
-#   success_evidence[:submit_request]). Reading a body is a Playwright call, so the reader thread only POSTS the
-#   read to a per-tracker executor (one thread, at most BODY_QUEUE waiting reads; more are dropped with body nil) and
-#   the read runs there, eagerly, while the response is still held by the browser. #since(mark, bodies: true) waits
-#   on the caller thread for those reads, BODY_WAIT_MS in total, and returns the first BODY_CAP bytes (nil when the
-#   read failed, was dropped or did not finish in time). With bodies: false (default) `body` is always nil.
+#   success_evidence[:submit_request][:url], which names the submit operation itself, so analytics, autosave and
+#   upload calls never compete with it for a read). Reading a body is a Playwright call, so the reader thread only
+#   POSTS the read to a per-tracker executor (one thread, at most BODY_QUEUE waiting reads; more are dropped) and the
+#   read runs there, eagerly, while the response is still held by the browser. #since(mark, bodies: true) waits on
+#   the caller thread for those reads, BODY_WAIT_MS in total, and returns the first BODY_CAP bytes. When a watched
+#   2xx..5xx response has no body, `body_error` says why: 'dropped' (the queue was full or the tracker disposed),
+#   'unreadable' (the read raised or returned nothing), 'timeout' (not done within BODY_WAIT_MS); VerifySubmit
+#   reports it, so "the body was never read" is told apart from "the body was not a success". With bodies: false
+#   (default), and for requests that are not watched, `body` and `body_error` are nil.
 class ApplyMate::Client::Browser::NetTracker
   MAX_RECORDS = 500
   IGNORE_OLDER_MS = 3_000
@@ -25,10 +29,14 @@ class ApplyMate::Client::Browser::NetTracker
   BODY_WAIT_MS = 5_000
 
   # Analytics, telemetry and captcha traffic: never evidence of a submit. 'host/path' entries match a path prefix.
+  # Datadog RUM (Ashby) beacons to browser-intake-<site>.com hosts, which are not subdomains of datadoghq.*.
   IGNORED_HOSTS = %w[
     google-analytics.com googletagmanager.com doubleclick.net recaptcha.net gstatic.com/recaptcha
     google.com/recaptcha hcaptcha.com challenges.cloudflare.com sentry.io segment.io hotjar.com facebook.net
+    datadoghq.com datadoghq.eu browser-intake-datadoghq.com browser-intake-datadoghq.eu
+    browser-intake-us3-datadoghq.com browser-intake-us5-datadoghq.com browser-intake-ap1-datadoghq.com
   ].map { |entry| entry.split('/', 2) }.freeze
+  DROPPED = :dropped
 
   def initialize(page)
     @page = page
@@ -85,7 +93,8 @@ class ApplyMate::Client::Browser::NetTracker
   def since(mark, bodies: false)
     wait_until = clock.now_ms + BODY_WAIT_MS
     @records.select { |record| record[:at] >= mark }.map do |record|
-      record.merge(body: bodies ? body_of(record[:body], wait_until) : nil)
+      body, body_error = bodies ? body_of(record[:body], wait_until) : [ nil, nil ]
+      record.merge(body:, body_error:)
     end
   end
 
@@ -95,6 +104,11 @@ class ApplyMate::Client::Browser::NetTracker
 
     @watched << pattern unless @watched.include?(pattern)
     self
+  end
+
+  # The watched patterns (Driver#switch_to re-registers them on the next page's tracker).
+  def watched
+    @watched.to_a
   end
 
   def dispose
@@ -134,25 +148,29 @@ class ApplyMate::Client::Browser::NetTracker
     @watched.any? { |pattern| pattern.match?(url) }
   end
 
-  # Runs on the reader thread: only enqueues. A full queue (or a shut-down executor) means no body, never a block.
+  # Runs on the reader thread: only enqueues. A full queue (or a shut-down executor) means no body (DROPPED), never
+  # a block.
   def read_later(request)
     Concurrent::Promises.future_on(@body_reader, request) { |watched| read_body(watched) }
   rescue Concurrent::RejectedExecutionError
-    nil
+    DROPPED
   end
 
-  # Runs on the body reader thread, never on the reader thread.
+  # Runs on the body reader thread, never on the reader thread. A raise rejects the future ('unreadable').
   def read_body(request)
-    body = request.response&.body
-    body&.byteslice(0, BODY_CAP)&.force_encoding(Encoding::UTF_8)&.scrub
-  rescue StandardError
-    nil
+    request.response&.body&.byteslice(0, BODY_CAP)&.force_encoding(Encoding::UTF_8)&.scrub
   end
 
-  def body_of(future, wait_until)
-    return if future.nil?
+  # [body, body_error] of a record's read handle (nil for an unwatched request).
+  def body_of(handle, wait_until)
+    return [ nil, nil ] if handle.nil?
+    return [ nil, 'dropped' ] if handle.equal?(DROPPED)
 
-    future.value([ wait_until - clock.now_ms, 0 ].max / 1000.0)
+    handle.wait([ wait_until - clock.now_ms, 0 ].max / 1000.0)
+    return [ nil, 'timeout' ] unless handle.resolved?
+
+    body = handle.value if handle.fulfilled?
+    body.nil? ? [ nil, 'unreadable' ] : [ body, nil ]
   end
 
   def ignored?(url)

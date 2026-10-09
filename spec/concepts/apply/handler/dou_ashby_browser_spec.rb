@@ -22,8 +22,8 @@ RSpec.describe Apply::Handler::Dou, :browser, type: :job do
   let(:claimed_at_post) { [] }
   let(:salary_path) { '596274cb-4e5f-4a6b-8c7d-9e0f1a2b3c08' }
   let(:gemini_cv) { gemini_json_response("```html\n<html><body><h1>Jane Doe</h1></body></html>\n```") }
-  # Gemini in call order: AnswerFields, GenerateCv (Verify needs no AI: the page text and the GraphQL response are
-  # two deterministic signals).
+  # Gemini in call order: AnswerFields, GenerateCv (Verify needs no AI: Ashby's confirmation view and the submit
+  # mutation's FormSubmitSuccess are two deterministic signals; the fixture's copy matches no thank-you pattern).
   let(:gemini_responses) { [ gemini_json_response(fixture_ashby_answers_json(email: user_email, phone: user_phone)), gemini_cv ] }
 
   def response(body, status: 200, location: nil)
@@ -79,9 +79,12 @@ RSpec.describe Apply::Handler::Dou, :browser, type: :job do
          throttle navigate:replay:submit discover:submit fill:submit submit:submit verify:submit]
     )
     expect(reloaded.apply_steps.map(&:state).uniq).to eq([ 'succeeded' ])
-    expect(reloaded.navigation).to eq([ { 'op' => 'unwrap', 'url_template' => '{canonical_form_url}' } ])
     survey_navigation = reloaded.apply_steps.find_by!(key: 'navigate:survey').result['navigation']
     expect(survey_navigation.pluck('op')).to eq(%w[goto unwrap])
+    # the submit scope replayed the stored navigation through Recipe::Interpret and persisted what it performed
+    expect(reloaded.navigation).to eq([ { 'op' => 'goto', 'url_template' => '{landing_url}' },
+                                        { 'op' => 'unwrap', 'url_template' => '{canonical_form_url}' } ])
+    expect(reloaded.apply_steps.find_by!(key: 'navigate:replay:submit').result['navigation']).to eq(survey_navigation)
 
     expect(opens.map { |options| options[:humanize] }).to eq([ false, true ])
     expect(opens.pluck(:identity).uniq).to eq([ apply.hashid ])

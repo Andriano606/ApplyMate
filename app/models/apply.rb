@@ -19,8 +19,7 @@ class Apply < ApplicationRecord
     http_method:      :string, # HTTP method extracted from the form element ('post', 'get')
     submit_selector:  :string, # CSS selector for the submit button
     submit_text:      :string, # visible text of the submit button, used for disambiguation
-    external_url:     :string, # canonical URL of the employer's application page
-    trigger_selector: :string, # CSS selector to click before the form appears (e.g. "Apply" button)
+    external_url:     :string, # canonical URL of the employer's application page (legacy rows; read by Component::Actions)
     cookies:          :string, # cookies captured at form-fetch time, forwarded on HTTP submission
     inputs:           :value   # Array<{ name, selector, form_index, tag, type, label, placeholder, value, options? }>
 

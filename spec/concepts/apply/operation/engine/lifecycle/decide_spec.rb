@@ -17,7 +17,8 @@ RSpec.describe Apply::Operation::Engine::Lifecycle::Decide do
     expect(decision).to have_attributes(state: :unsupported, auto_resume: false, release_claim: false)
     expect(decision.failure).to eq(code: :no_application_path, kind: :unsupported, stage: 'fake_submit',
                                    detail: 'no button for {{fact.email}}', after_claim: false, attempt: 3)
-    expect(decision.attributes).to eq(state: Apply.states[:unsupported], failure: decision.failure, stage: nil)
+    expect(decision.attributes).to eq(state: Apply.states[:unsupported], failure: decision.failure, stage: nil,
+                                            input_request: nil)
   end
 
   describe 'claim rule' do

@@ -16,7 +16,10 @@
 # overrides it: a scalar replaces value + displayed, a Hash is merged into the probe result (e.g. 'invalid' => true). `on(:click) { |target, *| ... }` runs a hook before the call is handled (to look at
 # the DB mid-step, or raise). `snapshot:` is what snapshot_all returns (default: an empty Snapshot);
 # `listbox_options:` ([WaitForListbox::Option]) is what every wait_for_listbox returns; wait_until calls its block
-# once and returns its value (or false).
+# once and returns its value (or false). `pages:` (default [final_url]) are the URLs of the open tabs; `open_page(url)`
+# appends one (a click that opens a tab: `session.on(:click) { session.open_page(url) }`) and `switch_to(index)`
+# makes that URL the current_url; `show(snapshot, url: nil, html: nil)` swaps the page snapshot_all (and current_url,
+# html) answers.
 class FakeSession
   attr_reader :calls, :open_options
 
@@ -25,9 +28,10 @@ class FakeSession
   )
 
   def initialize(html:, final_url:, cookies: '', read_values: {}, missing: [], snapshot: EMPTY_SNAPSHOT,
-                 listbox_options: [])
+                 listbox_options: [], pages: nil)
     @html = html
     @final_url = final_url
+    @pages = (pages || [ final_url ]).dup
     @cookies = cookies
     @read_values = read_values
     @missing = missing
@@ -38,6 +42,13 @@ class FakeSession
     @hooks = Hash.new { |hash, key| hash[key] = [] }
     @calls = []
     @open_options = []
+  end
+
+  # Session#deadline: what Session.open published (stub_browser_session sets it from the open options).
+  attr_writer :deadline
+
+  def deadline
+    @deadline
   end
 
   def on(method, &block)
@@ -180,6 +191,37 @@ class FakeSession
     @final_url
   end
 
+  def pages
+    record(:pages)
+    @pages.map { |url| { 'url' => url } }
+  end
+
+  # The page at `index` becomes current: current_url (and goto's NavResult) answer its URL from now on.
+  def switch_to(index)
+    record(:switch_to, index)
+    @final_url = @pages.fetch(index)
+    nil
+  end
+
+  # Not a Session method: the site opens a tab (target=_blank, window.open), e.g. inside `on(:click) { ... }`.
+  def open_page(url)
+    @pages << url
+    self
+  end
+
+  # Not a Session method: the page changed (an action took effect, e.g. inside `on(:click) { ... }`): snapshot_all
+  # returns `snapshot` from now on, html (and probe :outer_html) answers `html` when given and, when `url` is given,
+  # current_url answers it (the current tab moves there).
+  def show(snapshot, url: nil, html: nil)
+    @snapshot = snapshot
+    @html = html if html
+    if url
+      @pages[@pages.index(@final_url) || 0] = url
+      @final_url = url
+    end
+    self
+  end
+
   def settle(kind)
     record(:settle, kind)
     { quiet: true, ms: 0 }
@@ -249,6 +291,7 @@ module FakeSessionHelpers
   def stub_browser_session(fake)
     allow(ApplyMate::Client::Browser::Session).to receive(:open) do |**options, &block|
       fake.open_options << options
+      fake.deadline = options[:deadline]
       block.call(fake)
     end
   end

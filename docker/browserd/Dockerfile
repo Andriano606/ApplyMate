@@ -2,10 +2,12 @@
 #
 # browserd: Camoufox lease daemon (see .ai/docs/browser.md).
 #
-# Image tag = the pinned triple, single source for docker-compose.yml, CI and Kamal:
-#   andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0
-#   (camoufox CAMOUFOX_VERSION-CAMOUFOX_RELEASE, playwright-core from package.json)
-# Bump all three places (ARGs below, package.json/package-lock.json, the tag) together.
+# Image tag = the pinned triple plus the browserd revision, single source for docker-compose.yml, CI and Kamal:
+#   andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2
+#   (camoufox CAMOUFOX_VERSION-CAMOUFOX_RELEASE, playwright-core from package.json, BROWSERD_REVISION below)
+# Bump all places (ARGs below, package.json/package-lock.json, the tag) together. ANY change under docker/browserd/
+# (server.mjs, leases.mjs, entrypoint, ...) bumps BROWSERD_REVISION: a rebuilt image under an unchanged tag is never
+# pulled again by Kamal or compose, so the old server would keep running.
 #
 # The build FAILS (non-zero) when: TARGETARCH is not amd64/arm64, a download's sha256
 # does not match, camoufox-bin is missing, `camoufox-bin --version` does not report
@@ -89,6 +91,9 @@ FROM ${NODE_IMAGE}
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG CAMOUFOX_VERSION=156.0.1
 ARG CAMOUFOX_RELEASE=beta.36
+# Revision of the browserd code itself (the image tag's last part). r2: per-lease ttl_s (POST /leases).
+ARG BROWSERD_REVISION=r2
+LABEL org.opencontainers.image.version="${CAMOUFOX_VERSION}-${CAMOUFOX_RELEASE}-${BROWSERD_REVISION}"
 
 # Firefox runtime libraries (trixie t64 names), software GL for WebGL, Xvfb for
 # HEADLESS=virtual, iptables + util-linux (setpriv) for the egress isolation, curl for

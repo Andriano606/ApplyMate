@@ -141,6 +141,36 @@ RSpec.describe 'Applies on the vacancy page', type: :request do
       end
     end
 
+    describe 'POST /applies/:id/provide_input' do
+      let!(:waiting) do
+        create(:apply, :running, user:, vacancy: create(:vacancy, source: create(:source)), stage: 'awaiting_input',
+                                 input_request: { 'kind' => 'email_code' })
+      end
+      let(:code) { SecureRandom.random_number(1_000_000).to_s.rjust(6, '0') }
+
+      it 'stores the code and answers with a flash stream' do
+        post provide_input_apply_path(waiting), params: { code: }, headers: stream_headers
+
+        expect(response).to have_http_status(:ok)
+        expect(flash_stream).to include('<turbo-stream').and include(I18n.t('apply.provide_input.success'))
+        expect(waiting.reload.input_response).to include('code' => code)
+      end
+
+      it 'answers with an error flash when the apply is not waiting' do
+        waiting.update_columns(input_request: nil)
+
+        post provide_input_apply_path(waiting), params: { code: }, headers: stream_headers
+
+        expect(flash_stream).to include(I18n.t('apply.provide_input.not_allowed'))
+      end
+
+      it "does not reveal another user's apply" do
+        post provide_input_apply_path(create(:apply, :running)), params: { code: }, headers: stream_headers
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+
     describe 'POST /applies/:id/cancel' do
       it 'cancels a queued apply and flashes' do
         queued = create(:apply, user:, vacancy: create(:vacancy, source: create(:source)))

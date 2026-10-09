@@ -55,6 +55,12 @@ class AppliesController < ApplicationController
     end
   end
 
+  def provide_input
+    endpoint Apply::Operation::ProvideInput do |m|
+      handle_user_transition(m)
+    end
+  end
+
   private
 
   # The cards refresh through the StatusUpdate broadcast the operation triggers; the response only carries the

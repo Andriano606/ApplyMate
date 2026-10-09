@@ -7,12 +7,13 @@ RSpec.describe Apply::Operation::Stage::Verify do
   let(:ctx) { engine_context(apply) }
   let(:session) { FakeSession.new(html: '', final_url: 'https://jobs.ashbyhq.com/preply/x/application') }
   let(:png) { "\x89PNG\r\n\x1A\nfake".b }
-  let(:signals) { { 'success_text' => true, 'url_match' => false, 'submit_request' => true, 'ai' => false } }
+  let(:signals) { { 'success_text' => true, 'success_dom' => false, 'url_match' => false, 'submit_request' => true, 'ai' => false } }
 
   def verdict(status, count: 2, field_errors: [])
     Apply::Operation::Engine::VerifySubmit::Verdict.new(
-      status:, evidence: { 'signals' => signals, 'count' => count, 'min_signals' => 2, 'form_present' => false,
-                           'field_errors' => field_errors, 'mutations_2xx' => 1, 'requests' => 1 }
+      status:, evidence: { 'signals' => signals, 'count' => count, 'min_signals' => 2, 'baseline' => [ 'url_match' ], 'form_present' => false,
+                           'field_errors' => field_errors, 'mutations_2xx' => 1, 'requests' => 1, 'in_flight' => 0,
+                           'success_dom' => [], 'failure_dom' => [], 'submit_op' => [ { 'status' => 200, 'body' => 'dropped' } ] }
     )
   end
 
@@ -61,7 +62,8 @@ RSpec.describe Apply::Operation::Stage::Verify do
 
     it 'halts validation_rejected as definitive (releases the claim)' do
       expect { verify! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
-        expect(halt).to have_attributes(code: :validation_rejected, releases_claim?: true, detail: 'field errors: ashby:email')
+        expect(halt).to have_attributes(code: :validation_rejected, releases_claim?: true,
+                                        detail: start_with('field errors: ashby:email; signals 0/2 ('))
       }
       expect(apply.screenshot).not_to be_attached
     end
@@ -70,9 +72,14 @@ RSpec.describe Apply::Operation::Stage::Verify do
   context 'when the outcome is not proven either way' do
     before { stub_verdict(verdict(:unknown, count: 1)) }
 
-    it 'halts outcome_unknown (not definitive: the claim stays)' do
+    it 'halts outcome_unknown (not definitive: the claim stays) with the per-signal summary as the detail' do
       expect { verify! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
-        expect(halt).to have_attributes(code: :outcome_unknown, releases_claim?: false, detail: 'signals 1/2')
+        expect(halt).to have_attributes(code: :outcome_unknown, releases_claim?: false)
+        expect(halt.detail).to eq(
+          'signals 1/2 (success_text=yes success_dom=no url_match=no submit_request=yes ai=no); baseline [url_match]; ' \
+          'requests 1, 2xx 1, in_flight 0; submit_op [200 dropped]; form_present no, field_errors 0; ' \
+          'success_dom [], failure_dom []'
+        )
       }
     end
   end

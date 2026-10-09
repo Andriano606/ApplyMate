@@ -13,8 +13,12 @@
 #              required and options (source 'schema_api'); the DOM wins for the target and therefore the widget, and
 #              decides between the single-choice kinds (SINGLE_CHOICE: an Ashby ValueSelect / Boolean is a combobox,
 #              radios or Yes/No buttons depending on how it rendered)
-#   widget     the key of Apply::Widget::Registry.find (nil when phase 3a has no driver for the kind; filling such a
-#              field halts no_widget_driver)
+#   kind       the schema's, else the DOM's: a `chooser` button (snapshot.js: an upload button with no file input in
+#              its field root) is a `file`; a role=combobox text input with aria-autocomplete list/both and no
+#              aria-haspopup (a typeahead, no select chrome) is an `autocomplete`; a text input whose placeholder is a
+#              date mask (Widget::DateInput.masked?, "dd.mm.yyyy") is a `date`
+#   widget     the key of Apply::Widget::Registry.find (nil when no driver handles the kind; filling such a field halts
+#              no_widget_driver); a chooser is always `dropzone` (its kind alone would pick FileInput)
 #   target     the control's Target; a group's carries the field root as `root` (OptionGroup reads its options there)
 #   default    the value already in a prefilled text-like control (read_value probe), never sent to the AI
 #
@@ -31,6 +35,21 @@ class Apply::Operation::Engine::BuildFieldInventory < ApplyMate::Operation::Base
   # Single-choice kinds: the schema says "one of these options", the DOM says how they are picked.
   SINGLE_CHOICE = %w[select combobox autocomplete radio_group option_group].freeze
   DEFAULT_VALUE_KINDS = %w[text email tel url number textarea date select].freeze
+  # aria-autocomplete values of a typeahead (Widget::Autocomplete) rather than a select-like combobox.
+  AUTOCOMPLETE_LISTS = %w[list both].freeze
+
+  # The ONE "is this snapshot element a fillable control" rule (inventory units, AssessFormLikeness, the Navigator's
+  # FIELDS line and its implicit-submit guard): inputs except buttons, textarea, select, grouped elements and
+  # textbox / combobox / radio / checkbox / switch roles that are not a <button>, and `chooser` upload buttons; never
+  # search-like or disabled ones.
+  def self.control?(element)
+    return false if element['search_like'] || element['disabled']
+    return true if element['group'].present? || element['chooser']
+    return BUTTON_TYPES.exclude?(element['type']) if element['tag'] == 'input'
+    return true if %w[textarea select].include?(element['tag'])
+
+    CONTROL_ROLES.include?(element['role']) && element['tag'] != 'button'
+  end
 
   def perform!(ctx:, snapshot:, **)
     skip_authorize
@@ -55,17 +74,8 @@ class Apply::Operation::Engine::BuildFieldInventory < ApplyMate::Operation::Base
 
   # [[element, ...], ...]: one entry per field, DOM order of the first member.
   def units(elements)
-    groups = elements.select { |element| control?(element) }.group_by { |element| unit_key(element) }
+    groups = elements.select { |element| self.class.control?(element) }.group_by { |element| unit_key(element) }
     groups.values
-  end
-
-  def control?(element)
-    return false if element['search_like'] || element['disabled']
-    return true if element['group'].present?
-    return BUTTON_TYPES.exclude?(element['type']) if element['tag'] == 'input'
-    return true if %w[textarea select].include?(element['tag'])
-
-    CONTROL_ROLES.include?(element['role']) && element['tag'] != 'button'
   end
 
   def unit_key(element)
@@ -98,9 +108,9 @@ class Apply::Operation::Engine::BuildFieldInventory < ApplyMate::Operation::Base
       semantic: first['password'] ? 'password' : nil,
       widget: nil, target:, signature: Apply::Field.signature_for(label:, kind:, option_labels: option_labels(options)),
       ordinal: 0, default_value: default_value(first, kind, target), condition: schema&.condition,
-      source: schema ? 'schema_api' : 'snapshot'
+      source: schema ? 'schema_api' : 'snapshot', page: nil
     )
-    field.with(widget: Apply::Widget::Registry.find(field)&.key)
+    field.with(widget: first['chooser'] ? Apply::Widget::Dropzone.key : Apply::Widget::Registry.find(field)&.key)
   end
 
   def merged_kind(schema_kind, dom_kind)
@@ -111,15 +121,27 @@ class Apply::Operation::Engine::BuildFieldInventory < ApplyMate::Operation::Base
   end
 
   def dom_kind(first, members)
-    return first['group'] if %w[radio_group option_group combobox].include?(first['group'])
+    return 'file' if first['chooser']
+    return autocomplete?(first) ? 'autocomplete' : 'combobox' if first['group'] == 'combobox'
+    return first['group'] if %w[radio_group option_group].include?(first['group'])
     return members.size > 1 ? 'checkbox_group' : 'checkbox' if checkbox?(first)
 
     case first['tag']
     when 'select' then first.dig('attrs', 'multiple') ? 'multiselect' : 'select'
     when 'textarea' then 'textarea'
-    when 'input' then INPUT_KINDS.fetch(first['type'].to_s, 'text')
+    when 'input' then input_kind(first)
     else 'rich_text'
     end
+  end
+
+  def input_kind(first)
+    kind = INPUT_KINDS.fetch(first['type'].to_s, 'text')
+    kind == 'text' && Apply::Widget::DateInput.masked?(first.dig('attrs', 'placeholder')) ? 'date' : kind
+  end
+
+  def autocomplete?(first)
+    attrs = first['attrs'] || {}
+    !first['readonly'] && AUTOCOMPLETE_LISTS.include?(attrs['aria-autocomplete']) && attrs['aria-haspopup'].blank?
   end
 
   # A group is named by its question, a control by its own name (a name that only repeats the placeholder is no
@@ -140,7 +162,7 @@ class Apply::Operation::Engine::BuildFieldInventory < ApplyMate::Operation::Base
       Array(first['options']).map { |option| { 'label' => option['label'], 'value' => option['value'].presence || option['label'] } }
     when 'checkbox_group'
       members.map { |member| { 'label' => member['name'], 'value' => member.dig('attrs', 'value').presence || member['name'] } }
-    when 'combobox' then 'dynamic'
+    when 'combobox', 'autocomplete' then 'dynamic'
     end
   end
 

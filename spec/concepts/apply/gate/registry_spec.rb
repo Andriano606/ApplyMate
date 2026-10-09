@@ -10,6 +10,13 @@ RSpec.describe Apply::Gate::Registry do
     expect(gates.index(Apply::Gate::GoogleForms)).to be < gates.index(Apply::Gate::SignInWall)
   end
 
+  it 'orders the gates as the design lists them' do
+    expect(described_class::DEFAULT.map { |name| name.demodulize }).to eq(
+      %w[PrivateAddress GoogleForms CloudflareInterstitial ExternalMessenger SignInWall DataDome ClosedPosting
+         CookieConsent VisibleCaptcha EmailCode]
+    )
+  end
+
   it 'adds extra gates and drops skipped ones per platform' do
     platform = Class.new(Apply::Platform::Base) do
       extra_gates 'Apply::Gate::DataDome'

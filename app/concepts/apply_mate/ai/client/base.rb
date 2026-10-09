@@ -10,6 +10,11 @@ class ApplyMate::Ai::Client::Base
   # so callers can tell "the model said nothing" from "the model said something unusable".
   class EmptyResponse < StandardError; end
 
+  # Raised when Request#timeout is shorter than the client can possibly answer in (GeminiScraping: less than its
+  # browser SETUP_SECONDS), before any work starts. The apply Runner maps it to Halt(:deadline): the run is out of
+  # time, nothing is contended. (A taken local Chrome slot is ApplyMate::Client::LocalChrome::Busy.)
+  class DeadlineTooShort < StandardError; end
+
   # What the client can do natively. Allowed symbols:
   #   :json_schema    — sends ApplyMate::Ai::Request#json_schema as a native structured-output constraint
   #   :vision         — accepts ApplyMate::Ai::Request#images
@@ -20,6 +25,14 @@ class ApplyMate::Ai::Client::Base
 
   def self.supports?(capability)
     capabilities.include?(capability)
+  end
+
+  # The client's declared latency: worst-case seconds one call of `kind` takes (an HTTP API: the kind's
+  # ApplyMate::Ai::Request::TIMEOUTS; GeminiScraping: CALL_SECONDS). AiHandler gives a request this timeout when the caller
+  # sets none, and Apply::Operation::Engine::CallAi sizes the engine's budgets (Navigator, field recovery, scope and run
+  # deadlines, browserd lease TTL) from it.
+  def self.call_seconds(kind)
+    ApplyMate::Ai::Request::TIMEOUTS.fetch(kind)
   end
 
   def self.validate_api_key!(api_key:)

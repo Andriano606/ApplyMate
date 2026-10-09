@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
 # Which widget driver writes a field (design §7.2): the one whose key discovery stored in Apply::Field#widget, else the
-# first in DRIVERS whose handles? is true. Precedence matters (a file input before anything text-like, a combobox
-# before a native select). Constantized once per process.
+# first in DRIVERS whose handles? is true. Precedence matters (a chooser-only dropzone before a file input, file
+# inputs before anything text-like, a combobox before a native select, the specific text-ish kinds before Text).
+# Constantized once per process.
 class Apply::Widget::Registry
   DRIVERS = %w[
-    Apply::Widget::FileInput Apply::Widget::AriaCombobox Apply::Widget::NativeSelect Apply::Widget::OptionGroup
-    Apply::Widget::NativeCheck Apply::Widget::Text
+    Apply::Widget::Dropzone Apply::Widget::FileInput Apply::Widget::AriaCombobox Apply::Widget::Autocomplete
+    Apply::Widget::NativeSelect Apply::Widget::OptionGroup Apply::Widget::NativeCheck Apply::Widget::DateInput
+    Apply::Widget::Range Apply::Widget::ContentEditable Apply::Widget::Text
   ].freeze
 
   class << self

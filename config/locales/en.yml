@@ -216,7 +216,6 @@ en:
       success: Application deleted
     failure:
       ai_budget_exhausted: AI request budget exhausted
-      ai_integration_cannot_navigate: AI integration cannot navigate
       ai_lifetime_cap: Overall AI limit reached
       already_applied: Already applied
       already_claimed: Already submitted
@@ -255,8 +254,6 @@ en:
     failure_hint:
       ai_budget_exhausted: The AI request limit for this application is used up. Apply
         manually.
-      ai_integration_cannot_navigate: The selected AI integration cannot navigate
-        pages. Pick another one or apply manually.
       ai_lifetime_cap: The overall AI limit for this application has been reached.
         Apply manually.
       already_applied: You seem to have applied to this vacancy already. Confirm you
@@ -330,6 +327,18 @@ en:
         status: Status
         vacancy: Vacancy
       title: My applications
+    input_request:
+      code_label: Code
+      email_code:
+        hint: The site sent a verification code to your e-mail. Enter it here and
+          the application will be finished automatically.
+        title: Enter the code from the e-mail
+      expires_at: Waiting until %{time}
+      generic:
+        hint: The site is waiting for a confirmation. Enter the code you received
+          here and the application will be finished automatically.
+        title: Confirmation needed
+      submit: Send code
     mark_outcome:
       confirm_required: Confirm that the application was definitely not sent.
       not_allowed: This application cannot be marked in its current state.
@@ -357,6 +366,10 @@ en:
         user_profile: Profile
       submit: Apply
       title: New application
+    provide_input:
+      invalid_code: Enter the code (up to 32 characters).
+      not_allowed: This application is not waiting for a code right now.
+      success: Code sent
     resume:
       already_submitted: You already applied to this vacancy with another application,
         so retrying would send a second one.
@@ -393,6 +406,7 @@ en:
       artifacts: Artifacts
     stage:
       answer: Preparing answers
+      awaiting_input: Waiting for your code
       check_applyable: Checking availability
       detect: Detecting platform
       discover: Discovering form fields

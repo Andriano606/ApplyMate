@@ -28,6 +28,22 @@ RSpec.describe Apply::Operation::Engine::StartContext do
     end
   end
 
+  it 'resets the per-attempt AI counter and leaves the lifetime one' do
+    apply = create(:apply, state: :waiting_capacity, ai_calls: 12, ai_calls_total: 40)
+
+    described_class.call(apply:)
+
+    expect(apply.reload).to have_attributes(ai_calls: 0, ai_calls_total: 40)
+  end
+
+  it 'clears a stale input request and response so a resumed run never consumes an old code' do
+    apply = create(:apply, state: :waiting_capacity, input_request: { 'kind' => 'email_code' }, input_response: { 'code' => '123456' })
+
+    described_class.call(apply:)
+
+    expect(apply.reload).to have_attributes(input_request: nil, input_response: nil)
+  end
+
   context 'when queued' do
     let(:apply) { create(:apply) }
 

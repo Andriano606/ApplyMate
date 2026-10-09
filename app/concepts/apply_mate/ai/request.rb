@@ -11,6 +11,8 @@
 #                     the :json_schema capability; others rely on format_instructions text alone
 #   timeout           Integer seconds — HTTP timeout for API clients
 #   max_output_tokens Integer — cap on the visible answer
+#   retries           Integer — transient-failure retries an API client may make (Gemini 429/502/503). 0 inside a
+#                     browser lease: a sleeping retry would burn the lease's deadline.
 #   thinking_budget   Integer — reasoning tokens allowed on top of max_output_tokens. Thinking models
 #                     (Gemini 2.5+, Ollama qwen3/deepseek-r1) spend their reasoning from the same
 #                     provider-side cap, so clients send max_output_tokens + thinking_budget as that
@@ -18,7 +20,7 @@
 #                     itself with thinking_config.thinking_budget. Without this a verify answer can
 #                     come back empty with finishReason MAX_TOKENS after the form was submitted.
 ApplyMate::Ai::Request = Data.define(:system, :messages, :images, :json_schema, :timeout, :max_output_tokens,
-                                     :thinking_budget)
+                                     :thinking_budget, :retries)
 
 # Reopened (not `Data.define do … end`) so the constants are scoped to Request, not to ApplyMate::Ai.
 class ApplyMate::Ai::Request
@@ -35,21 +37,27 @@ class ApplyMate::Ai::Request
   # HTTP timeout (seconds) per request kind. Without one a hung provider blocks an apply worker thread.
   TIMEOUTS = { navigate: 60, answers: 90, verify: 30, cv: 180 }.freeze
 
+  # Transient-failure retries per request kind: a navigation decision or a verdict is re-asked by the caller (or never),
+  # form answers and a CV are worth a retry inside the client.
+  RETRIES = { navigate: 0, answers: 2, verify: 0, cv: 2 }.freeze
+
   # Provider-side output cap: the visible answer plus the reasoning that precedes it.
   def output_token_limit
     max_output_tokens + thinking_budget
   end
 
   # Unknown kind raises KeyError on purpose: every ResponseSchema must declare a real kind.
-  def self.for(kind:, text:, json_schema: nil, system: nil, images: [])
+  # `timeout:` / `retries:` nil = the kind's default.
+  def self.for(kind:, text:, json_schema: nil, system: nil, images: [], timeout: nil, retries: nil)
     new(
       system:,
       messages:          [ { role: 'user', content: text } ],
       images:,
       json_schema:,
-      timeout:           TIMEOUTS.fetch(kind),
+      timeout:           timeout || TIMEOUTS.fetch(kind),
       max_output_tokens: MAX_OUTPUT_TOKENS.fetch(kind),
-      thinking_budget:   THINKING_BUDGETS.fetch(kind)
+      thinking_budget:   THINKING_BUDGETS.fetch(kind),
+      retries:           retries || RETRIES.fetch(kind)
     )
   end
 end

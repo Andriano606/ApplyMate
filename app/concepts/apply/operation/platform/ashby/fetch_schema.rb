@@ -77,7 +77,7 @@ class Apply::Operation::Platform::Ashby::FetchSchema < ApplyMate::Operation::Bas
       description: text_of(entry['descriptionHtml']), placeholder: nil, required: entry['isRequired'] == true,
       multiple: raw['type'] == 'MultiValueSelect', max_length: nil, accept: nil, autocomplete: nil, options:, semantic: nil,
       widget: nil, target: nil, signature: Apply::Field.signature_for(label:, kind:, option_labels: options&.pluck('label')),
-      ordinal: 0, default_value: nil, condition: nil, source: 'schema_api'
+      ordinal: 0, default_value: nil, condition: nil, source: 'schema_api', page: nil
     )
   end
 

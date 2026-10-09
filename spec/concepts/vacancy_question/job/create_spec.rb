@@ -15,6 +15,12 @@ RSpec.describe VacancyQuestion::Job::Create, type: :job do
     expect(job.concurrency_duration).to eq(10.minutes)
   end
 
+  it 'retries when the local Chrome slot stays taken' do
+    allow(VacancyQuestion).to receive(:includes).and_raise(ApplyMate::Client::LocalChrome::Busy, 'slot taken')
+
+    expect { described_class.perform_now(9) }.to have_enqueued_job(described_class).with(9)
+  end
+
   it 'enqueues on the apply queue' do
     expect { described_class.perform_later(9) }
       .to have_enqueued_job(described_class).with(9).on_queue('apply')

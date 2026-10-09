@@ -83,24 +83,8 @@ RSpec.describe Apply::Handler::Base do
   end
 
   describe '.engine!' do
-    # Stand-ins for stages of the later units (replaced by the real classes once they exist).
-    let(:engine_stages) do
-      { 'ReachForm' => :navigate, 'DiscoverFields' => :discover, 'AnswerFields' => :answer, 'ReviewGate' => :review,
-        'FillFields' => :fill, 'Submit' => :submit, 'Verify' => :verify }.transform_values do |stage_name|
-        Class.new(Apply::Operation::Stage::Base) { stage stage_name }
-      end
-    end
     let(:guard) { ->(ctx) { ctx.apply.external? } }
-    let(:detect_guard) { ->(_ctx) { true } }
-    let(:engine) { Class.new(described_class).tap { |klass| klass.engine!(detect_if: detect_guard, if: guard) } }
-
-    before do
-      engine_stages.each do |name, klass|
-        next if Apply::Operation::Stage.const_defined?(name, false)
-
-        stub_const("Apply::Operation::Stage::#{name}", klass)
-      end
-    end
+    let(:engine) { Class.new(described_class).tap { |klass| klass.engine!(if: guard) } }
 
     it 'declares the engine pipeline with the survey and submit scopes' do
       expect(engine.steps.map(&:key)).to eq(
@@ -110,43 +94,38 @@ RSpec.describe Apply::Handler::Base do
       expect(engine.scope_conditions.keys).to eq(%i[survey submit])
     end
 
-    it 'puts detect_if on DetectPlatform, platform_reachable? on the pre-form stages and if: on the rest' do
-      steps = engine.steps.index_by(&:key)
-      ctx = instance_double(Apply::Operation::Engine::Context, platform_reachable?: true, survey_needed?: true)
+    it 'puts if: on every scope-less step and on the submit scope; scoped steps carry no condition of their own' do
+      steps = engine.steps
 
-      expect(steps['detect'].condition).to be(detect_guard)
-      expect(steps['schema'].condition.call(ctx)).to be(true)
-      allow(ctx).to receive(:platform_reachable?).and_return(false)
-      expect(steps['schema'].condition.call(ctx)).to be(false)
-      expect(steps['navigate:survey'].condition).to be_nil
-      expect(steps['discover:survey'].condition).to be(guard)
-      expect(steps['review'].condition).to be(guard)
+      expect(steps.reject(&:scope).map(&:condition)).to all(be(guard))
+      expect(steps.select(&:scope).map(&:condition)).to all(be_nil)
       expect(engine.scope_conditions[:submit]).to be(guard)
     end
 
-    it 'runs the survey scope for a reachable platform while the form is not reachable directly with a known schema' do
+    it 'runs the survey scope under if: while the form is not reachable directly with a known schema' do
       survey = engine.scope_conditions[:survey]
-      ctx = instance_double(Apply::Operation::Engine::Context, survey_needed?: true, platform_reachable?: true)
+      ctx = instance_double(Apply::Operation::Engine::Context, survey_needed?: true,
+                                                               apply: instance_double(Apply, external?: true))
 
       expect(survey.call(ctx)).to be(true)
       allow(ctx).to receive(:survey_needed?).and_return(false)
       expect(survey.call(ctx)).to be(false)
-      allow(ctx).to receive_messages(survey_needed?: true, platform_reachable?: false)
+      allow(ctx).to receive_messages(survey_needed?: true, apply: instance_double(Apply, external?: false))
       expect(survey.call(ctx)).to be(false)
     end
 
-    it 'keeps the CV prompt and schema options of the legacy pipeline' do
+    it 'keeps the CV prompt and schema options of the internal pipeline' do
       cv = engine.steps.find { |step| step.operation == Apply::Operation::Ai::GeneratePdfCv }
 
       expect(cv.options).to eq(prompt_class: Apply::Ai::Prompt::GenerateCv, schema_class: Apply::Ai::ResponseSchema::GenerateCv)
     end
 
-    it 'leaves the scope conditions bare without if:' do
+    it 'leaves the step and scope conditions bare without if:' do
       bare = Class.new(described_class) { engine! }
 
-      expect(bare.steps.first.condition).to be_nil
+      expect(bare.steps.map(&:condition)).to all(be_nil)
       expect(bare.scope_conditions[:submit]).to be_nil
-      ctx = instance_double(Apply::Operation::Engine::Context, survey_needed?: true, platform_reachable?: true)
+      ctx = instance_double(Apply::Operation::Engine::Context, survey_needed?: true)
       expect(bare.scope_conditions[:survey].call(ctx)).to be(true)
     end
   end

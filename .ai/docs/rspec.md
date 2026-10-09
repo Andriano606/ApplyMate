@@ -175,12 +175,9 @@ Pre-populate `apply` with jsonb_accessor attributes using `update!`:
 ```ruby
 before do
   apply.update!(
-    external_url:    'https://example.com/apply',
-    submit_selector: 'button[type="submit"].btn',
-    submit_text:     'Apply Now',
-    filled_inputs:   [{ 'name' => 'email', 'selector' => '[name="email"]',
-                        'tag' => 'input', 'type' => 'email',
-                        'form_index' => 0, 'value' => 'dev@example.com' }]
+    filled_inputs: [{ 'name' => 'email', 'selector' => '[name="email"]',
+                      'tag' => 'input', 'type' => 'email',
+                      'form_index' => 0, 'value' => unique_email }]
   )
   apply.cv.attach(io: StringIO.new('%PDF-1.4 fake'), filename: 'CV.pdf',
                   content_type: 'application/pdf')
@@ -189,12 +186,12 @@ end
 
 ## FakeSession (browser steps)
 
-Steps that open an `ApplyMate::Client::Browser::Session` (`Ai::FetchExternalForm`, `SendApply::Browser`) are specced
-against `FakeSession` (`spec/support/fake_session.rb`): same public methods and parameters as `Session` (enforced by
+Steps that open an `ApplyMate::Client::Browser::Session` (the engine's session scopes: `Stage::ReachForm` /
+`DiscoverFields` / `FillFields` / `Submit` / `Verify`, the Navigator, `SmokeSurvey`) are specced against `FakeSession` (`spec/support/fake_session.rb`): same public methods and parameters as `Session` (enforced by
 `spec/concepts/apply_mate/client/browser/session_contract_spec.rb`), no browserd.
 
 ```ruby
-let(:session) { FakeSession.new(html: page_html, final_url: url) } # cookies: '', read_values: {}, missing: [], snapshot:, listbox_options: []
+let(:session) { FakeSession.new(html: page_html, final_url: url) } # cookies: '', read_values: {}, missing: [], snapshot:, listbox_options: [], pages: nil
 before { stub_browser_session(session) } # Session.open yields it, returns the block value, records the kwargs
 ```
 
@@ -203,29 +200,51 @@ before { stub_browser_session(session) } # Session.open yields it, returns the b
 | `html:` / `final_url:` / `cookies:` | what `html`, `current_url`, `cookies` (and `goto`'s `NavResult`) return |
 | `missing: [css, …]` | a target whose **first** strategy's css is listed is not on the page: `click` / `fill` / `select` / `upload` / `probe` / … raise `TargetNotFound`, `present?` / `ready?` return `false` |
 | `read_values: { css => value }` | `probe(:read_value, target)['value']` (and `'displayed'`) for that target; otherwise it echoes the last `fill` / `type` / `select` into the same target. The hash has the real probe's keys (`invalid: false`, `error_text: nil`, `pressed: nil`) |
-| `snapshot:` | the `ApplyMate::Client::Browser::Snapshot` that `snapshot_all` returns (default `FakeSession::EMPTY_SNAPSHOT`) |
+| `snapshot:` / `show(snapshot, url: nil, html: nil)` | the `ApplyMate::Client::Browser::Snapshot` that `snapshot_all` returns (default `FakeSession::EMPTY_SNAPSHOT`); `show` (not a `Session` method) swaps it, and the `current_url` / `html` when given, e.g. inside `on(:goto)` (the landing page) or `on(:click)` (an action took effect, a thank-you replaced the form). Build snapshots with `build_snapshot` (below) |
 | `listbox_options:` | `[Operation::WaitForListbox::Option]` that every `wait_for_listbox` returns (default `[]`); `dom_mark` returns an empty mark |
+| `pages:` / `open_page(url)` / `switch_to(index)` | `pages:` (default `[final_url]`) are the open tabs `pages` returns as `[{ 'url' => … }]`; `open_page(url)` (not a `Session` method) appends one, e.g. `session.on(:click) { session.open_page(form_url) }` for a link that opens a tab; `switch_to(index)` makes that tab's URL the `current_url` (`IndexError` for an unknown index) |
 | `type` / `wait_until` | `type` appends to the target's echoed value; `wait_until` calls its block once and returns its value or `false` |
 | `on(:click) { \|target\| … }` | hook run before a call is handled: read the DB mid-step or `raise` (e.g. a button that vanishes after the claim) |
 | `calls` / `calls_of(:click)` | every call as `[method, *args, kwargs]` (kwargs hash only when the method has any), e.g. `[:goto, url]`, `[:settle, :click]`, `[:present?, target, { visibility: :required }]`. `ready?` records `keys:/attr:/ratio:` only in keys mode, `screenshot` records `mask_fillable:` only when true |
 | `open_options` | one kwargs hash per `Session.open` (assert `humanize:` and `deadline <= ctx.deadline_at`) |
 
 ```ruby
-expect(session.calls).to include([ :goto, HoneytechDou::DOU_REDIRECT ])
-expect(session.calls_of(:click).map(&:first)).to eq([ ApplyMate::Client::Browser::Target.css('#trigger'), submit_target ])
-expect(session.open_options.sole).to include(humanize: true)
+expect(session.calls).to include([ :goto, HoneytechDou::PEOPLEFORCE_URL ])
+expect(session.open_options.map { |options| options[:humanize] }).to eq([ false, true ]) # survey, submit
 
-claimed_at_click = nil
-session.on(:click) { claimed_at_click = Apply.find(apply.id).submit_claimed_at } # claim taken before the click
+claimed_at_click = []
+session.on(:click) { |target| claimed_at_click << Apply.find(apply.id).submit_claimed_at if submit?(target) }
 ```
 
-`spec/support/shared_contexts/honeytech_dou.rb` wires one `FakeSession` (`let(:session)`) for both browser steps of
-the DOU external flow; override `let(:session)` in a context to script `missing:` / `read_values:`.
+**Snapshot builder** (`spec/support/snapshot_builder.rb`, included everywhere): `build_snapshot(frames:, elements:,
+markers: [])` returns a real `Snapshot` built by the production `Operation::SnapshotAll` from canned probe output
+(refs `f<frame>:e<index>`, fingerprints, Targets with frame paths, digest). `snapshot_element(role:, name:, type:,
+tag:, frame:, id:, css:, href:, regions:, **probe_keys)` is one probe element with every key `snapshot.js` returns
+(sensible defaults; `regions: [form_css]` puts it inside a form root, `submit_like: true`, `selected: true`, ...).
+Pass a `tag > tag:nth-of-type` chain as `css:` when the spec needs DOM ancestry (the Navigator derives the form root
+from the claimed refs' css paths).
 
-The production path of the same steps is covered by `spec/concepts/apply/operation/send_apply/browser_browserd_spec.rb`
-(`:browser`): FetchExternalForm + SendApply::Browser on the real Session against `FixtureSite` (form page, trigger
-page, a `maxlength` read-back mismatch), with only Gemini stubbed (`allow(Session).to receive(:open).and_call_original`
-undoes the shared context's FakeSession).
+`spec/support/shared_contexts/honeytech_dou.rb` ('honeytech dou') wires one `FakeSession` (`let(:session)`) for both
+leases of the DOU external flow: it starts at `about:blank`, `on(:goto)` shows `peopleforce_form_snapshot` (the
+PeopleForce form: 7 controls incl. a contenteditable cover letter and a file input, "Застосувати" submit) with
+`peopleforce_form_html`, and a click on `HoneytechDou::PEOPLEFORCE_SUBMIT` shows the thank-you page. Override
+`let(:session)` in a context to script `missing:` / `read_values:`.
+
+**The Gemini router** (same context): `stub_gemini_router` answers every Gemini call by reading its prompt
+(`gemini_route(text)`) and records `[kind, text]` in `gemini_prompts` (`gemini_prompt_kinds` → `%i[navigate answers cv
+verify]`): `GOAL` → Navigate (`gemini_navigate(prompt)`: a frame listing ≥ 3 fillable refs → `form_reached` with exactly
+those refs, else click the "Apply" tab, or wait while it is already selected), `Form fields to answer` → AnswerFields
+by label (`answers_by_label`, override per spec), ```` ```html ```` → the CV, `submission` → VerifySubmit citing
+`verify_quote`. Refs are always parsed from the prompt text, never hard-coded (`f1:e2` changes with the page). The
+building blocks (`gemini_navigate_click(ref:)`, `gemini_navigate_wait`, `gemini_navigate_form_reached(scope_ref:,
+field_refs:, ...)`, `gemini_answers(prompt)`, `gemini_cv`, `gemini_verify_ok`) return answer texts; a stubbed
+browser-backed client reuses the router: its stubbed `complete` joins `request.system` and the message contents into
+one prompt and returns `ApplyMate::Ai::Response.new(text: gemini_route(prompt), usage: ApplyMate::Ai::Usage::UNKNOWN)`
+(`dou_spec.rb`, GeminiScraping context).
+
+The production path of the engine is covered by the `:browser` e2e specs (`dou_ashby_browser_spec.rb`,
+`dou_generic_browser_spec.rb`): the real Session against `FixtureSite`, with only the DOU HTTP and Gemini stubbed
+(`allow(Session).to receive(:open).and_wrap_original` undoes the shared context's FakeSession and counts leases).
 
 ## Browser specs (`:browser`)
 
@@ -261,9 +280,13 @@ widgets); unit specs with fakes cover the pure loops (`WaitQuiet`, `WaitPastClou
     ValueSelect with 15 and with 3 options, Boolean, MultiValueSelect ×2; paths match `ashby/application.html`).
   - `POST /ashby/api/non-user-graphql?op=ApiJobPosting` → the same posting JSON, not recorded (the schema read of
     `Apply::Operation::Platform::Ashby::FetchSchema` with `origin: FixtureSite.alt_url('/ashby')`).
-  - `POST /ashby/api/non-user-graphql?op=<any other op>` → appends `{ op:, body: }` to `FixtureSite.submissions`
-    (`Concurrent::Array`, cleared by `FixtureSite.reset!` before every `:browser` example) and answers
-    `{"data":{"submitApplicationForm":{"success":true}}}`.
+  - `POST /ashby/api/non-user-graphql?op=ApiSubmit<...>` (the submit mutation) → appends `{ op:, body: }` to
+    `FixtureSite.submissions` (`Concurrent::Array`, cleared by `FixtureSite.reset!` before every `:browser` example)
+    after the `on_submit` hooks ran, and answers `ASHBY_SUBMIT_ANSWERS[FixtureSite.ashby_submit_result]` (`:success`
+    by default, the real `FormSubmitSuccess` JSON; `:form_render`: the validation re-render, HTTP 200). Any other op
+    (`ApiSetFormValue`, ...) → 200, not recorded. `POST /rum/...` → 202 (the Datadog RUM beacons).
+  - `POST /generic/submit` (the JSON post of `generic/widget.html`) → recorded as `{ op: 'generic', body: }` the same
+    way (hooks, then `submissions`), answers `{"ok":true}`.
   - `POST /submit` → 200 "Thank you for applying".
 
   | Page | Contents |
@@ -274,7 +297,11 @@ widgets); unit specs with fakes cover the pure loops (`WaitQuiet`, `WaitPastClou
   | `challenge.html` | "Just a moment..." title + `cf-chl-` marker, replaced by real content after 2 s |
   | `multi.html` | two identical `button.apply` |
   | `responsive.html` | two `input[name=email]`: `#email_mobile` hidden (`display: none`), `#email_desktop` visible (hidden-duplicate ambiguity) |
-  | `widgets.html` | react-select-like `#country-input[role=combobox]` whose menu (`[role=listbox]` + 4 `[role=option]`) is appended to `<body>` on click / ArrowDown and leaves a `.select__single-value` chip; readonly el-select `#city-input` with a pre-rendered hidden `.el-select-dropdown` (`li.el-select-dropdown__item`, no role); yes/no `aria-pressed` buttons in `[role=group]`; `#far-input` below a 1600 px spacer; `#cookie-overlay` that covers the page after 3 s and intercepts clicks (Obstructed) |
+  | `widgets.html` | react-select-like `#country-input[role=combobox]` whose menu (`[role=listbox]` + 4 `[role=option]`) is appended to `<body>` on click / ArrowDown and leaves a `.select__single-value` chip; readonly el-select `#city-input` with a pre-rendered hidden `.el-select-dropdown` (`li.el-select-dropdown__item`, no role); yes/no `aria-pressed` buttons in `[role=group]`; `#far-input` below a 1600 px spacer; `#cookie-overlay` that covers the page after 3 s and intercepts clicks (Obstructed); a typeahead `#school-input` (suggestions after 2 characters), a contenteditable `#cover`, native and masked (dd.mm.yyyy) dates, a range `#experience` with an output span, a chooser-only dropzone `#resume-zone` (the file input is created on click) |
+  | `wizard.html` | a 2-page SPA wizard in `form#apply`: "Step 1 of 2", a type=button Next that validates page 1, page 1's answers travel as hidden inputs, page 2 posts to `{{ORIGIN}}/submit`; a decoy "Continue reading" outside the form |
+  | `new_tab.html` | "Apply for this job" `target=_blank` link to `form.html` (the form opens in a new tab) |
+  | `generic/careers.html` | an unknown site (no adapter, no `data-*` markers): vacancy title h1 "AI Animator / Motion Designer", a cookie banner with "Accept all" after 1 s, cross-origin `iframe#apply-widget` → `{{ALT_ORIGIN}}/generic/widget.html` |
+  | `generic/widget.html` | `nav[role=tablist]` tabs "Overview" (selected) / "Apply"; Apply mounts a 2-page wizard in `div#application-form`: Full name, Email, Phone, an Element-UI-like readonly select "How did you hear about us?" (LinkedIn / DOU / Friend), "Step 1 of 2", Next; page 2: contenteditable "Cover letter", file "Resume", consent "I agree to the privacy policy", "Step 2 of 2", "Submit application" → JSON `POST {{ALT_ORIGIN}}/generic/submit`, then "Thank you for applying! We received your application." replaces the form |
   | `ashby/company.html` | Preply-like wrapper: no form/iframe in the HTML; `<script src="{{ALT_ORIGIN}}/ashby/embed.js?version=2">` injects `iframe#ashby_embed_iframe` (cross-origin) after 300 ms → `{{ALT_ORIGIN}}/ashby/posting.html?embed=js`, or, when the company page URL carries `?ashby_jid=<uuid>`, → `{{ALT_ORIGIN}}/ashby/preply/<jid>?embed=js` (the job URL detection keys on); a Usercentrics-like banner in an **open shadow root** (`#usercentrics-root`) with "Accept all" / "Accept necessary only" after 1 s |
   | `ashby/embedded_application.html` | company page whose static cross-origin `iframe#ashby_embed_iframe` already shows `{{ALT_ORIGIN}}/ashby/application.html?embed=js`: `ReachForm` without a canonical navigation must find the form root inside the iframe (`reach_form_spec.rb`) |
 | `ashby/posting.html` | Ashby description: `nav[role=tablist]` with `a#job-application-form[role=tab]` and `a > button` "Apply for this Job", both → `application.html?embed=js` |
@@ -363,50 +390,48 @@ end
 When testing several operations against the same company fixture, put common setup in a named shared context. Keep constants in a companion module to avoid Ruby's constant-hoisting problem (constants inside `RSpec.describe` blocks are silently promoted to `Object` and clash across files):
 
 ```ruby
-# spec/support/shared_contexts/honeytech_dou.rb
-module HoneytechDou
-  VACANCY_URL  = 'https://jobs.dou.ua/companies/honeytech/vacancies/354709/'
-  DOU_REDIRECT = 'https://dou.ua/goto/vacancy/?id=354709'
+# spec/support/shared_contexts/coidea_dou.rb
+module CoideaDou
+  VACANCY_URL = 'https://jobs.dou.ua/companies/coidea-agency/vacancies/356740/'
 end
 
-RSpec.shared_context 'honeytech dou' do
-  let(:vacancy_external_url) { nil }          # override per spec to pre-set external_url
-  let(:vacancy) { create(:vacancy, external_url: vacancy_external_url, ...) }
+RSpec.shared_context 'coidea dou' do
+  let(:user_email) { unique_email('dev') }      # never a literal: unique_email / unique_phone per use
+  let(:vacancy) { create(:vacancy, url: CoideaDou::VACANCY_URL, ...) }
 
-  # Canned AI responses reused across specs — gemini_json_response comes from spec/support/ai_responses.rb
-  let(:gemini_check_form_page)     { gemini_json_response('{"has_form":true,...}') }
-  let(:gemini_check_submit_result) { gemini_json_response('{"success":true,...}') }
-
-  # Canonical filled inputs for this company — reuse in FillForm / SendApply specs
-  let(:filled_inputs) { [{ 'name' => 'email', 'value' => user_email, ... }] }
+  # Canonical filled inputs of the internal form — reuse in FillForm / SendApply::Http specs
+  let(:filled_inputs) { [{ 'name' => 'descr', 'value' => '...', ... }] }
 
   # Pre-AI state: same fields with blank values (input to FillForm)
   let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
 end
 ```
 
-Each spec `include_context 'honeytech dou'` and adds only what it owns — its HTTP stubs and AI response sequence.
+Each spec `include_context '...'` and adds only what it owns — its HTTP stubs and AI responses.
 
-**Always define `filled_inputs` and `raw_inputs` in every shared context**, even if the first spec written doesn't use them. `SendApply` and `FillForm` specs will need them, and omitting them forces a retroactive edit. `raw_inputs` is always derived:
+**Internal-path contexts** (`coidea dou`, `art of spin djinni`) define `filled_inputs` and `raw_inputs` (`raw_inputs`
+is always derived from `filled_inputs`); the `FillForm` / `SendApply::Http` specs read them. Include only the fields
+relevant to filling and submission.
+
+**External (engine) contexts** (`honeytech dou`) have no `filled_inputs`: the engine stores `fields` / `answers`. They
+script the page with a `FakeSession` + `build_snapshot` and answer the AI with the prompt router
+(`stub_gemini_router`, see "FakeSession (browser steps)"), because the engine's call order depends on the page (how
+many Navigate turns, whether a wizard page brings follow-up answers):
 
 ```ruby
-let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
+before do
+  stub_honeytech_redirect_walk
+  stub_gemini_router
+end
+# ...
+expect(gemini_prompt_kinds).to eq(%i[navigate answers cv verify])
 ```
 
-Include only the fields relevant to filling and submission — hidden/checkbox ancillaries (e.g. `save_msg_template`) can be omitted.
-
-**Full-pipeline handler spec** stubs all four Gemini calls in order; uses shared `let`s for first and last:
+**Internal full-pipeline handler spec** stubs its Gemini calls in order:
 
 ```ruby
 stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
-  .to_return(gemini_check_form_page, gemini_fill_form, gemini_generate_cv, gemini_check_submit_result)
-```
-
-**Single-operation spec** stubs only its one call:
-
-```ruby
-stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
-  .to_return(gemini_check_form_page)
+  .to_return(gemini_json_response(fill_form_json), gemini_json_response(cv_html))
 ```
 
 `stub_request(...).to_return(r1, r2, r3)` serves responses in call order — each invocation consumes the next entry.

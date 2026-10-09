@@ -6,7 +6,8 @@
 #                submitted_at
 #   rejected  -> Halt(:validation_rejected, definitive: true): the form is still there with field errors and no
 #                mutation was accepted, so the claim is released
-#   unknown   -> Halt(:outcome_unknown): submit_unverified, the user says whether it was sent
+#   unknown   -> Halt(:outcome_unknown, detail: Verdict#detail - which signals held, the submit request's status and
+#                body state): submit_unverified, the user says whether it was sent
 class Apply::Operation::Stage::Verify < Apply::Operation::Stage::Base
   stage :verify
 
@@ -17,9 +18,9 @@ class Apply::Operation::Stage::Verify < Apply::Operation::Stage::Base
     ctx.trace(:verdict, status: verdict.status.to_s, **verdict.evidence)
     case verdict.status
     when :submitted then attach_screenshot(ctx, apply)
-    when :rejected then halt!(:validation_rejected, detail: "field errors: #{verdict.evidence['field_errors'].join(', ')}",
-                                                     definitive: true)
-    else halt!(:outcome_unknown, detail: "signals #{verdict.evidence['count']}/#{verdict.evidence['min_signals']}")
+    when :rejected then halt!(:validation_rejected, definitive: true,
+                                                     detail: "field errors: #{verdict.evidence['field_errors'].join(', ')}; #{verdict.detail}")
+    else halt!(:outcome_unknown, detail: verdict.detail)
     end
     step_result(status: verdict.status.to_s, signals: verdict.evidence['signals'])
   end

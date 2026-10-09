@@ -22,6 +22,13 @@ RSpec.describe UserProfile::Job::ExtractFacts, type: :job do
     expect { described_class.perform_now(user_profile.id) }.to have_enqueued_job(described_class).with(user_profile.id)
   end
 
+  it 'retries when the local Chrome slot stays taken' do
+    user_profile = create(:user_profile)
+    allow(UserProfile::Operation::ExtractFacts).to receive(:call).and_raise(ApplyMate::Client::LocalChrome::Busy)
+
+    expect { described_class.perform_now(user_profile.id) }.to have_enqueued_job(described_class).with(user_profile.id)
+  end
+
   it 'runs the ExtractFacts operation' do
     user_profile = create(:user_profile)
     allow(UserProfile::Operation::ExtractFacts).to receive(:call)

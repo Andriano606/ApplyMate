@@ -16,10 +16,16 @@ require 'puma'
 # - GET /ashby/posting.json -> spec/fixtures/files/apply_engine/ashby/api_job_posting.json
 # - POST /ashby/api/non-user-graphql?op=ApiJobPosting -> the posting JSON above (the schema read of
 #   Apply::Operation::Platform::Ashby::FetchSchema; not recorded)
-# - POST /ashby/api/non-user-graphql?op=<any other op> -> recorded in FixtureSite.submissions as { op:, body: }
-#   after the FixtureSite.on_submit hooks ran (in the server thread; a spec reads the DB there, e.g. to prove the
-#   submit claim was taken before the POST), answers {"data":{"submitApplicationForm":{"success":true}}}
+# - POST /ashby/api/non-user-graphql?op=ApiSubmit<...> (the submit mutation) -> recorded in FixtureSite.submissions
+#   as { op:, body: } after the FixtureSite.on_submit hooks ran (in the server thread; a spec reads the DB there, e.g.
+#   to prove the submit claim was taken before the POST), answers ASHBY_SUBMIT_ANSWERS[FixtureSite.ashby_submit_result]
+#   (:success by default: the real FormSubmitSuccess JSON; :form_render: the validation re-render, HTTP 200)
+# - POST /ashby/api/non-user-graphql?op=<any other op> (ApiSetFormValue...) -> 200 {"data":{"setFormValue":...}},
+#   not recorded
+# - POST /rum/... -> 202 (a stand-in for the Datadog RUM beacons the real page sends)
 # - POST /submit -> 200 "Thank you for applying"
+# - POST /generic/submit (the JSON post of generic/widget.html, a site no adapter knows) -> recorded in
+#   FixtureSite.submissions as { op: 'generic', body: } after the on_submit hooks ran, answers {"ok":true}
 # - anything else 404.
 module FixtureSite
   PAGES_DIR = Pathname(__dir__).join('fixture_site/pages')
@@ -29,6 +35,13 @@ module FixtureSite
   NOT_FOUND = [ 404, { 'content-type' => 'text/plain' }, [ 'not found' ] ].freeze
   ASHBY_JOB = %r{\A/ashby/[^/]+/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}}
   ASHBY_PAGES = { %r{#{ASHBY_JOB}/application\z} => 'ashby/application.html', /#{ASHBY_JOB}\z/ => 'ashby/posting.html' }.freeze
+  # What jobs.ashbyhq.com answers to ApiSubmitSingleApplicationFormAction (the SPA aliases the mutation).
+  ASHBY_SUBMIT_ANSWERS = {
+    success: { data: { submitApplicationFormAction: { applicationFormResult: { __typename: 'FormSubmitSuccess', _: nil },
+                                                      messages: { blockMessageForCandidateHtml: nil } } } }.to_json,
+    form_render: { data: { submitApplicationFormAction: { applicationFormResult: { __typename: 'FormRender', id: 'f' },
+                                                          messages: { blockMessageForCandidateHtml: nil } } } }.to_json
+  }.freeze
 
   APP = lambda do |env|
     request = Rack::Request.new(env)
@@ -38,11 +51,12 @@ module FixtureSite
     if request.post? && request.path == '/ashby/api/non-user-graphql'
       next [ 200, JSON_HEADERS, [ ASHBY_POSTING_JSON.read ] ] if request.GET['op'] == 'ApiJobPosting'
 
-      submission = { op: request.GET['op'], body: request.body.read }
-      FixtureSite.submit_hooks.each { |hook| hook.call(submission) }
-      FixtureSite.submissions << submission
-      next [ 200, JSON_HEADERS, [ '{"data":{"submitApplicationForm":{"success":true}}}' ] ]
+      next [ 200, JSON_HEADERS, [ '{"data":{"setFormValue":{"_":null}}}' ] ] unless request.GET['op'].to_s.start_with?('ApiSubmit')
+
+      next FixtureSite.record_submission(request.GET['op'], request, ASHBY_SUBMIT_ANSWERS.fetch(FixtureSite.ashby_submit_result))
     end
+    next FixtureSite.record_submission('generic', request, '{"ok":true}') if request.post? && request.path == '/generic/submit'
+    next [ 202, { 'content-type' => 'text/plain' }, [] ] if request.post? && request.path.start_with?('/rum/')
     next [ 200, JSON_HEADERS, [ ASHBY_POSTING_JSON.read ] ] if request.get? && request.path == '/ashby/posting.json'
 
     FixtureSite.page(request)
@@ -50,6 +64,7 @@ module FixtureSite
 
   class << self
     attr_reader :port, :alt_port
+    attr_writer :ashby_submit_result
 
     def start
       return if @server
@@ -86,13 +101,26 @@ module FixtureSite
       submit_hooks << block
     end
 
+    # Runs the on_submit hooks with { op:, body: }, stores it in submissions and answers `answer` (JSON, 200).
+    def record_submission(op, request, answer)
+      submission = { op:, body: request.body.read }
+      submit_hooks.each { |hook| hook.call(submission) }
+      submissions << submission
+      [ 200, JSON_HEADERS, [ answer ] ]
+    end
+
     def submit_hooks
       @submit_hooks ||= Concurrent::Array.new
+    end
+
+    def ashby_submit_result
+      @ashby_submit_result || :success
     end
 
     def reset!
       submissions.clear
       submit_hooks.clear
+      @ashby_submit_result = nil
     end
 
     def page(request)

@@ -17,6 +17,22 @@ class Apply::Platform::Ashby < Apply::Platform::Base
     '_systemfield_name' => 'full_name', '_systemfield_email' => 'email', '_systemfield_resume' => 'cv',
     '_systemfield_phone' => 'phone'
   }.freeze
+  # The job board SPA's submit mutations (Apollo HttpLink: `?op=<operationName>`, JSON POST): one form, or the
+  # application form plus survey forms. Field values were stored earlier by ApiSetFormValue / file-upload ops.
+  SUBMIT_OPS = %w[ApiSubmitSingleApplicationFormAction ApiSubmitMultipleFormsAction].freeze
+  # The confirmation view Ashby renders inside #form[role=tabpanel] after a FormSubmitSuccess (role=status: a
+  # "Success" heading plus the org's own message, applicationSubmittedSuccessMessage, or the default "Your
+  # application was successfully submitted..."). The URL never changes.
+  SUCCESS_SELECTORS = [ '.ashby-application-form-success-container' ].freeze
+  # "We couldn't submit your application": the submit failed, or the candidate is blocked (which still answers
+  # FormSubmitSuccess, with messages.blockMessageForCandidateHtml).
+  FAILURE_SELECTORS = %w[.ashby-application-form-failure-container .ashby-application-form-blocked-application-container].freeze
+  # The default copy and common custom copy (Preply: "Application received! Thank you for taking the first step...").
+  # Never a bare "success": the copy is the org's, the selectors above are the copy-independent signal.
+  SUCCESS_TEXTS = [
+    /application (was |has been )?(successfully )?submitted/i, /application (was |has been )?received/i,
+    /thank(s| you) for (applying|your application)/i
+  ].freeze
 
   class << self
     def origin
@@ -32,8 +48,21 @@ class Apply::Platform::Ashby < Apply::Platform::Base
       %r{#{Regexp.escape(authority)}/(?<slug>[^/?#]+)/(?<jid>#{UUID})}
     end
 
-    def graphql_url
-      %r{\A#{Regexp.escape(origin)}/api/non-user-graphql}
+    # The submit mutation only (NetTracker watches it): never ApiSetFormValue, autofill or file-upload ops.
+    def submit_url
+      %r{\A#{Regexp.escape(origin)}/api/non-user-graphql\?op=(?:#{SUBMIT_OPS.join('|')})(?:&|\z)}
+    end
+
+    # The submit mutation's JSON says the application was accepted: no GraphQL errors, the application form result
+    # (any alias: data.submitApplicationFormAction / data.submitMultipleFormsAction) and every survey form result
+    # are FormSubmitSuccess, and no block message. A validation re-render answers HTTP 200 with FormRender.
+    def submit_accepted?(json)
+      result = json['data'].is_a?(Hash) && json['data'].values.find { |value| value.is_a?(Hash) && value.key?('applicationFormResult') }
+      return false if json['errors'].present? || !result
+
+      [ result['applicationFormResult'], *Array(result['surveyFormResults']) ].all? do |form|
+        form.is_a?(Hash) && form['__typename'] == 'FormSubmitSuccess'
+      end && result.dig('messages', 'blockMessageForCandidateHtml').blank?
     end
 
     def declare_signals!
@@ -99,13 +128,12 @@ class Apply::Platform::Ashby < Apply::Platform::Base
                           key_prefix: INSTANCE_PREFIX_SOURCE)
   end
 
-  # Until the submit mutation is measured, success needs TWO independent signals.
+  # Two of: the confirmation view (success_dom), the submit mutation's FormSubmitSuccess (submit_request), the
+  # confirmation copy (success_text). The first two are copy-independent; a failure view vetoes.
   def success_evidence
     {
-      texts: [ /application (was )?(successfully )?submitted/i, /thank(s| you) for applying/i ],
-      url_patterns: [],
-      submit_request: { url: self.class.graphql_url,
-                        body_ok: ->(json) { json['errors'].blank? && json['data'].present? } },
+      texts: SUCCESS_TEXTS, url_patterns: [], selectors: SUCCESS_SELECTORS, failure_selectors: FAILURE_SELECTORS,
+      submit_request: { url: self.class.submit_url, body_ok: ->(json) { self.class.submit_accepted?(json) } },
       min_signals: 2
     }
   end

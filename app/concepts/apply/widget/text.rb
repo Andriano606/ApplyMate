@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
-# Text-like inputs and textareas (dates as text): `fill`; in the submit scope (the lease that clicks submit, where
-# invisible captchas score the interaction) `type` with 40-90 ms between keys, after clearing the field. Fallback:
-# clear and `type` (a React-controlled input that "ate" the filled value usually takes typed keys).
+# Text-like inputs and textareas (dates are Widget::DateInput's): `fill`; in the submit scope (the lease that clicks
+# submit, where invisible captchas score the interaction) `type` with 40-90 ms between keys, after clearing the field.
+# Fallback: clear and `type` (a React-controlled input that "ate" the filled value usually takes typed keys).
+# Widget::ContentEditable inherits the typing rule and the exact read-back.
 class Apply::Widget::Text < Apply::Widget::Base
-  KINDS = %w[text email tel url number textarea date].freeze
+  KINDS = %w[text email tel url number textarea].freeze
   # Longest answer typed key by key; a longer one is filled (pasted): at 40-90 ms per key a 1 000-character letter
   # would eat a minute of the submit scope (SCOPE_DEADLINE 8 min, SUBMIT_RESERVE 120 s).
   TYPE_LIMIT = 300

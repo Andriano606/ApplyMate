@@ -2,7 +2,8 @@
 
 require 'rails_helper'
 
-# The browserd image tag is the pinned triple "<Camoufox version>-<release>-pw<playwright-core>". It is written in
+# The browserd image tag is the pinned triple "<Camoufox version>-<release>-pw<playwright-core>" plus
+# "-<BROWSERD_REVISION>" (the Dockerfile ARG bumped on any docker/browserd change). It is written in
 # five places that nothing else ties together: docker/browserd (Dockerfile ARGs + package.json/package-lock.json),
 # docker-compose.yml, config/deploy.staging.yml and Gemfile.lock (playwright-ruby-client must speak the same protocol
 # version as browserd's playwright-core, which AcquireLease also asserts at runtime). This spec fails on any drift,
@@ -21,7 +22,10 @@ RSpec.describe 'browserd image tag consistency' do
   let(:lockfile) { Bundler::LockfileParser.new(Rails.root.join('Gemfile.lock').read) }
 
   let(:playwright_core) { package_json.dig('dependencies', 'playwright-core') }
-  let(:expected_tag) { "#{dockerfile_arg('CAMOUFOX_VERSION')}-#{dockerfile_arg('CAMOUFOX_RELEASE')}-pw#{playwright_core}" }
+  let(:expected_tag) do
+    "#{dockerfile_arg('CAMOUFOX_VERSION')}-#{dockerfile_arg('CAMOUFOX_RELEASE')}-pw#{playwright_core}-" \
+      "#{dockerfile_arg('BROWSERD_REVISION')}"
+  end
 
   # Every `ARG NAME=value` line for NAME (the Dockerfile declares the version ARGs in more than one stage); all must
   # agree, otherwise the downloaded binary and the final stage's version check would differ.
@@ -42,6 +46,10 @@ RSpec.describe 'browserd image tag consistency' do
     expect(package_json['dependencies']).to eq('camoufox-js' => '0.10.2', 'playwright-core' => '1.63.0')
     expect(package_lock.dig('packages', 'node_modules/camoufox-js', 'version')).to eq('0.10.2')
     expect(package_lock.dig('packages', 'node_modules/playwright-core', 'version')).to eq(playwright_core)
+  end
+
+  it 'carries a browserd revision so a changed server gets a new tag' do
+    expect(dockerfile_arg('BROWSERD_REVISION')).to match(/\Ar\d+\z/)
   end
 
   it 'tags the docker-compose.yml browserd image with the pinned triple' do

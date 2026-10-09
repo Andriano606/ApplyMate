@@ -1,23 +1,23 @@
 # frozen_string_literal: true
 
-# Opens the application form in the scope's session (design §5.4, §10.2, §16): Engine::ReachForm (the landing page
-# for a platform not identified yet, the canonical form URL, else the adapter's navigation recipe; Halt(:not_a_form)
-# when the form of a known platform never gets ready) and persists what worked: applies.navigation (the op list, e.g.
-# [{ 'op' => 'goto', 'url_template' => '{landing_url}' }, { 'op' => 'unwrap', 'url_template' => '{canonical_form_url}' }])
-# and applies.form_url. ctx.form_root (the readiness root in the frame where the form rendered) is what DiscoverFields
-# reads.
+# Opens the application form in the scope's session (design §5.4, §6.3, §10.2, §16): Engine::ReachForm (the landing
+# page for a platform not identified yet, the canonical form URL, the adapter's navigation recipe, the current page,
+# else the AI Navigator; Halt(:not_a_form) when nothing reaches the form) and persists what worked: applies.navigation
+# (the op list, e.g. [{ 'op' => 'goto', 'url_template' => '{landing_url}' }, { 'op' => 'unwrap', 'url_template' =>
+# '{canonical_form_url}' }], or the Navigator's [goto {landing_url}, click, ..., wait_for]) and applies.form_url.
+# ctx.form_root (the readiness / R2-accepted root in the frame where the form rendered) is what DiscoverFields reads.
+# Every path either sets a form root or halts: there is no "succeeded without a form" result.
 #
 # A detection the rendered pages changed (generic -> ashby on Preply's careers page) is persisted like DetectPlatform
 # persists its own: platform, platform_match and the apply key, after CheckApplyKey (Halt(:already_applied) for an
-# unconfirmed duplicate of the now known posting). A platform the landing page did not identify reaches nothing:
-# the step succeeds without a form (step_result navigation nil) and, in phase 3a, Handler::Dou's legacy external
-# path takes over (its engine steps require ctx.platform_known?).
+# unconfirmed duplicate of the now known posting).
 #
 # Survey scope: skipped on a later attempt while the match (key + captures) and the schema ids are unchanged; restore
 # re-adopts the match this step persisted (applies.platform_match), the schema it read (FetchSchema.persisted_schema),
 # form_url (applies.form_url) and form_root (the stored result). `replay: true` (submit scope): always runs (no digest)
-# and reaches the form the same way; replaying a STORED navigation arrives with recipes in phase 3b (a canonical
-# unwrap is idempotent).
+# and replays the stored applies.navigation through Recipe::Interpret (Engine::ReachForm path R); on drift it reaches
+# the form the survey's way, the Navigator healing with the drifted op as its hint. The navigation persisted
+# afterwards is the one actually performed (with any switch_tab a click's new tab inserted, or the fallback's ops).
 class Apply::Operation::Stage::ReachForm < Apply::Operation::Stage::Base
   stage :navigate
 
@@ -46,14 +46,10 @@ class Apply::Operation::Stage::ReachForm < Apply::Operation::Stage::Base
 
   private
 
-  def run!(ctx:, **)
-    navigation = Apply::Operation::Engine::ReachForm.call(ctx:).model
+  def run!(ctx:, replay: false, **)
+    stored = ctx.apply.navigation if replay
+    navigation = Apply::Operation::Engine::ReachForm.call(ctx:, navigation: stored).model
     persist_detection!(ctx)
-    if navigation.nil?
-      ctx.trace(:platform_unknown, probable: ctx.match&.probable&.key)
-      return step_result(navigation: nil, form_url: nil, form_root: nil, platform: ctx.match&.key, schema: 0)
-    end
-
     ctx.persist!(navigation:, form_url: ctx.form_url)
     step_result(navigation:, form_url: ctx.form_url, form_root: ctx.form_root.to_h, platform: ctx.match.key,
                 schema: Array(ctx.schema).size)

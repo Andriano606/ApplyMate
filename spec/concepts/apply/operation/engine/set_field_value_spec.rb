@@ -71,10 +71,49 @@ RSpec.describe Apply::Operation::Engine::SetFieldValue do
   end
 
   it 'halts no_widget_driver for a kind no driver handles' do
-    range = answer_field(id: 'level', kind: 'range', widget: nil)
+    multiselect = answer_field(id: 'langs', kind: 'multiselect', widget: nil)
 
-    expect { set!('5', on: range) }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
-      expect(halt).to have_attributes(code: :no_widget_driver, detail: 'range')
+    expect { set!([ 'Ruby' ], on: multiselect) }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+      expect(halt).to have_attributes(code: :no_widget_driver, detail: 'multiselect')
     }
+  end
+
+  it 'keeps the snapshot GuardAction took before the first write on the Mismatch (for RecoverField)' do
+    before_write = build_snapshot(elements: [ snapshot_element(role: 'combobox', name: 'Country') ])
+    session.show(before_write)
+    stuck = answer_field(id: 'country', kind: 'combobox', widget: 'aria_combobox', options: 'dynamic',
+                         target: ApplyMate::Client::Browser::Target.css('#country'))
+
+    expect { set!('Atlantis', on: stuck) }.to raise_error(Apply::Widget::Mismatch) { |error|
+      expect(error.before).to equal(before_write)
+    }
+  end
+
+  context 'with an autocomplete whose suggestions do not name the answer' do
+    let(:school) do
+      answer_field(id: 'school', kind: 'autocomplete', widget: 'autocomplete', options: 'dynamic',
+                   target: ApplyMate::Client::Browser::Target.css('#school'))
+    end
+    let(:suggestion) do
+      ApplyMate::Client::Browser::Operation::WaitForListbox::Option.new(
+        label: 'Lviv Polytechnic', target: ApplyMate::Client::Browser::Target.css('#school-option-0')
+      )
+    end
+    let(:session) do
+      FakeSession.new(html: '', final_url: 'https://jobs.example.com/apply', listbox_options: [ suggestion ],
+                      read_values: { '#school' => 'Lviv Polytechnic' })
+    end
+
+    it 'accepts the first suggestion and returns it as result[:approximate]' do
+      call = described_class.call(ctx:, field: school, value: 'Lviv State College')
+
+      expect(call.model.displayed).to eq('Lviv Polytechnic')
+      expect(call[:approximate]).to eq('Lviv Polytechnic')
+      expect(session.calls_of(:click).last).to eq([ suggestion.target ])
+    end
+
+    it 'returns no approximate pick when a suggestion matches' do
+      expect(described_class.call(ctx:, field: school, value: 'Lviv Polytechnic')[:approximate]).to be_nil
+    end
   end
 end

@@ -10,11 +10,12 @@
 #      visible / enabled / stable / editable): the gates once more and ONE retry; a second Obstructed ->
 #      Halt(:target_obstructed, detail: reason).
 #
-# Termination: at most two attempts. model = the action's return value.
+# Termination: at most two attempts. model = the action's return value; result[:snapshot] = the snapshot the first
+# gates ran on (the page right before the action: SetFieldValue keeps it for RecoverField's "new since the write").
 class Apply::Operation::Engine::GuardAction < ApplyMate::Operation::Base
   def perform!(ctx:, action:, **)
     skip_authorize
-    run_gates(ctx)
+    result[:snapshot] = run_gates(ctx)
     self.model = action.call
   rescue ApplyMate::Client::Browser::Obstructed => e
     ctx.trace(:obstructed, reason: e.reason, retry: true)
@@ -34,5 +35,6 @@ class Apply::Operation::Engine::GuardAction < ApplyMate::Operation::Base
   def run_gates(ctx)
     snapshot = ctx.session.snapshot_all(markers: Apply::Platform::Registry.dom_markers)
     Apply::Operation::Engine::RunGates.call(ctx:, event: :after_action, snapshot:)
+    snapshot
   end
 end

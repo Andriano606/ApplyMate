@@ -6,6 +6,8 @@ RSpec.describe Apply::Operation::Stage::FillFields do
   let(:apply) { create(:apply) }
   let(:ctx) { engine_context(apply) }
   let(:read_values) { {} }
+  let(:gemini) { %r{generativelanguage\.googleapis\.com.*generateContent} }
+  let(:recovery) { { actions: [], reason: 'the field rejects the value itself', give_up: true } }
   let(:elements) { [ submit_button ] }
   let(:snapshot) { FakeSession::EMPTY_SNAPSHOT.with(elements:) }
   let(:session) do
@@ -46,6 +48,9 @@ RSpec.describe Apply::Operation::Stage::FillFields do
     ctx.form_root = css('#form')
     ctx.fields = fields
     ctx.open_scope!(:submit, session, 5.minutes.from_now)
+    ctx.scratch.step_record = ApplyStep.create!(apply:, attempt: ctx.attempt, key: 'fill', stage: 'fill', position: 0,
+                                                state: :running, started_at: Time.current)
+    stub_request(:post, gemini).to_return(gemini_json_response(recovery.to_json))
   end
 
   it 'has a localized stage name' do
@@ -57,7 +62,7 @@ RSpec.describe Apply::Operation::Stage::FillFields do
     let(:fields) { [ name, resume, salary, token ] }
 
     it 'fills the answered fields with read-back, skips the unanswered optional and hidden ones' do
-      expect(fill![:step_result]).to eq('filled' => 2, 'unfilled' => [])
+      expect(fill![:step_result]).to eq('filled' => 2, 'unfilled' => [], 'pages' => 1)
       expect(session.calls_of(:fill)).to include([ css('#name'), '' ])
       expect(session.calls_of(:probe)).to include([ :read_value, css('#name') ], [ :read_value, css('#resume') ])
       expect(session.calls.flatten).not_to include(css('#salary'), css('#token'))
@@ -80,7 +85,7 @@ RSpec.describe Apply::Operation::Stage::FillFields do
     end
 
     it 'never uploads it as a local path' do
-      expect(fill![:step_result]).to eq('filled' => 1, 'unfilled' => [])
+      expect(fill![:step_result]).to eq('filled' => 1, 'unfilled' => [], 'pages' => 1)
       expect(session.calls_of(:upload)).to be_empty
     end
   end
@@ -88,20 +93,84 @@ RSpec.describe Apply::Operation::Stage::FillFields do
   context 'when an optional value does not stick (maxlength cuts it)' do
     let(:read_values) { { '#why' => 'Bec' } }
 
-    it 'traces it as unfilled, after the fallback write, and goes on' do
-      expect(fill![:step_result]).to eq('filled' => 2, 'unfilled' => [ 'why' ])
+    it 'traces it as unfilled, after the fallback write and the AI recovery, and goes on' do
+      expect(fill![:step_result]).to eq('filled' => 2, 'unfilled' => [ 'why' ], 'pages' => 1)
       expect(session.calls_of(:type)).to include([ css('#why'), 'Because', { delay_ms: Integer } ])
-      expect(ctx.scratch.trace.pluck('event')).to include('widget_fallback', 'unfilled')
+      expect(ctx.scratch.trace.pluck('event')).to include('widget_fallback', 'recover_turn', 'field_unrecovered', 'unfilled')
+      expect(ctx.scratch.step_record.artifacts).not_to be_attached
     end
   end
 
-  context 'when a required value does not stick' do
+  context 'when a required value does not stick, even after the recovery' do
     let(:read_values) { { '#name' => { 'displayed' => 'Jane Doe', 'invalid' => true, 'error_text' => 'Too long' } } }
 
-    it 'halts required_field_unfillable with the field id' do
+    it 'asks the AI once (give_up), stores a masked unfillable screenshot and halts required_field_unfillable' do
       expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
         expect(halt).to have_attributes(code: :required_field_unfillable, detail: 'name')
       }
+      expect(a_request(:post, gemini)).to have_been_made.once
+      expect(ctx.scratch.step_record.reload.artifacts.map { |artifact| artifact.filename.to_s }).to eq([ 'unfillable.png' ])
+      expect(session.calls).to include([ :screenshot, { full_page: false, mask_fillable: true } ])
+    end
+
+    it 'asks a browser-backed integration too (text mode), then halts the same way' do
+      apply.ai_integration.update!(provider: 'gemini_scraping')
+      client = instance_double(ApplyMate::Ai::Client::GeminiScraping)
+      allow(ApplyMate::Ai::Client::GeminiScraping).to receive(:new).and_return(client)
+      give_up = { actions: [], reason: 'nothing to click', give_up: true }.to_json
+      allow(client).to receive(:complete)
+        .and_return(ApplyMate::Ai::Response.new(text: "```json\n#{give_up}\n```", usage: ApplyMate::Ai::Usage::UNKNOWN))
+
+      expect { fill! }.to raise_error(Apply::Operation::Engine::Halt, /required_field_unfillable/)
+      expect(client).to have_received(:complete).once
+      expect(a_request(:post, gemini)).not_to have_been_made
+    end
+  end
+
+  context 'when the AI recovery makes a required value stick' do
+    let(:fields) { [ name ] }
+    let(:read_values) { { '#name' => 'Jan' } }
+    let(:recovery) { { actions: [ { type: 'click', ref: 'f0:e0', key: nil, index: nil, max_ms: nil } ], reason: 'x', give_up: false } }
+    let(:snapshot) do
+      build_snapshot(elements: [ snapshot_element(role: 'button', name: 'Edit', css: '#name-edit', regions: [ '#name' ]) ])
+    end
+
+    before do
+      session.on(:click) { read_values.delete('#name') }
+      session.show(snapshot.with(elements: snapshot.elements + [ submit_button ])) # the form check after filling needs it
+    end
+
+    it 'fills the field' do
+      expect(fill![:step_result]).to eq('filled' => 1, 'unfilled' => [], 'pages' => 1)
+      expect(ctx.scratch.trace.pluck('event')).to include('field_recovered')
+    end
+  end
+
+  context 'when an autocomplete has no suggestion naming the answer' do
+    let(:school) do
+      answer_field(id: 'school', kind: 'autocomplete', label: 'School', widget: 'autocomplete', options: 'dynamic',
+                   target: css('#school'))
+    end
+    let(:fields) { [ name, school ] }
+    let(:answers) do
+      { 'name' => answer_entry('Jane Doe', source: 'fact', confidence: 1.0),
+        'school' => answer_entry('Lviv State College', source: 'fact', confidence: 1.0) }
+    end
+    let(:read_values) { { '#school' => 'Lviv Polytechnic' } }
+    let(:session) do
+      option = ApplyMate::Client::Browser::Operation::WaitForListbox::Option.new(label: 'Lviv Polytechnic', target: css('#school-0'))
+      FakeSession.new(html: '', final_url: 'https://jobs.ashbyhq.com/preply/x/application', snapshot:, read_values:,
+                      listbox_options: [ option ])
+    end
+
+    it 'stores the first suggestion as an approximate answer and halts review before any claim' do
+      expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+        expect(halt).to have_attributes(code: :review, detail: include('approximate'))
+      }
+      expect(apply.reload.answers['school']).to eq('value' => 'Lviv Polytechnic', 'source' => 'approximate', 'confidence' => 0.5)
+      expect(apply.answers['name']).to include('value' => 'Jane Doe')
+      expect(apply.submit_claimed_at).to be_nil
+      expect(a_request(:post, gemini)).not_to have_been_made
     end
   end
 
@@ -129,14 +198,170 @@ RSpec.describe Apply::Operation::Stage::FillFields do
     end
   end
 
-  context 'when the form root has no submit button after filling (a multi-page form)' do
+  context 'when the form root has neither a submit nor a next button after filling' do
     let(:fields) { [ name ] }
-    let(:elements) { [ submit_button.merge('submit_like' => false, 'name' => 'Next') ] }
+    let(:elements) { [ submit_button.merge('submit_like' => false, 'name' => 'Save draft') ] }
 
-    it 'halts wizard_too_long' do
+    it 'halts target_not_found before any claim' do
       expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
-        expect(halt).to have_attributes(code: :wizard_too_long, detail: 'multi-page form')
+        expect(halt).to have_attributes(code: :target_not_found, detail: 'no submit or next button in the form')
       }
+      expect(apply.reload.submit_claimed_at).to be_nil
+    end
+  end
+
+  describe 'a wizard (design §7.4)' do
+    let(:email) { unique_email('jane') }
+    let(:phone) { unique_phone }
+    let(:region) { [ '#form' ] }
+    let(:next_button) { snapshot_element(role: 'button', name: 'Next', tag: 'button', type: 'button', css: '#next', regions: region) }
+    let(:page_one) do
+      build_snapshot(frames: [ { outline: [ 'h2 Step 1 of 2' ] } ], elements: [
+        snapshot_element(role: 'textbox', name: 'Full name', css: '#full_name', required: true, regions: region),
+        snapshot_element(role: 'textbox', name: 'Email', type: 'email', css: '#email', required: true, regions: region),
+        snapshot_element(role: 'textbox', name: 'Phone', type: 'tel', css: '#phone', regions: region),
+        next_button
+      ])
+    end
+    let(:page_two_outline) { [ 'h2 Step 2 of 2' ] }
+    let(:page_two_advance) do
+      snapshot_element(role: 'button', name: 'Submit application', tag: 'button', type: 'submit', submit_like: true,
+                       css: '#submit', regions: region)
+    end
+    let(:page_two) do
+      build_snapshot(frames: [ { outline: page_two_outline } ], elements: [
+        snapshot_element(role: 'textbox', name: 'Cover letter', tag: 'textarea', css: '#cover', required: true, regions: region),
+        snapshot_element(role: 'checkbox', name: 'I agree to the privacy policy', type: 'checkbox', required: true,
+                         regions: region, strategies: [ { 'css' => '#consent' } ]),
+        page_two_advance
+      ])
+    end
+    let(:fields) { inventory(page_one) }
+    let(:cover_id) { inventory(page_two).first.id }
+    let(:consent_id) { inventory(page_two).second.id }
+    let(:answers) do
+      name_field, email_field, phone_field = fields
+      { name_field.id => answer_entry('Jane Doe', source: 'fact', confidence: 1.0),
+        email_field.id => answer_entry(email, source: 'fact', confidence: 1.0),
+        phone_field.id => answer_entry(phone, source: 'fact', confidence: 1.0) }
+    end
+    let(:letter) { { 'value' => 'I would love to build this with you.', 'confidence' => 0.9 } }
+    let(:session) do
+      FakeSession.new(html: '', final_url: 'https://careers.acme.example/jobs/7/apply', snapshot: page_one, read_values:)
+    end
+    let(:next_target) { page_one.elements.last['target'] }
+
+    # The production ids ("f_<signature>_<ordinal>"); the outer `before` builds `answers` before it sets the form root.
+    def inventory(snapshot)
+      ctx.form_root ||= css('#form')
+      Apply::Operation::Engine::BuildFieldInventory.call(ctx:, snapshot:).model
+    end
+
+    def stub_answers(*entries)
+      replies = entries.map { |entry| gemini_json_response("```json\n#{{ cover_id => entry }.to_json}\n```") }
+      stub_request(:post, gemini).to_return(*replies)
+    end
+
+    before do
+      ctx.adopt_match!(Apply::Operation::Engine::Detect::Match.generic)
+      session.on(:click) { |target| session.show(page_two) if target == next_target }
+      # NativeCheck ticks the checkbox through its label; the page then reports the input checked.
+      session.on(:set_checked) { read_values['#consent'] = { 'checked' => true } }
+    end
+
+    it 'fills page 1, clicks Next once, answers only the new textarea with ONE AI call, fills page 2 and stops at :final' do
+      stub_answers(letter)
+
+      expect(fill![:step_result]).to eq('filled' => 5, 'unfilled' => [], 'pages' => 2)
+      expect(session.calls_of(:click)).to eq([ [ next_target ] ])
+      expect(session.calls_of(:type).map(&:second)).to eq([ 'Jane Doe', email, phone, letter['value'] ]) # submit scope: typed
+      expect(session.calls_of(:set_checked).map(&:last)).to eq([ true ])
+      expect(a_request(:post, gemini)).to have_been_made.once
+      expect(a_request(:post, gemini).with { |req| req.body.include?('Cover letter') && !req.body.include?('privacy') })
+        .to have_been_made.once
+      expect(ctx.scratch.trace.pluck('event')).to include('wizard_page')
+      expect(ctx.scratch.followup_calls).to eq(1)
+      expect(ctx.scratch.wizard_page).to eq(2)
+      expect(apply.reload.submit_claimed_at).to be_nil
+    end
+
+    it 'persists the follow-up fields (with their page) and answers' do
+      stub_answers(letter)
+      fill!
+
+      expect(apply.reload.field_list.select(&:later_page?).map(&:id)).to eq([ cover_id, consent_id ])
+      expect(apply.answers).to include(cover_id => letter.merge('source' => 'ai'), consent_id => include('value' => true, 'source' => 'policy'))
+      expect(apply.answers.keys).to include(*fields.map(&:id))
+    end
+
+    it 'replays page 2 from the stored answers after an approved review, without asking the AI again' do
+      later = inventory(page_two).map { |field| field.with(page: 2, target: nil) }
+      ctx.fields = fields + later
+      apply.update!(answers: answers.merge(cover_id => answer_entry(letter['value'], confidence: 0.9),
+                                           consent_id => answer_entry(true, source: 'user', confidence: 1.0)))
+      stub_answers(letter)
+
+      expect(fill![:step_result]).to include('pages' => 2, 'filled' => 5)
+      expect(a_request(:post, gemini)).not_to have_been_made
+      expect(ctx.scratch.followup_calls).to eq(0)
+    end
+
+    it 'halts target_not_found at the final page when a stored required field of a later page never showed' do
+      ctx.fields = fields + [ answer_field(id: 'f_gone_0', label: 'Portfolio', required: true, page: 2, target: nil) ]
+      stub_answers(letter)
+
+      expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+        expect(halt).to have_attributes(code: :target_not_found, detail: 'f_gone_0')
+      }
+    end
+
+    context 'when the AI leaves the new required field blank' do
+      it 'halts required_field_unfillable before any claim and without filling page 2' do
+        stub_answers({ 'value' => nil, 'confidence' => 0.0 })
+
+        expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt).to have_attributes(code: :required_field_unfillable, detail: cover_id)
+        }
+        expect(session.calls_of(:fill).map(&:first)).not_to include(page_two.elements.first['target'])
+        expect(apply.reload.submit_claimed_at).to be_nil
+      end
+    end
+
+    context 'when a follow-up answer needs a review (low confidence) and a third page follows' do
+      let(:page_two_outline) { [ 'h2 Step 2 of 3' ] }
+      let(:page_two_advance) { next_button }
+
+      it 'halts review after filling page 2, before its Next click and before any claim' do
+        stub_answers(letter.merge('confidence' => 0.2))
+
+        expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt).to have_attributes(code: :review, detail: 'low_confidence')
+        }
+        expect(session.calls_of(:click)).to eq([ [ next_target ] ])
+        expect(apply.reload.answers[cover_id]).to include('source' => 'ai', 'confidence' => 0.2)
+        expect(apply.submit_claimed_at).to be_nil
+      end
+    end
+
+    context 'with more than MAX_WIZARD_PAGES pages' do
+      let(:page_one) do
+        build_snapshot(frames: [ { outline: [ 'h2 Step 1 of 7' ] } ], elements: [
+          snapshot_element(role: 'textbox', name: 'Full name', css: '#full_name', required: true, regions: region),
+          snapshot_element(role: 'textbox', name: 'Email', type: 'email', css: '#email', required: true, regions: region),
+          snapshot_element(role: 'textbox', name: 'Phone', type: 'tel', css: '#phone', regions: region),
+          next_button
+        ])
+      end
+
+      before { session.on(:click) { |_target| session.show(page_one) } }
+
+      it 'halts wizard_too_long on the sixth page without clicking its Next' do
+        expect { fill! }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt).to have_attributes(code: :wizard_too_long, detail: 'more than 6 pages')
+        }
+        expect(session.calls_of(:click).size).to eq(described_class::MAX_WIZARD_PAGES - 1)
+        expect(apply.reload.submit_claimed_at).to be_nil
+      end
     end
   end
 end

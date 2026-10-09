@@ -81,7 +81,7 @@ Every per-user apply view of a vacancy rides the single `[user, vacancy]` stream
 
 The CV list (`VacancyCv::TurboHandler::Index`, stream `[user, vacancy, :vacancy_cvs]`) is separate: `broadcast(vacancy, user)` (whole list) is called by `VacancyCvsController#create`, `Apply::Operation::Destroy` and `Apply::Operation::Ai::GeneratePdfCv` on start (its placeholder row appears); `broadcast_row(record)` (replaces that row's own `cv_<record>` frame in place, or removes it; whole list only when the last row is gone and the empty state swaps in) is called by `GeneratePdfCv` in `cleanup`, after the final status is stored. Rows are never inserted relative to a sibling: if that sibling were not rendered yet (two applies starting at once), Turbo would drop the action and the list would never recover.
 
-The questions list (`VacancyQuestion::TurboHandler::Index`, stream `[user, vacancy, :vacancy_questions]`): `broadcast(vacancy, user)` is called by `VacancyQuestionsController#create`, by `Apply::Operation::FetchInternalForm` / `Apply::Operation::Ai::FetchExternalForm` (a new form brings new question suggestions) and by `Apply::Operation::Destroy`.
+The questions list (`VacancyQuestion::TurboHandler::Index`, stream `[user, vacancy, :vacancy_questions]`): `broadcast(vacancy, user)` is called by `VacancyQuestionsController#create`, by `Apply::Operation::FetchInternalForm` (a new form brings new question suggestions) and by `Apply::Operation::Destroy`.
 
 ## Index broadcasts reuse the index operation
 

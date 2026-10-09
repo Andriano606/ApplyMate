@@ -46,11 +46,14 @@
       if (chips.length) break;
     }
   }
+  const buttonish =
+    tag === 'button' || (el.getAttribute('role') || '').trim() === 'button';
   let displayed;
   if (tag === 'select') displayed = text(el.selectedOptions[0]);
   else if (el.isContentEditable) displayed = text(el);
   else if (chips.length) displayed = chips.join(', ');
   else if (type === 'file') displayed = files.join(', ');
+  else if (buttonish) displayed = text(fieldRoot || el.parentElement || el);
   else displayed = value;
 
   let invalid = el.getAttribute('aria-invalid') === 'true';
@@ -77,8 +80,11 @@
   const pressed =
     el.getAttribute('aria-pressed') || el.getAttribute('aria-checked');
 
+  const attr = (name) => el.getAttribute(name);
+
   return {
     tag,
+    type: type || null,
     value,
     checked: tag === 'input' && 'checked' in el ? el.checked : null,
     files,
@@ -87,5 +93,9 @@
     invalid,
     error_text: errorText || null,
     pressed,
+    min: attr('min') ?? attr('aria-valuemin'),
+    max: attr('max') ?? attr('aria-valuemax'),
+    step: attr('step'),
+    aria_valuenow: attr('aria-valuenow'),
   };
 };

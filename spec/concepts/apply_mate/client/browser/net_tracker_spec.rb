@@ -79,7 +79,7 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
     finish(post)
 
     expect(tracker.since(0)).to eq([ { url: post.url, method: 'POST', status: 201, at: 1_010.0,
-                                       frame_url: 'https://jobs.example.com/embed', body: nil } ])
+                                       frame_url: 'https://jobs.example.com/embed', body: nil, body_error: nil } ])
   end
 
   it 'records a failed request with a nil status' do
@@ -93,6 +93,8 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
       https://www.google-analytics.com/g/collect https://region1.analytics.google-analytics.com/g/collect
       https://www.google.com/recaptcha/api2/reload https://www.gstatic.com/recaptcha/x https://api.hcaptcha.com/x
       https://o1.ingest.sentry.io/api/1/envelope/ https://challenges.cloudflare.com/cdn-cgi/x
+      https://browser-intake-datadoghq.com/api/v2/rum https://rum.browser-intake-datadoghq.eu/api/v2/rum
+      https://browser-intake-us5-datadoghq.com/api/v2/logs
     ]
     ignored.each { |url| finish(request_class.new(url, 'POST', 200, nil)) }
     finish(request_class.new('https://www.google.com/forms/submit', 'POST', 200, nil))
@@ -197,7 +199,8 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
       finish(get)
       finish(failed, event: 'requestfailed')
 
-      expect(tracker.since(0, bodies: true).pluck(:body)).to eq([ nil, nil ])
+      expect(tracker.since(0, bodies: true).map { |record| record.slice(:body, :body_error) })
+        .to eq([ { body: nil, body_error: nil } ] * 2)
       expect([ other, get, failed ].map(&:reads)).to eq([ nil, nil, nil ])
     end
 
@@ -212,7 +215,7 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
       expect(tracker.since(0, bodies: true).sole[:body]).to eq('{"data":{"ok":true}}')
     end
 
-    it 'drops bodies (nil, no raise) once BODY_QUEUE reads are waiting' do
+    it "drops bodies (nil, body_error 'dropped', no raise) once BODY_QUEUE reads are waiting" do
       gate = Queue.new
       blocked = Array.new(described_class::BODY_QUEUE + 2) do |index|
         request_class.new("#{graphql}&n=#{index}", 'POST', 200, nil, -> { gate.pop })
@@ -220,15 +223,15 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
       expect { blocked.each { |request| finish(request) } }.not_to raise_error
 
       (described_class::BODY_QUEUE + 1).times { gate << 'ok' }
-      bodies = tracker.since(0, bodies: true).pluck(:body)
-      expect(bodies.first(described_class::BODY_QUEUE + 1)).to all(eq('ok')) # 1 running + BODY_QUEUE waiting
-      expect(bodies.last).to be_nil # dropped: the queue was full
+      records = tracker.since(0, bodies: true)
+      expect(records.first(described_class::BODY_QUEUE + 1).pluck(:body)).to all(eq('ok')) # 1 running + BODY_QUEUE waiting
+      expect(records.last).to include(body: nil, body_error: 'dropped') # the queue was full
     end
 
-    it 'records a failed body read as nil' do
+    it "records a failed body read as nil, body_error 'unreadable'" do
       finish(request_class.new(graphql, 'POST', 200, nil, -> { raise Playwright::Error.new(message: 'gone') }))
 
-      expect(tracker.since(0, bodies: true).sole).to include(status: 200, body: nil)
+      expect(tracker.since(0, bodies: true).sole).to include(status: 200, body: nil, body_error: 'unreadable')
     end
 
     it 'gives up waiting for a body after BODY_WAIT_MS' do
@@ -236,7 +239,7 @@ RSpec.describe ApplyMate::Client::Browser::NetTracker do
       gate = Queue.new
       finish(request_class.new(graphql, 'POST', 200, nil, -> { gate.pop }))
 
-      expect(tracker.since(0, bodies: true).sole[:body]).to be_nil
+      expect(tracker.since(0, bodies: true).sole).to include(body: nil, body_error: 'timeout')
       gate << 'late'
     end
 

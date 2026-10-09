@@ -10,6 +10,7 @@
 #
 # `fields` come from the production discovery (Engine::FormElements.snapshot + BuildFieldInventory) after the form
 # root holds at least one visible control, so a widget spec also proves that discovery picked the right widget.
+# `scope:` (default :survey) is the Context scope the session is published as (:submit: the drivers type with jitter).
 # `in_fixture_scope(ctx) { |session| ... }` opens the scope only (about:blank, e.g. for ReachForm).
 module FixtureFormHelpers
   FIXTURE_FORM_DEADLINE = 3.minutes
@@ -18,8 +19,8 @@ module FixtureFormHelpers
     "#{ApplyMate::Client::Browser::Browserd.owner_prefix}#{Process.pid}:fixture-form"
   end
 
-  def on_fixture_form(ctx, url, form_root:)
-    in_fixture_scope(ctx) do |session|
+  def on_fixture_form(ctx, url, form_root:, scope: :survey)
+    in_fixture_scope(ctx, scope:) do |session|
       session.goto(url)
       root = ApplyMate::Client::Browser::Target.css(form_root)
       raise "#{url}: #{form_root} never rendered" unless session.ready?(root, timeout: 10)
@@ -33,7 +34,7 @@ module FixtureFormHelpers
   def in_fixture_scope(ctx, scope: :survey)
     deadline = FIXTURE_FORM_DEADLINE.from_now
     ApplyMate::Client::Browser::Session.open(deadline:, owner: fixture_form_owner) do |session|
-      ctx.open_scope!(scope, session, deadline)
+      ctx.open_scope!(scope, session, session.deadline)
       yield session
     ensure
       ctx.close_scope!

@@ -69,6 +69,8 @@
     /^:r[0-9a-z]*:|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i;
   const REQUIRED_CLASS = /(^|[_-])required([_-]|$)/i;
   const SUBMIT_TEXT = /submit|надіслати|відправити|подати заявку/i;
+  const UPLOAD_LEXICON =
+    /upload|attach|resume|\bcv\b|browse|завантаж|прикріп|резюме|загруз/i;
   const POPUP_ANCESTOR =
     '.el-select, .v-select, .select__control, [class*="select__control"]';
   const CHIP = '[class*=chip], [class*=singleValue], [class*=single-value]';
@@ -359,6 +361,15 @@
     (el.localName === 'button' &&
       (typeOf(el) === 'submit' || (!el.hasAttribute('type') && !!el.form))) ||
     (el.localName === 'input' && ['submit', 'image'].includes(typeOf(el)));
+  // A button (or drop area with role=button) that opens the file chooser itself: an upload word in its name and no
+  // file input in its field root (else, without a root, its parent or grandparent) - the input is created on click.
+  const choosesFile = (el, name, fieldRoot, buttonish, selfVisible) => {
+    if (!buttonish || !selfVisible || isSubmitType(el)) return false;
+    if (!UPLOAD_LEXICON.test(name)) return false;
+    const parent = el.parentElement;
+    const scope = fieldRoot || (parent && parent.parentElement) || parent;
+    return !(scope && scope.querySelector('input[type=file]'));
+  };
   const fieldsNearby = (el) => {
     let scope = el.form || null;
     if (!scope) {
@@ -542,6 +553,7 @@
           (isSubmitType(el) ||
             SUBMIT_TEXT.test(`${name} ${el.getAttribute('class') || ''}`)) &&
           fieldsNearby(el),
+        chooser: choosesFile(el, name, fieldRoot, buttonish, selfVisible),
         href: tag === 'a' ? clean(el.getAttribute('href'), 500) || null : null,
         options:
           tag === 'select'
@@ -570,6 +582,8 @@
           accept: el.getAttribute('accept'),
           multiple: el.hasAttribute('multiple'),
           maxlength: el.getAttribute('maxlength'),
+          'aria-autocomplete': el.getAttribute('aria-autocomplete'),
+          'aria-haspopup': el.getAttribute('aria-haspopup'),
           value:
             type === 'radio' || type === 'checkbox'
               ? el.getAttribute('value')
@@ -616,6 +630,19 @@
         textOf(tab) + (tab.getAttribute('aria-selected') === 'true' ? '*' : ''),
     );
     if (tabs.length) outline.push(`tabs ${tabs.join(' | ')}`);
+  }
+  // A wizard's progress ("progressbar 1/3"): Engine::ClassifyAdvance reads it as evidence of a further page.
+  for (const bar of doc.querySelectorAll('[role=progressbar], progress')) {
+    if (outline.length >= 40) break;
+    const native = bar.localName === 'progress';
+    const now = native
+      ? bar.value
+      : parseFloat(bar.getAttribute('aria-valuenow'));
+    const max = native
+      ? bar.max
+      : parseFloat(bar.getAttribute('aria-valuemax'));
+    if (seen(bar) && Number.isFinite(now) && Number.isFinite(max))
+      outline.push(`progressbar ${now}/${max}`);
   }
   for (const dialog of doc.querySelectorAll('dialog[open], [role=dialog]')) {
     if (seen(dialog))

@@ -45,6 +45,7 @@ Rails.application.routes.draw do
       post :cancel
       post :approve_review
       post :mark_outcome
+      post :provide_input
     end
   end
   get 'artifacts/:owner/:id/:name', to: 'artifacts#show', as: :artifact,

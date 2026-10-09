@@ -15,8 +15,8 @@ class Apply::Operation::Engine::WaitReady < ApplyMate::Operation::Base
   DEFAULT_MIN_FIELDS = 3
   DEFAULT_ROOT = 'body'
 
-  # platform.readiness, else visible fields under the platform's form root (Generic's :ai_only included: its
-  # Navigator arrives in phase 3b, and in 3a an unknown platform keeps the legacy path).
+  # platform.readiness, else visible fields under the platform's form root (also for no platform yet). Callers never
+  # ask for an ai_only platform (Generic): Engine::ReachForm and Engine::Navigate skip WaitReady for it.
   def self.readiness_of(platform)
     readiness = platform&.readiness
     return readiness if readiness.is_a?(Apply::Platform::Base::Readiness)

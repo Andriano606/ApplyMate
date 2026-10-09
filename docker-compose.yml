@@ -24,13 +24,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
   # Camoufox lease daemon for the apply engine (.ai/docs/browser.md). Image tag = pinned
-  # triple, keep in sync with docker/browserd/Dockerfile ARGs and package.json. This is the
+  # triple + browserd revision, keep in sync with docker/browserd/Dockerfile ARGs and package.json. This is the
   # browserd `bin/dev` applies use (BROWSERD_URL=http://localhost:9300): it loads real
   # third-party pages, so EGRESS_ALLOW_RANGES stays unset and Firefox reaches public
   # addresses only (no LAN, no docker host).
   browserd: &browserd
     build: docker/browserd
-    image: andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0
+    image: andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2
     init: true                 # tini reaps Firefox children
     cap_add: [NET_ADMIN]       # entrypoint installs the egress firewall, then drops privileges
     shm_size: 1g
@@ -42,7 +42,7 @@ services:
     environment: &browserd_env
       BROWSERD_TOKEN: ${BROWSERD_TOKEN:-dev-browserd-token}
       MAX_BROWSERS: ${APPLY_SLOTS:-1}
-      LEASE_TTL_S: "600"
+      LEASE_TTL_S: "1800"
       HEADLESS: "true"
       BROWSERD_OS: windows
       BROWSERD_ADVERTISE_HOST: localhost

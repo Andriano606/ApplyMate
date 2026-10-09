@@ -69,8 +69,10 @@ RSpec.shared_examples 'a platform adapter' do
   it 'describes success with positive evidence only' do
     evidence = adapter.success_evidence
 
-    expect(evidence.keys).to contain_exactly(:texts, :url_patterns, :submit_request, :min_signals)
+    expect(evidence.keys).to include(:texts, :url_patterns, :submit_request, :min_signals)
+    expect(evidence.keys - %i[texts url_patterns submit_request min_signals]).to all(be_in(%i[selectors failure_selectors]))
     expect(evidence[:texts] + evidence[:url_patterns]).to all(be_a(Regexp))
+    expect(Array(evidence[:selectors]) + Array(evidence[:failure_selectors])).to all(be_a(String))
     expect(evidence[:min_signals]).to be_between(1, 3)
     expect(evidence[:submit_request]).to include(url: a_kind_of(Regexp), body_ok: a_kind_of(Proc)) if evidence[:submit_request]
   end

@@ -30,6 +30,10 @@ RSpec.describe Apply::Component::StatusPill, type: :component do
     expect(spinner?(html)).to be(true)
   end
 
+  it 'shows the awaiting_input stage text' do
+    expect(pill(build(:apply, :running, stage: 'awaiting_input')).text).to include(I18n.t('apply.stage.awaiting_input'))
+  end
+
   it 'falls back to the state label for a running apply without a stage' do
     expect(pill(build(:apply, state: :running, stage: nil)).text).to include(I18n.t('apply.state.running'))
   end

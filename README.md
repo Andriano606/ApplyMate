@@ -175,16 +175,18 @@ ssh andrii@192.168.50.155 "sudo ufw allow from 192.168.31.0/24 to any port 9002 
 ### browserd (Camoufox)
 
 `browserd` видає застосунку короткоживучі браузери Camoufox (Firefox з фінгерпринтом на рівні C++) — «лізи» —
-по протоколу Playwright. Кожен ліз — окремий процес браузера з TTL 600 с; кількість одночасних браузерів обмежена
+по протоколу Playwright. Кожен ліз — окремий процес браузера з власним TTL (дедлайн скоупу + 60 с, не більше `LEASE_TTL_S` = 1800 с); кількість одночасних браузерів обмежена
 `MAX_BROWSERS`. Браузери ходять в інтернет лише через проксі smokescreen (тільки публічні адреси) і не бачать
 внутрішніх сервісів. Повний опис (API лізів, reaper, ізоляція мережі, версії): `.ai/docs/browser.md`.
-Dockerfile: `docker/browserd/Dockerfile`; образ: `andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0`.
+Dockerfile: `docker/browserd/Dockerfile`; образ: `andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2`
+(тег = версії Camoufox і playwright-core + ревізія `BROWSERD_REVISION`; будь-яка зміна в `docker/browserd/` піднімає ревізію,
+інакше Kamal і compose не стягнуть новий образ).
 
 | Змінна                | Значення                                                                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `BROWSERD_TOKEN`      | Bearer-токен (обов'язковий, ≥ 16 символів); у dev за замовчуванням `dev-browserd-token`                                              |
 | `MAX_BROWSERS`        | 1..3, ліміт одночасних браузерів (у dev = `APPLY_SLOTS`, за замовчуванням 1)                                                         |
-| `LEASE_TTL_S`         | життя лізу, за замовчуванням 600                                                                                                     |
+| `LEASE_TTL_S`         | найдовше життя лізу, за замовчуванням 1800; `POST /leases` просить `ttl_s` = дедлайн скоупу + 60 с                                   |
 | `HEADLESS`            | `true` / `virtual` (Xvfb) / `false`                                                                                                  |
 | `BROWSERD_OS`         | ОС фінгерпринту, `windows`                                                                                                           |
 | `EGRESS_ALLOW_RANGES` | лише для тестів (`browserd-test`, CI): `host.docker.internal` → /32 для fixture_site. Не задавати ні в dev `browserd`, ні на staging |
@@ -208,7 +210,7 @@ docker buildx use multiarch
 
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0 \
+  -t andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2 \
   --push \
   docker/browserd
 ```

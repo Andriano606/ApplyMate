@@ -5,6 +5,7 @@ import {
   DISCONNECT_GRACE_MS,
   NEVER_CONNECTED_GRACE_MS,
   UPSTREAM_PORT_OFFSET,
+  MIN_TTL_S,
 } from '../leases.mjs';
 
 const T0 = 1_000_000;
@@ -174,4 +175,26 @@ test('process exit of a launching lease is left to the launch path', () => {
   const lease = table.acquire('a', {}, T0);
   table.markProcessExit(lease.id);
   assert.deepEqual(table.reapable(T0), []);
+});
+
+test('a lease lives the ttl it asked for, clamped to [MIN_TTL_S, ttlSeconds]', () => {
+  const table = build({ maxBrowsers: 3, ttlSeconds: 1800 });
+  const asked = table.acquire('a', { ttlSeconds: 1260 }, T0);
+  const short = table.acquire('b', { ttlSeconds: 5 }, T0);
+  const long = table.acquire('c', { ttlSeconds: 7200 }, T0);
+  [asked, short, long].forEach((lease) => table.markReady(lease.id, T0));
+
+  assert.equal(asked.expiresAt, T0 + 1260 * 1000);
+  assert.equal(short.expiresAt, T0 + MIN_TTL_S * 1000);
+  assert.equal(long.expiresAt, T0 + 1800 * 1000);
+  assert.deepEqual(
+    table.expired(T0 + 1260 * 1000).map((lease) => lease.owner),
+    ['a', 'b'],
+  );
+});
+
+test('a lease without ttlSeconds lives the table ttl', () => {
+  const table = build({ ttlSeconds: 900 });
+  const lease = ready(table, 'a');
+  assert.equal(lease.expiresAt, T0 + 900 * 1000);
 });

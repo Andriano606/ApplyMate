@@ -40,6 +40,24 @@ RSpec.describe Apply::Operation::Stage::DetectPlatform do
     expect(I18n.t("apply.stage.#{described_class.stage}", locale: :en)).to eq('Detecting platform')
   end
 
+  # Owner decision 2026-10-09: every integration drives every platform; an unknown one goes to Generic + Navigator.
+  context 'with a GeminiScraping integration (browser-backed, no native JSON schema)' do
+    let(:careers) { 'https://careers.example.test/jobs/42' }
+    let(:entry_url) { careers }
+    let(:responses) { { careers => html('<title>Jobs</title>', careers) } }
+
+    before do
+      apply.ai_integration.update!(provider: 'gemini_scraping')
+      allow(ApplyMate::Client::Browser::Session).to receive(:open)
+    end
+
+    it 'is not halted on a plain generic match: the run goes on to the Generic Navigator' do
+      expect { run }.not_to raise_error
+      expect(ctx.platform).to be_a(Apply::Platform::Generic)
+      expect(apply.reload).to have_attributes(platform: 'generic', landing_url: careers)
+    end
+  end
+
   context 'with the Preply chain at the HTTP level (dou.ua -> preply.com?ashby_jid)' do
     it 'stays generic with Ashby as the probable platform and persists the detection' do
       run
@@ -157,6 +175,13 @@ RSpec.describe Apply::Operation::Stage::DetectPlatform do
       allow(Apply::Platform::Registry).to receive(:fingerprint).and_return('other')
 
       expect(described_class.input_digest(ctx)).not_to eq(changed)
+    end
+
+    it 'does not depend on the AI integration' do
+      digest = described_class.input_digest(ctx)
+      apply.ai_integration.update!(provider: 'gemini_scraping')
+
+      expect(described_class.input_digest(ctx)).to eq(digest)
     end
   end
 

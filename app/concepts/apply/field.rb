@@ -15,7 +15,8 @@ class Apply::Field < Data.define(
   :ordinal,       # position among fields with an equal signature, DOM order inside form_root
   :default_value, # prefilled value read in the CURRENT session; never sent to AI, never persisted for hidden
   :condition,     # { 'field' => id, 'equals' => 'Other' } | nil
-  :source         # one of SOURCES
+  :source,        # one of SOURCES
+  :page           # wizard page (2..) a follow-up field first appeared on (Engine::AnswerFollowups) | nil (page 1)
 )
   KINDS = %w[
     text email tel url number textarea rich_text select multiselect combobox autocomplete
@@ -56,6 +57,12 @@ class Apply::Field < Data.define(
 
   def fillable?
     kind != 'hidden'
+  end
+
+  # Discovered behind a wizard's Next button: absent from the page the form opens on, by design (ReconcileFields keeps
+  # it without a target; AnswerFields' digest leaves it out, so a follow-up never voids an approved review).
+  def later_page?
+    page.to_i > 1
   end
 
   def option_kind?

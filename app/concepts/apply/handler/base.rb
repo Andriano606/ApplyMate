@@ -45,20 +45,18 @@ class Apply::Handler::Base
       @current_scope = nil
     end
 
-    # The engine pipeline of design §10.1 (phase 3a stages). `detect_if` guards DetectPlatform; FetchSchema and the
-    # survey's ReachForm run under `detect_if` AND `ctx.platform_reachable?` (a known platform, or a generic match
-    # with a probable one that the landing page may confirm: the platform is not settled before them); `if` is AND-ed
-    # into DiscoverFields and every later step and scope (Handler::Dou: external AND platform_known?, so an
-    # unidentified platform falls through to its legacy path). The recipe-learning stage arrives in phase 6.
-    def engine!(detect_if: nil, if: nil)
+    # The engine pipeline of design §10.1. `if` (the handler's routing guard; Handler::Dou: an external apply) is put on
+    # every step and scope: DetectPlatform, FetchSchema, the :survey scope (ReachForm + DiscoverFields, while
+    # ctx.survey_needed?), AnswerFields, the CV, ReviewGate, AcquireHostSlot and the :submit scope. A platform no adapter
+    # knows stays `generic` and is reached by the Navigator inside ReachForm. The recipe-learning stage arrives in phase 6.
+    def engine!(if: nil)
       guard = binding.local_variable_get(:if)
       stages = Apply::Operation::Stage
-      reachable = all_of(detect_if, ->(ctx) { ctx.platform_reachable? })
-      add_step stages::DetectPlatform, if: detect_if
-      add_step stages::FetchSchema, if: reachable
-      session_scope(:survey, if: all_of(reachable, ->(ctx) { ctx.survey_needed? })) do
+      add_step stages::DetectPlatform, if: guard
+      add_step stages::FetchSchema, if: guard
+      session_scope(:survey, if: all_of(guard, ->(ctx) { ctx.survey_needed? })) do
         add_step stages::ReachForm
-        add_step stages::DiscoverFields, if: guard
+        add_step stages::DiscoverFields
       end
       add_step stages::AnswerFields, if: guard
       add_step Apply::Operation::Ai::GeneratePdfCv, if: guard, prompt_class: Apply::Ai::Prompt::GenerateCv,

@@ -25,6 +25,10 @@ class Apply::Operation::Engine::Run < ApplyMate::Operation::Base
     ApplyMate::Ai::ResponseSchema::Json::InvalidResponse => :invalid_ai_output,
     ActiveRecord::RecordInvalid => :invalid_record,
     ApplyMate::Client::Browser::PoolBusy => :capacity,
+    # The process-wide local Chrome slot (GeminiScraping, the Grover CV render) stayed taken for the caller's wait.
+    ApplyMate::Client::LocalChrome::Busy => :capacity,
+    # An AI call given less time than the client needs to start: the run is out of time, nothing is contended.
+    ApplyMate::Ai::Client::Base::DeadlineTooShort => :deadline,
     Apply::Operation::Engine::Throttled => :capacity,
     ApplyMate::Client::Browser::Crashed => :browser_crashed,
     ApplyMate::Client::Browser::DeadlineExceeded => :deadline,
@@ -94,13 +98,12 @@ class Apply::Operation::Engine::Run < ApplyMate::Operation::Base
     in_session(ctx, scope) { steps.each { |step| run_step(ctx, handler, step, skippable: false) } }
   end
 
-  # One browser lease for the whole scope; the submit scope types humanlike. close_scope! also runs when Session.open
-  # failed before yielding.
+  # One browser lease for the whole scope; the submit scope types humanlike. The scope deadline is the session's own
+  # (ctx.scope_deadline, cut to the lease's expiry). close_scope! also runs when Session.open failed before yielding.
   def in_session(ctx, scope)
-    deadline = ctx.scope_deadline
-    ApplyMate::Client::Browser::Session.open(deadline:, owner: ApplyMate::Client::Browser::Session.owner_for(ctx.apply),
+    ApplyMate::Client::Browser::Session.open(deadline: ctx.scope_deadline, owner: ApplyMate::Client::Browser::Session.owner_for(ctx.apply),
                                              humanize: scope == :submit, identity: ctx.apply.hashid) do |session|
-      ctx.open_scope!(scope, session, deadline)
+      ctx.open_scope!(scope, session, session.deadline)
       yield
     end
   ensure

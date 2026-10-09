@@ -7,12 +7,12 @@ RSpec.describe Apply::Job::Apply, type: :job do
     expect(described_class.new(42).queue_name).to eq('apply')
   end
 
-  it 'limits concurrency to one run per Apply for 45 minutes' do
+  it 'limits concurrency to one run per Apply for the longest possible run plus slack' do
     job = described_class.new(42)
 
     expect(job.concurrency_key).to eq('Apply::Job::Apply/apply:42')
     expect(job.concurrency_limit).to eq(1)
-    expect(job.concurrency_duration).to eq(45.minutes)
+    expect(job.concurrency_duration).to eq(Apply::Operation::Engine::StartContext.max_run_seconds.seconds + described_class::CONCURRENCY_SLACK)
   end
 
   it 'enqueues on the apply queue' do

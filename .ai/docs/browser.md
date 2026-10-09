@@ -18,8 +18,10 @@ ws proxy, `camoufox.mjs` the one launch options builder, `entrypoint.sh` firewal
 | smokescreen | commit `d533c7aa3eb3ffd2a3fe275dc3bb01dcd2dfa4ea`, built with `golang:1.26-bookworm` | `Dockerfile` ARG `SMOKESCREEN_COMMIT` |
 | Node | `node:22-trixie-slim` | `Dockerfile` |
 
-**Image tag (single source):** `andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0`, used by
-`docker-compose.yml`, CI and Kamal. Bump the Dockerfile ARGs, `package.json` + lockfile and the tag together.
+**Image tag (single source):** `andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2` (the triple plus the
+browserd revision, Dockerfile `ARG BROWSERD_REVISION`), used by `docker-compose.yml`, CI and Kamal. Bump the
+Dockerfile ARGs, `package.json` + lockfile and the tag together; ANY change under `docker/browserd/` (server.mjs,
+leases.mjs, entrypoint...) bumps `BROWSERD_REVISION` (see "Image publishing").
 
 **Why this triple is outside declared support.** It is parity with the Stealth Render Studio "Cloudflare" config
 that passes Cloudflare/Ashby in practice. `camoufox-js` 0.12.x caps the browser below beta.32 and skips
@@ -55,7 +57,7 @@ Read in `docker/browserd/server.mjs` (header) and `docker/browserd/entrypoint.sh
 | `BROWSERD_TOKEN` | **required** (≥ 16 chars) | Bearer token for every route except `GET /health` |
 | `MAX_BROWSERS` | **required**, `1..3` | Hard cap on concurrent browsers (= the 3 published ws ports). Staging = `APPLY_SLOTS` |
 | `PORT` | `9300` | Control API port |
-| `LEASE_TTL_S` | `600` (60..3600) | Hard lifetime of one lease |
+| `LEASE_TTL_S` | `1800` (60..3600) | MAXIMUM lifetime of one lease. Each `POST /leases` asks for its own `ttl_s` (the apply scope deadline + 60 s: about 9 min with an API AI, about 21 min with GeminiScraping), clamped to `[MIN_TTL_S = 60, LEASE_TTL_S]`; a lease without `ttl_s` lives `LEASE_TTL_S`. Must stay ≥ the longest scope (`Context#scope_deadline`, 20 min) + 60 s, or a slow-AI scope's deadline is cut to the lease (apply_engine.md "Latency-aware budgets") |
 | `HEADLESS` | `true` | `true` headless; `virtual` = headful under Xvfb `:99` started by the entrypoint; `false` = headful on `$DISPLAY` |
 | `BROWSERD_OS` | `windows` | Fingerprint OS (`windows`/`macos`/`linux`) |
 | `BROWSERD_LOCALE` | `uk-UA` | Browser locale |
@@ -72,7 +74,7 @@ otherwise, also for unknown routes). The header is not CORS-"simple", so page JS
 
 | Request | Responses |
 |---|---|
-| `POST /leases` `{"owner": "<host>:<app dir>:<env>:<pid>:<apply hashid>", "humanize": false, "identity": null}` (JSON ≤ 16 KB; `owner` required, 1..200 chars; `identity` optional string) | `201` `{id, ws_endpoint: "ws://<ADVERTISE_HOST>:<9301+slot>/<64 hex>", expires_at, playwright_version, browser_version, identity}`; `503` + `Retry-After: 5` + `{error: "pool_busy", leases, max}` when all slots are taken (or `shutting_down`); `500 {error: "launch_failed"}`; `400 invalid_json`, `413 body_too_large`, `422 owner_required / owner_invalid / identity_invalid / humanize_invalid` |
+| `POST /leases` `{"owner": "<host>:<app dir>:<env>:<pid>:<apply hashid>", "humanize": false, "identity": null, "ttl_s": <int, optional>}` (JSON ≤ 16 KB; `owner` required, 1..200 chars; `identity` optional string; `ttl_s` an integer ≥ 1, clamped to `[MIN_TTL_S = 60, LEASE_TTL_S]` (`leases.mjs`), absent = `LEASE_TTL_S`; Ruby's `AcquireLease` always sends it, see `Session.open`) | `201` `{id, ws_endpoint: "ws://<ADVERTISE_HOST>:<9301+slot>/<64 hex>", expires_at, playwright_version, browser_version, identity}` (`expires_at` reflects the granted, clamped TTL); `503` + `Retry-After: 5` + `{error: "pool_busy", leases, max}` when all slots are taken (or `shutting_down`); `500 {error: "launch_failed"}`; `400 invalid_json`, `413 body_too_large`, `422 owner_required / owner_invalid / identity_invalid / humanize_invalid / ttl_invalid` |
 | `DELETE /leases/:id` | `204` after the browser is gone (`close()`, `kill()` after 5 s, `SIGKILL` after 5 more); `404` unknown; `409` still launching |
 | `DELETE /leases?owner=<prefix>` | `200 {released: n}`: kills every active lease whose owner starts with the prefix (the apply worker calls this with its hostname on start). `400` without `owner` |
 | `GET /health` (no auth) | `200`/`503` `{ok, leases, max, playwright_core, camoufox_build, proxy_ok}`. `ok = proxy_ok && !shutting_down`; `proxy_ok` = TCP connect to the egress proxy |
@@ -101,7 +103,7 @@ which tears it down itself on any failure (including the client going away mid-l
 
 | Rule | Threshold |
 |---|---|
-| TTL | `now ≥ expires_at` (`LEASE_TTL_S` from readiness) |
+| TTL | `now ≥ expires_at` (the lease's own TTL, i.e. its clamped `ttl_s` or `LEASE_TTL_S`, counted from readiness) |
 | Never connected | no ws client within 60 s of readiness (`NEVER_CONNECTED_GRACE_MS`), so reaped within ~75 s |
 | Disconnected | connection count back to 0 for ≥ 30 s (`DISCONNECT_GRACE_MS`) |
 | Process exited | Firefox exit event (also released immediately from the `exit` handler) |
@@ -267,8 +269,9 @@ end
 `AcquireLease` → `Driver::Playwright.new(lease:, deadline:).start` → `yield session` → `ensure driver&.close`. `close`
 disposes the tracker, stops the Playwright connection (errors logged as `browser.driver_stop_failed`) and always calls
 `ReleaseLease`, so the lease is released when the block raises and when `start` fails after the lease was granted.
-`deadline` is a `Time` (the Runner's scope deadline, `SCOPE_DEADLINE` on `Apply::Operation::Engine::Context`, phase 2
-unit 4). `Session.owner_for(apply)` = `"<Browserd.owner_prefix><pid>:<apply hashid>"`.
+`deadline` is a `Time` (the Runner's scope deadline, `Context#scope_deadline`: `SCOPE_DEADLINE` 8 min plus the slow-AI
+allowance, 20 min with GeminiScraping). The lease asks for `ttl_s = ceil(deadline - now) + LEASE_MARGIN_S (60)`; the
+driver's deadline is `min(deadline, lease.expires_at - 60 s)`, so a browserd that grants less ends the scope cleanly. `Session.owner_for(apply)` = `"<Browserd.owner_prefix><pid>:<apply hashid>"`.
 
 `Driver#start`: `Playwright.connect_to_browser_server(ws_endpoint, browser_type: 'firefox')` (bounded by
 `CONNECT_TIMEOUT_S = 30`), `browser.new_context` **without options**, `new_page`, `NetTracker.new(page)`.
@@ -297,30 +300,37 @@ unit 4). `Session.owner_for(apply)` = `"<Browserd.owner_prefix><pid>:<apply hash
 | `screenshot(full_page: false, mask_fillable: false)` | — | PNG bytes; `mask_fillable` paints over `Driver::Playwright::MASK_SELECTOR` (`input:visible, textarea, select, [contenteditable], [role=combobox], [role=textbox]`) in the main frame and every child frame (first `MAX_FRAMES`) |
 | `cookies` | — | `"name=value; …"` of the context |
 | `current_url` | — | `page.url` |
+| `pages` | — | `[{ 'url' }]` of every page (tab) of the context, oldest first (`context.pages`); a tab a click opened (`target=_blank`, `window.open`) is appended. Browsers report a new tab 0.5–1.5 s after the click (measured on Camoufox: ~1.5 s for the first, ~0.5 s later), i.e. usually after `settle(:click)` returned: poll with `wait_until` |
+| `switch_to(index)` | — | `Driver#switch_to`: `context.pages.fetch(index)` (`IndexError` for an unknown index) → `bring_to_front` → its `domcontentloaded` (at most `ACTION_TIMEOUT_MS`, a slow page is switched to anyway) → the session's page. Every other method (frames, content, snapshots, screenshots, `current_url`, actions) follows it. **The NetTracker is per page**: the old one is disposed and a new one bound to the new page, with the `network_watch` patterns carried over; marks taken before the switch are void for `network_since` / `network_in_flight` (requests of the old page are gone). The caller settles the new page (`settle_content`) |
 | `settle(kind)` | — | `Operation::WaitQuiet` with profile `kind` → `{ quiet:, ms: }` |
 | `settle_content` | — | `Operation::WaitForContentSettle` → Boolean |
 | `network_mark` / `network_since(mark, bodies: false)` | — | `NetTracker#mark` / `#since` |
 | `network_in_flight(mark)` | — | `NetTracker#in_flight_since(mark)`: non-GET, non-ignored requests started at or after `mark` that have not finished or failed yet, however old |
 | `network_watch(pattern)` | — | `NetTracker#watch(pattern)`: capture response bodies of matching requests |
 
-Callers today: the legacy `Apply::Operation::Ai::FetchExternalForm` (`humanize: false`) and
-`Apply::Operation::SendApply::Browser` (`humanize: true`), see `.ai/docs/apply_handlers.md`, and the phase 3a engine
-(`.ai/docs/apply_engine.md`), each through a Runner session scope:
+Callers: the apply engine only (`.ai/docs/apply_engine.md`), each through a Runner session scope (`:survey` with
+`humanize: false`, `:submit` with `humanize: true`); `Apply::Operation::SmokeSurvey` opens one non-humanized lease
+the same way:
 
 | Engine caller | Session methods |
 | ------------- | --------------- |
 | `Engine::CollectRenderedEvidence`, `RunGates` / gates (`CookieConsent` clicks) | `snapshot_all`, `current_url`, `click` |
-| `Engine::ReachForm`, `Apply::Recipe::Op::Goto` / `Unwrap`, `Engine::WaitReady` | `goto`, `current_url`, `snapshot_all`, `frames`, `wait_until`, `ready?` |
+| `Engine::ReachForm`, `Engine::Observe`, `Engine::WaitReady` | `goto`, `current_url`, `snapshot_all`, `frames`, `wait_until`, `ready?` |
+| `Engine::Navigate` (the AI Navigator), `Engine::ExecuteAction`, `Engine::AdoptNewTab` | `snapshot_all(markers:, regions:)`, `current_url`, `pages`, `probe(:opens_tab)`, `goto` (an `navigate` action), `wait_until`; clicks / presses / scrolls go through the recipe ops below |
+| `Engine::RecoverField` | `snapshot_all(regions:)`; its click / press through the recipe ops |
+| `Engine::AwaitInput` (`Gate::EmailCode`) | `snapshot_all(markers:)`, `click`, `press`, `settle(:submit)`; the code is typed by the `Text` widget |
+| `Recipe::Interpret`, recipe ops (`apply/recipe/op/*`: `Goto`/`Unwrap`, `Click`, `Press`, `Scroll`, `SwitchTab`, `WaitFor`) | `pages`, `probe(:opens_tab)`, `goto`, `click`, `press`, `scroll_into_view`, `settle(:click / :key)`, `wait_until`, `switch_to`, `settle_content`, `ready?`, `current_url` |
 | `Engine::FormElements`, `Engine::BuildFieldInventory` | `snapshot_all(markers:, regions:)`, `probe(:read_value)` (default values) |
 | `Engine::GuardAction`, `Engine::SetFieldValue` | `snapshot_all`, `settle(kind)` |
 | Widgets (`apply/widget/*`) | `fill`, `type`, `press`, `click`, `select`, `set_checked`, `upload`, `present?`, `dom_mark`, `wait_for_listbox`, `probe(:read_value)`, `probe(:snapshot)` |
+| `Stage::FillFields` (wizard Next) | `click`, `settle(:click)`, `snapshot_all` |
 | `Stage::Submit` | `snapshot_all`, `trial_click`, `network_watch`, `network_mark`, `click`, `settle(:submit)` |
 | `Engine::VerifySubmit` / `CollectSubmitEvidence`, `Stage::Verify` | `wait_until`, `html(frame_path:)`, `current_url`, `frames`, `network_since(mark, bodies: true)`, `network_in_flight(mark)`, `probe(:read_value)`, `screenshot(full_page: true, mask_fillable: true)` |
 | `Engine::CaptureArtifact` | `screenshot(mask_fillable: true)`, `frames`, `html(frame_path:)` |
 
 Step specs use `FakeSession` (`.ai/docs/rspec.md`), whose method
-list and parameters `session_contract_spec.rb` keeps identical to this class. `pages` / `switch_to(index)` (design
-§9.1) arrive with the Navigator (phase 3b), their first caller.
+list and parameters `session_contract_spec.rb` keeps identical to this class (its `pages:` knob and `open_page(url)`
+script tabs).
 
 **`Snapshot`** (`ApplyMate::Client::Browser::Snapshot = Data.define(:frames, :elements, :evidence, :digest)`),
 built by `Operation::SnapshotAll`: one `Driver#evaluate_all_frames` call runs `snapshot.js` and `detect.js` on each
@@ -406,6 +416,7 @@ gives up at `max`. Polls every 50 ms. `max` is clamped to the time left before t
 ## NetTracker
 
 `NetTracker.new(page)` subscribes `page.on('request' | 'requestfinished' | 'requestfailed')` (every frame of the page).
+One tracker per page: requests of another tab are not seen, and `Session#switch_to` rebinds it (above).
 Events arrive on the gem's reader thread: state lives in `Concurrent::Map` (in flight, keyed by the request object),
 `Concurrent::Array` (records) and `Concurrent::AtomicReference` (last event); callbacks never call back into
 Playwright (a blocking call from the reader thread deadlocks it) and never raise (that would kill the dispatch loop).
@@ -416,23 +427,31 @@ Playwright (a blocking call from the reader thread deadlocks it) and never raise
 | `last_event_at` | monotonic ms of the last request start/finish/failure (`-Infinity` before any) |
 | `mark` / `since(mark)` | monotonic ms / records whose request started at or after `mark` |
 | `in_flight_since(mark)` | non-GET, non-`IGNORED_HOSTS` requests started at or after `mark` still in flight (no age cut-off: a slow submit POST is never "too old"); `VerifySubmit` refuses `:rejected` while it is > 0 |
-| `dispose` | unsubscribes (`Driver#close`) |
+| `watched` | the `watch` patterns (`Driver#switch_to` re-registers them on the next page's tracker) |
+| `dispose` | unsubscribes (`Driver#close`, `Driver#switch_to` for the page it leaves) |
 
-A record `{ url:, method:, status:, at:, frame_url:, body: }` is written when a **non-GET** request finishes (`status`
+A record `{ url:, method:, status:, at:, frame_url:, body:, body_error: }` is written when a **non-GET** request finishes (`status`
 from `request.existing_response`) or fails (`status: nil`), unless its host matches `IGNORED_HOSTS` (suffix match;
 `host/path` entries also match a path prefix): `google-analytics.com googletagmanager.com doubleclick.net recaptcha.net
 gstatic.com/recaptcha google.com/recaptcha hcaptcha.com challenges.cloudflare.com sentry.io segment.io hotjar.com
-facebook.net`. At most `MAX_RECORDS = 500`, oldest dropped. Request bodies are never stored (they carry the
+facebook.net datadoghq.com datadoghq.eu browser-intake-datadoghq.com browser-intake-datadoghq.eu
+browser-intake-us3-datadoghq.com browser-intake-us5-datadoghq.com browser-intake-ap1-datadoghq.com` (Datadog RUM beacons,
+which Ashby sends around the submit, go to `browser-intake-<site>` hosts that are not subdomains of `datadoghq.*`).
+At most `MAX_RECORDS = 500`, oldest dropped. Request bodies are never stored (they carry the
 applicant's answers).
 
-**Response bodies** (`watch(pattern)`, a `Regexp`; the platform's `success_evidence[:submit_request]` URL): for a
-**finished** non-GET request whose URL matches a watched pattern, the reader thread only *posts* the read to a
-per-tracker `Concurrent::ThreadPoolExecutor` (`max_threads: 1`, `max_queue: BODY_QUEUE = 8`, `fallback_policy: :abort`;
-a rejected post records `body: nil`, never blocks or raises). The read (`request.response.body`, a Playwright call)
+**Response bodies** (`watch(pattern)`, a `Regexp`; the platform's `success_evidence[:submit_request]` URL, which names
+the submit operation itself — Ashby's `submit_url` matches only `?op=ApiSubmit…`, so autosave / upload / analytics
+calls never take a read slot): for a **finished** non-GET request whose URL matches a watched pattern, the reader
+thread only *posts* the read to a per-tracker `Concurrent::ThreadPoolExecutor` (`max_threads: 1`,
+`max_queue: BODY_QUEUE = 8`, `fallback_policy: :abort`; a rejected post records the `DROPPED` handle, never blocks or
+raises). The read (`request.response.body`, a Playwright call)
 runs on that thread eagerly, while the browser still holds the response, and keeps the first `BODY_CAP = 64.kilobytes`
 (UTF-8, scrubbed). `since(mark, bodies: true)` waits on the **caller** thread for those reads, `BODY_WAIT_MS = 5_000` in
-total, and returns the strings (`nil` when the read failed, was dropped or is still running); with `bodies: false`
-(default) `body` is always `nil`. Unwatched, GET and failed requests are never read. `dispose` shuts the executor
+total, and returns the strings. When a watched request with a status has no body, `body_error` says why: `dropped`
+(queue full / tracker disposed), `unreadable` (the read raised or returned nothing), `timeout` (not done within
+`BODY_WAIT_MS`); `VerifySubmit` reports it in `submit_op` (the body is "never read", not "not a success"). With
+`bodies: false` (default), and for unwatched requests, `body` and `body_error` are `nil`. Unwatched, GET and failed requests are never read. `dispose` shuts the executor
 down (at most one thread per lease, so ≤ `APPLY_SLOTS` threads per worker).
 
 All monotonic time comes from `ApplyMate::Client::Browser::Clock` (`now_ms`, `sleep_ms`, `remaining_ms(deadline)`);
@@ -455,8 +474,9 @@ located element.
 | `detect` | `(root, { markers })` | `{ url, name (window.name), title, script_srcs, iframe_srcs, iframes: [{ id, name, src }], dom_markers: { selector => count } }` (an invalid marker counts 0) |
 | `listbox` | `(root, { since })` | `{ containers: { key => visible option count }, options: [{ label, value, selected, disabled, listbox_id, strategies }] }` over visible `[role=option]` / `.el-select-dropdown__item`; container = closest `[role=listbox]`, `.el-select-dropdown`, `ul` (key `#id` or css path). With `since` (an earlier `containers`): only options whose container was absent or whose index in it ≥ the old count |
 | `readiness` | `(root, { min, keys, attr, ratio, keyPrefix })` | `{ fields, ready }`. Default: visible fillable controls under root, `ready = fields >= min`. Keys mode (`keys` non-empty): distinct keys found in `attr` of elements under root, any visibility, with `keyPrefix` (a regex source from the platform, e.g. `Apply::Platform::Ashby::INSTANCE_PREFIX_SOURCE`; none when nil) stripped from the start, case-insensitive; `ready = found >= ceil(keys.length × ratio)`. The probe hard-codes no platform rule. (`snapshot.js` / `listbox.js` keep their own UUID-prefix test for a different reason: such ids change per render on any site, so they are never used as locator strategies.) |
-| `read_value` | `(el)` | `{ tag, value, checked, files, text, displayed, invalid, error_text, pressed }`: `displayed` = selected option text / contenteditable text / combobox chip (leaf `[class*=chip]`, `singleValue`, `multiValue`, `single-value`, `multi-value__label` within ≤ 4 ancestors, stopping at the field root) / file names / value; `invalid` = `aria-invalid` or `:invalid`; `error_text` = `[role=alert]`, `[aria-live]` in the field root + the `aria-describedby` targets; `pressed` = `aria-pressed` / `aria-checked` as written |
+| `read_value` | `(el)` | `{ tag, type, value, checked, files, text, displayed, invalid, error_text, pressed, min, max, step, aria_valuenow }`: `displayed` = selected option text / contenteditable text / combobox chip (leaf `[class*=chip]`, `singleValue`, `multiValue`, `single-value`, `multi-value__label` within ≤ 4 ancestors, stopping at the field root) / file names / for a `button` or `[role=button]` (a `chooser` dropzone) the text of its field root (`[data-field-path]`, `fieldset`, `[role=group]`), else of its parent, so the chosen file name next to it counts / value; `type` = the `type` attribute (lower-case, null when absent; `Widget::DateInput` picks native vs masked by it); `invalid` = `aria-invalid` or `:invalid`; `error_text` = `[role=alert]`, `[aria-live]` in the field root + the `aria-describedby` targets; `pressed` = `aria-pressed` / `aria-checked` as written; `min` / `max` = the attribute, else `aria-valuemin` / `aria-valuemax`; `step`, `aria_valuenow` as written (`Widget::Range`) |
 | `outer_html` | `(el)` | `el.outerHTML` (`Session#html(frame_path:)`) |
+| `opens_tab` | `(el)` | `true` when the element sits in an `a[href]` / `area[href]` / `form` whose `target` (else the document's `<base target>`) names another browsing context (`_blank` or a window name, not `_self` / `_parent` / `_top`). `Recipe::Interpret` asks it before a click / press to know whether to wait for a new tab; `window.open` from a script is invisible to it |
 
 **`snapshot.js` elements** (at most 800 per frame, `truncated: true` beyond): native `input` (not hidden; every file
 input, even hidden), `textarea`, `select`, `button`, `a[href]`, `summary`, explicit roles `button link tab combobox
@@ -485,11 +505,15 @@ walked. Per element:
   Selects carry `options: [{ label, value, selected, disabled }]`; comboboxes `chip` (current chip text).
 - flags `password` (`type=password`, `autocomplete` current/new-password), `search_like` (`type=search`, under
   `[role=search]`, `header`, `footer`, a `nav` that is not `[role=tablist]`), `submit_like` (submit type, or "submit" in name/class, never inside a
-  field root, never search-like, only with a fillable control nearby), `href` for links.
+  field root, never search-like, only with a fillable control nearby), `chooser` (a self-visible, non-submit `button` /
+  `[role=button]` whose name matches `UPLOAD_LEXICON` = `/upload|attach|resume|\bcv\b|browse|завантаж|прикріп|резюме|загруз/i`
+  and whose field root (else its grandparent, else its parent) holds no `input[type=file]`: a dropzone that creates the
+  file input on click; `BuildFieldInventory` makes it a `file` field with widget `dropzone`), `href` for links.
 - `strategies`: `{ attr: { id } }` unless the id is instance-prefixed (`<uuid>_…`) or a React `:r…:` id;
   `{ attr: { name[, value] } }` (radios/checkboxes with value) unless instance-prefixed; `{ role, name }`;
   `{ label }`; always last `{ css: <nth-of-type path> }` (shadow trees joined by a descendant space). `attrs` keeps
-  `id name type autocomplete placeholder accept multiple maxlength value data-field-path` raw.
+  `id name type autocomplete placeholder accept multiple maxlength aria-autocomplete aria-haspopup value data-field-path`
+  raw (`aria-autocomplete` / `aria-haspopup` tell a typeahead from a select-like combobox).
 
 Frame-level: `outline` (visible `h1`–`h3`, `tabs A* | B` with `*` = selected, visible dialogs; ≤ 40), `alerts`
 (visible `[role=alert]`/`[aria-live=assertive]`, ≤ 10), `captcha` (`recaptcha`, `recaptcha_invisible`,
@@ -523,8 +547,8 @@ Any other `Playwright::Error` (navigation failure, an action timing out on a pre
 
 ## Dev / CI / staging wiring
 
-The image tag is the pinned triple `<CAMOUFOX_VERSION>-<CAMOUFOX_RELEASE>-pw<playwright-core>`, currently
-`156.0.1-beta.36-pw1.63.0`. It is written in the Dockerfile ARGs, `package.json`/`package-lock.json`,
+The image tag is the pinned triple `<CAMOUFOX_VERSION>-<CAMOUFOX_RELEASE>-pw<playwright-core>` plus
+`-<BROWSERD_REVISION>`, currently `156.0.1-beta.36-pw1.63.0-r2`. It is written in the Dockerfile ARGs, `package.json`/`package-lock.json`,
 `docker-compose.yml`, `config/deploy.staging.yml` and (as `playwright-ruby-client (1.63.0)`) `Gemfile.lock`.
 `spec/config/browserd_image_tag_spec.rb` fails when any one of them drifts, and when the staging `MAX_BROWSERS` differs
 from the apply worker's `APPLY_SLOTS`. Bump all of them in one commit.
@@ -577,16 +601,35 @@ role's `APPLY_SLOTS` (Solid Queue threads) and the accessory's `MAX_BROWSERS`.
 
 | What | Value |
 | --- | --- |
-| Accessory image | `andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0` (pulled; the owner pushes it) |
+| Accessory image | `andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2` (pulled; the owner pushes it) |
 | Accessory options | `network-alias: browserd`, `init`, `memory: 6g`, `memory-swap: 6g`, `cpus: '3'`, `pids-limit: 2048`, `shm-size: 1g`, `tmpfs: /tmp:rw,size=1g`, `cap-add: NET_ADMIN`, `restart: unless-stopped` |
 | Accessory ports | none published: control API and ws ports are reachable only on the Kamal network |
-| Accessory env | `MAX_BROWSERS: apply_slots (3)`, `LEASE_TTL_S: 600`, `PORT: 9300`, `HEADLESS: true`, `BROWSERD_OS: windows`, `BROWSERD_ADVERTISE_HOST: browserd`, secret `BROWSERD_TOKEN`; **no** `EGRESS_ALLOW_RANGES` |
+| Accessory env | `MAX_BROWSERS: apply_slots (3)`, `LEASE_TTL_S: 1800` (the maximum; each lease asks for its own `ttl_s`), `PORT: 9300`, `HEADLESS: true`, `BROWSERD_OS: windows`, `BROWSERD_ADVERTISE_HOST: browserd`, secret `BROWSERD_TOKEN`; **no** `EGRESS_ALLOW_RANGES` |
 | `apply_worker` role | `APPLY_SLOTS: apply_slots (3)`, `BROWSERD_URL: http://browserd:9300`, secret `BROWSERD_TOKEN`, `memory: 3g` |
 | `apply_worker` stop window | role key `stop_timeout: 45` |
 | Other roles | no `BROWSERD_URL` (only the apply worker leases browsers) |
 
 Sizing (design §18): Raspberry Pi 5, 16 GB → `APPLY_SLOTS = 3`; the 4 CPU cores are the limit, not RAM. browserd gets
 6 GB without swap and 3 cores; the apply worker 3 GB. browserd itself refuses `MAX_BROWSERS > 3`.
+
+Resource model of the apply worker: `APPLY_SLOTS` Camoufox leases in browserd (6 GB, 3 cores) plus AT MOST ONE local
+Chrome in the apply worker process. Two things launch one there, and both run under the same process-wide slot
+`ApplyMate::Client::LocalChrome::SLOT` (`Concurrent::Semaphore(1)`): GeminiScraping (a browser-backed AI client, may
+be asked inside a lease) and the Grover PDF render of `Apply::Ai::ResponseSchema::GenerateCv` (every apply's CV step
+and `VacancyCv::Job::Create`; all AI/Grover jobs run on `:apply`, i.e. in this one process). Playwright clients are
+websocket connections to browserd (`connect_to_browser_server`), not local browsers.
+
+Fit check of the `apply_worker` container (`memory: 3g`, no swap), ESTIMATES (not measured on the Pi): Rails with
+`APPLY_SLOTS = 3` job threads about 0.5–0.7 GB, plus the one local Chrome: GeminiScraping on gemini.google.com
+about 0.6–1 GB, a Grover CV render about 0.2–0.4 GB; peak ≈ 1.7 GB, ≥ 1.3 GB headroom. Without the shared slot the
+worst case was one GeminiScraping Chrome + two Grover Chromiums (≈ 2.5 GB with Rails), close enough to 3 GB for an OOM
+SIGKILL (leaked leases until the boot sweep, every in-flight run reaped). Host: browserd 6 GB + apply worker 3 GB are
+hard caps; the remaining ≈ 7 GB of the 16 GB hold web, the general worker, Postgres, Elasticsearch (256 MB heap),
+MinIO, Loki/Promtail/Grafana and the OS. Measure `docker stats` peaks after the first slow-AI applies and revisit
+the 3 GB if Rails alone exceeds 1 GB. See apply_engine.md "Latency-aware budgets". A lease asks for `ttl_s = scope deadline - now + 60 s`
+(`Session.open`, clamped by browserd to `60..LEASE_TTL_S`); the scope's deadline is capped at `expires_at - 60 s`, so a
+short server maximum ends a scope cleanly. Raise `LEASE_TTL_S` (max 3600) when the slow-AI allowance needs a longer
+scope.
 
 `pids-limit` counts **threads** (cgroup `pids`), not processes. Measured 2026-10-07 on `browserd-test` (amd64) with
 3 concurrent leases on iframe-heavy pages (reCAPTCHA demo, YouTube, Ashby): `pids.peak` = 564 (~40 idle: node,
@@ -609,7 +652,12 @@ like the MinIO secrets. Generate it with `openssl rand -hex 32`. Rotation: chang
 `bin/kamal deploy -d staging --roles=apply_worker` (until the redeploy, `POST /leases` answers 401 and `AcquireLease`
 raises `Crashed`).
 
-**Image publishing (owner only).** CI never pushes. After bumping the triple, the owner builds and pushes the
+**Image publishing (owner only).** CI never pushes, and CI is the only place that builds the current
+`docker/browserd/` code (`apply_mate_browserd:ci`); dev compose and the staging accessory run whatever image the pinned
+tag names. So ANY change under `docker/browserd/` (not only a version bump) bumps the tag: `ARG BROWSERD_REVISION` in
+the Dockerfile (`r2` = per-lease `ttl_s`) together with `docker-compose.yml`, `config/deploy.staging.yml` and README
+(`spec/config/browserd_image_tag_spec.rb` checks they agree). An unchanged tag is never re-pulled, and the old server
+silently ignores fields it does not know (an `r1` server ignores `ttl_s`: every lease lives `LEASE_TTL_S`). After bumping, the owner builds and pushes the
 multi-arch image (`docker buildx build --platform linux/amd64,linux/arm64 -t
 andriano606/apply_mate_browserd:<triple> --push docker/browserd`, README "browserd"), then reboots the accessory and
 redeploys `apply_worker`. Pushing must happen before the deploy, or the accessory boot fails to pull.

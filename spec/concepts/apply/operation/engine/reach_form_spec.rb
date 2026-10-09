@@ -16,7 +16,13 @@ RSpec.describe Apply::Operation::Engine::ReachForm do
     let(:recipe) { nil }
     let(:missing) { [] }
     let(:current) { 'about:blank' }
-    let(:session) { FakeSession.new(html: '', final_url: current, missing:) }
+    let(:session) { FakeSession.new(html: '', final_url: current, missing:, snapshot: form_page) }
+    # The page a stored WaitFor('#form') checks with R2: name, email, phone inside the root.
+    let(:form_page) do
+      build_snapshot(frames: [ { url: 'https://acme.example/jobs/1' } ], elements: [ 'Full name', 'Email', 'Phone' ].map { |name|
+        snapshot_element(name:, regions: [ '#form' ])
+      })
+    end
     let(:platform_class) do
       canonical_url = canonical
       recipe_ops = recipe
@@ -43,7 +49,7 @@ RSpec.describe Apply::Operation::Engine::ReachForm do
       expect(session.calls_of(:ready?).first).to eq([ ApplyMate::Client::Browser::Target.css('#form'), { timeout: 0, min_fields: 3 } ])
       expect(ctx.form_root).to eq(ApplyMate::Client::Browser::Target.css('#form'))
       expect(ctx.scratch.canonical_unwrapped).to eq([ 'spec_form' ])
-      expect(ctx.scratch.trace.pluck('event')).to eq(%w[navigated form_ready])
+      expect(ctx.scratch.trace.pluck('event')).to eq(%w[recipe_op form_ready])
     end
 
     it 'clamps the readiness wait to the time left' do
@@ -108,6 +114,74 @@ RSpec.describe Apply::Operation::Engine::ReachForm do
       end
     end
 
+    context 'when the adapter recipe clicks a target that is gone (drift)' do
+      let(:canonical) { nil }
+      let(:current) { 'https://acme.example/jobs/1' }
+      let(:recipe) { [ { 'op' => 'click', 'target' => ApplyMate::Client::Browser::Target.css('a.apply').to_h } ] }
+      let(:missing) { [ 'a.apply' ] }
+
+      it 'traces the drift, counts the path as not ready and lets the Navigator heal from the drifted op' do
+        navigator = []
+        allow(Apply::Operation::Engine::Navigate).to receive(:call) do |ctx:, heal_hint:|
+          navigator << heal_hint
+          raise Apply::Operation::Engine::Halt.new(:no_application_path, detail: 'gave up')
+        end
+
+        expect { reach! }.to raise_error(Apply::Operation::Engine::Halt, /no_application_path/)
+        expect(ctx.scratch.trace.find { |entry| entry['event'] == 'recipe_drift' }).to include('op' => recipe.first)
+        expect(navigator.sole.to_h).to eq(recipe.first)
+        expect(session.calls_of(:wait_until)).to be_empty
+      end
+    end
+
+    describe 'replaying a stored navigation (navigation:)' do
+      let(:current) { 'https://acme.example/jobs/1' }
+      let(:tab) { 'https://acme.example/jobs/1/apply' }
+      let(:click) { { 'op' => 'click', 'target' => ApplyMate::Client::Browser::Target.css('a.apply').to_h } }
+      let(:wait_for) { { 'op' => 'wait_for', 'root' => '#form', 'frame_path' => [], 'min_fields' => 3 } }
+      let(:stored) { [ { 'op' => 'goto', 'url_template' => '{entry_url}' }, click, wait_for ] }
+
+      def replay!
+        described_class.call(ctx:, navigation: stored).model
+      end
+
+      it 'replays it through Interpret and stops at its WaitFor (no canonical unwrap, no second readiness wait)' do
+        expect(replay!).to eq(stored)
+        expect(session.calls_of(:goto)).to eq([ [ ctx.entry_url ] ])
+        expect(session.calls_of(:click).map(&:first)).to eq([ ApplyMate::Client::Browser::Target.css('a.apply') ])
+        expect(session.calls_of(:ready?)).to eq([ [ ApplyMate::Client::Browser::Target.css('#form'), { timeout: 30, min_fields: 3 } ] ])
+        expect(ctx.form_root).to eq(ApplyMate::Client::Browser::Target.css('#form'))
+      end
+
+      it 'returns the switch_tab a click inserted' do
+        session.on(:click) { session.open_page(tab) }
+
+        expect(replay!).to eq([ stored[0], click, { 'op' => 'switch_tab', 'index' => 1 }, wait_for ])
+        expect(ctx.form_url).to eq(tab)
+      end
+
+      context 'without a WaitFor (a 3a navigation)' do
+        let(:stored) { [ unwrap ] }
+
+        it 'waits for the platform readiness after it' do
+          expect(replay!).to eq([ unwrap ])
+          expect(session.calls_of(:ready?).first).to eq([ ApplyMate::Client::Browser::Target.css('#form'), { timeout: 0, min_fields: 3 } ])
+          expect(ctx.scratch.canonical_unwrapped).to eq([ 'spec_form' ])
+        end
+      end
+
+      context 'when the stored click target is gone' do
+        let(:missing) { [ 'a.apply' ] }
+
+        it 'traces recipe_drift and falls back to the canonical unwrap' do
+          expect(replay!).to eq([ unwrap ])
+          expect(session.calls_of(:goto)).to eq([ [ ctx.entry_url ], [ canonical ] ])
+          expect(ctx.scratch.trace.pluck('event')).to include('recipe_drift')
+          expect(ctx.form_root).to eq(ApplyMate::Client::Browser::Target.css('#form'))
+        end
+      end
+    end
+
     it 'stops on a gate after the navigation (Google Forms)' do
       snapshot = FakeSession::EMPTY_SNAPSHOT.with(evidence: FakeSession::EMPTY_SNAPSHOT.evidence.merge(
         frame_urls: [ 'https://docs.google.com/forms/d/e/1/viewform' ]
@@ -136,22 +210,75 @@ RSpec.describe Apply::Operation::Engine::ReachForm do
       ctx.open_scope!(:survey, session, 5.minutes.from_now)
     end
 
-    it 'opens the final URL of the redirect walk and redetects there within LANDING_TIMEOUT, then gives up (no Navigator)' do
+    # The Navigator's part (its own spec covers the loop): a click, then the R2-accepted root.
+    let(:navigator_ops) do
+      [ { 'op' => 'click', 'target' => ApplyMate::Client::Browser::Target.css('a.apply').to_h },
+        { 'op' => 'wait_for', 'root' => 'form', 'frame_path' => [], 'min_fields' => 3 } ]
+    end
+
+    def stub_navigator
+      allow(Apply::Operation::Engine::Navigate).to receive(:call) do |ctx:, heal_hint:|
+        ctx.form_root = ApplyMate::Client::Browser::Target.css('form')
+        ctx.form_url = careers
+        instance_double(ApplyMate::Operation::Result, model: navigator_ops)
+      end
+    end
+
+    it 'opens the final URL of the redirect walk, waits IDENTIFY_TIMEOUT there (nothing probable), then hands over to the Navigator' do
+      stub_navigator
+
+      expect(reach!).to eq([ { 'op' => 'goto', 'url_template' => '{landing_url}' }, *navigator_ops ])
+      expect(session.calls_of(:goto)).to eq([ [ careers ] ])
+      expect(session.calls_of(:wait_until).sole.sole[:timeout]).to eq(described_class::IDENTIFY_TIMEOUT)
+      expect(session.calls_of(:ready?)).to be_empty # Generic is ai_only: no readiness poll claims the page
+      expect(ctx.scratch.trace.find { |entry| entry['event'] == 'landed' }).to include('identified' => false)
+      expect(Apply::Operation::Engine::Navigate).to have_received(:call).with(ctx:, heal_hint: nil)
+    end
+
+    it 'waits LANDING_TIMEOUT (clamped to the time left) when the HTTP level found a probable platform' do
+      stub_navigator
+      probable = Apply::Operation::Engine::Detect::Match.new(key: 'ashby', confidence: 0.5, captures: {}, frame_path: nil,
+                                                             from_alias: false, probable: nil)
+      ctx.adopt_match!(Apply::Operation::Engine::Detect::Match.generic(probable:))
       ctx.scratch.scope_deadline = 7.seconds.from_now
 
-      expect(reach!).to be_nil
-      expect(session.calls_of(:goto)).to eq([ [ careers ] ])
-      expect(session.calls_of(:wait_until).sole.sole[:timeout]).to be <= 7
-      expect(session.calls_of(:ready?)).to be_empty
-      expect(ctx.scratch.trace.find { |entry| entry['event'] == 'landed' }).to include('identified' => false)
+      reach!
+
+      expect(session.calls_of(:wait_until).sole.sole[:timeout]).to be_between(6, 7)
     end
 
     it 'does not land again on a session that already shows a page' do
+      stub_navigator
       session.goto(careers)
 
-      expect(reach!).to be_nil
+      expect(reach!).to eq(navigator_ops)
       expect(session.calls_of(:goto)).to eq([ [ careers ] ])
       expect(session.calls_of(:wait_until)).to be_empty
+    end
+
+    it 'halts not_a_form without the Navigator when the lease stays blank (nothing to look at)' do
+      allow(session).to receive(:current_url).and_return('about:blank')
+      allow(Apply::Operation::Engine::Navigate).to receive(:call)
+
+      expect { reach! }.to raise_error(Apply::Operation::Engine::Halt, /not_a_form/)
+      expect(Apply::Operation::Engine::Navigate).not_to have_received(:call)
+    end
+
+    context 'when the Navigator hands over to a platform it identified (no form root yet)' do
+      it "runs that adapter's paths once more" do
+        allow(Apply::Operation::Engine::Navigate).to receive(:call) do |ctx:, heal_hint:|
+          ctx.scratch.match = Apply::Operation::Engine::Detect::Match.new(key: 'spec_form', confidence: 0.9, captures: {},
+                                                                          frame_path: nil, from_alias: false, probable: nil)
+          ctx.scratch.platform = Class.new(Apply::Platform::Base) {
+            define_singleton_method(:key) { 'spec_form' }
+            define_method(:form_root_selector) { '#form' }
+          }.new(ctx:, match: ctx.match)
+          instance_double(ApplyMate::Operation::Result, model: navigator_ops.first(1))
+        end
+
+        expect(reach!).to eq([ { 'op' => 'goto', 'url_template' => '{landing_url}' }, navigator_ops.first ])
+        expect(ctx.form_root).to eq(ApplyMate::Client::Browser::Target.css('#form'))
+      end
     end
 
     context 'when the rendered page carries the Ashby embed' do
@@ -201,8 +328,11 @@ RSpec.describe Apply::Operation::Engine::ReachForm do
       end
     end
 
-    it 'halts not_a_form when the schema keys never appear' do
+    it 'halts not_a_form when the schema keys never appear (the Navigator gives up too)' do
       stub_const("#{described_class}::READY_TIMEOUT", 2)
+      stub_request(:post, %r{generativelanguage\.googleapis\.com.*generateContent}).to_return(gemini_json_response(
+        { status: 'give_up', reason: 'no form', actions: [], form: nil, give_up_code: 'not_a_form' }.to_json
+      ))
       in_fixture_scope(ctx) do |session|
         ctx.scratch.canonical_unwrapped << 'ashby'
         session.goto(FixtureSite.url('/form.html'))

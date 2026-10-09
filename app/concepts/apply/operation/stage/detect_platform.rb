@@ -5,7 +5,9 @@
 #   -> RunGates(:http_resolved) (Google Forms, messengers, sign-in walls, DataDome, private hops)
 #   -> Context#redetect! (Detect over the evidence; adopts the adapter, Generic below the threshold)
 #   -> CheckApplyKey (Halt(:already_applied) for a confirmed-less duplicate)
-#   -> persist platform, platform_match, apply_key, entry_url, landing_url (the walk's final URL).
+#   -> persist platform, platform_match, apply_key, entry_url, landing_url (the walk's final URL)
+# Every integration may drive any platform: an unknown one goes to Platform::Generic and the Navigator with whatever AI
+# the user chose (owner decision 2026-10-09; see .ai/docs/apply_engine.md "AI budget").
 # Skipped on a later attempt while the entry URL and Registry.fingerprint are unchanged (restore re-adopts the match
 # and the evidence); a new adapter or signal makes it run again.
 class Apply::Operation::Stage::DetectPlatform < Apply::Operation::Stage::Base

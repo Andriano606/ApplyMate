@@ -160,8 +160,8 @@ accessories:
 
   # Camoufox lease daemon (.ai/docs/browser.md). Only apply_worker talks to it, over the Kamal
   # network alias `browserd`; no `publish`, so the control API and ws ports never leave the host's
-  # Docker network. Tag = pinned triple <camoufox version>-<release>-pw<playwright-core>; keep it in
-  # sync with docker/browserd (spec/config/browserd_image_tag_spec.rb). The owner pushes the
+  # Docker network. Tag = pinned triple <camoufox version>-<release>-pw<playwright-core> plus
+  # -<BROWSERD_REVISION> (bumped on any docker/browserd change); keep it in sync with docker/browserd (spec/config/browserd_image_tag_spec.rb). The owner pushes the
   # multi-arch image by hand (README "browserd"); Kamal only pulls it.
   # Sizing (design §18, Pi 5 16 GB): 6g RAM without swap and 3 of the 4 cores for apply_slots
   # browsers; the cores, not RAM, are the limit. pids-limit counts THREADS: 3 leases on
@@ -169,7 +169,7 @@ accessories:
   # (measured 2026-10-07, ~40 idle + ~175 per Camoufox); 2048 leaves ~3.5x headroom and still
   # stops a runaway fork loop.
   browserd:
-    image: andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0
+    image: andriano606/apply_mate_browserd:156.0.1-beta.36-pw1.63.0-r2
     host: 192.168.50.155
     options:
       network-alias: browserd
@@ -185,7 +185,9 @@ accessories:
     env:
       clear:
         MAX_BROWSERS: '<%= apply_slots %>'
-        LEASE_TTL_S: '600'
+        # Longest lease (s). Each POST /leases asks for its scope deadline + 60 s (8 min scopes; up to 20 min with
+        # a slow AI integration such as GeminiScraping, .ai/docs/apply_engine.md "Resource model").
+        LEASE_TTL_S: '1800'
         PORT: '9300'
         HEADLESS: 'true'
         BROWSERD_OS: 'windows'

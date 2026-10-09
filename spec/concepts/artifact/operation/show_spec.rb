@@ -106,6 +106,18 @@ RSpec.describe Artifact::Operation::Show, type: :operation do
       expect(disk_token(model.url).dig('_rails', 'data', 'key')).to eq(step.ordered_artifacts.second.blob.key)
     end
 
+    it 'serves a page snapshot (HTML) as a download even when inline is asked for' do
+      expect(disk_token(model.url).dig('_rails', 'data', 'disposition')).to start_with('attachment')
+    end
+
+    context 'with the screenshot' do
+      let(:name) { '1' }
+
+      it 'serves it inline' do
+        expect(disk_token(model.url).dig('_rails', 'data', 'disposition')).to start_with('inline')
+      end
+    end
+
     %w[0 3 -1 abc].each do |position|
       context "with position #{position.inspect}" do
         let(:name) { position }

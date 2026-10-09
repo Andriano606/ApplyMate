@@ -37,6 +37,10 @@ class ApplyPolicy < ApplicationPolicy
     owner?
   end
 
+  def provide_input?
+    owner?
+  end
+
   class Scope < ApplicationPolicy::Scope
     def resolve
       scope.where(user:)

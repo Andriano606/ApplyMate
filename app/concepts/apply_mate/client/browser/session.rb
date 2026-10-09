@@ -11,11 +11,21 @@
 # fallback. Elements are addressed by Target and resolved by Operation::Locate with the visibility mode noted per
 # method. Actions do not settle implicitly: callers call #settle with the matching profile.
 class ApplyMate::Client::Browser::Session
+  # Seconds between the session's deadline and the lease's expiry: the client gives up (DeadlineExceeded) and releases
+  # the lease before browserd's TTL reaper kills the browser under it.
+  LEASE_MARGIN_S = 60
+
   # Acquires a lease (PoolBusy after AcquireLease::BUSY_ATTEMPTS busy answers), connects, yields, and always
   # releases the lease: the ensure runs when the block raises and when Driver#start fails after the lease was granted.
+  # The lease TTL is sized from `deadline` (+ LEASE_MARGIN_S): a scope sized for a slow AI gets a longer lease. browserd
+  # clamps the TTL to its LEASE_TTL_S maximum; the session's own deadline (#deadline) is then cut to the lease's
+  # expires_at - LEASE_MARGIN_S, so a short server maximum ends the scope cleanly instead of killing it mid-step.
   def self.open(deadline:, owner:, humanize: false, identity: nil)
-    lease = ApplyMate::Client::Browser::Operation::AcquireLease.call(owner:, humanize:, identity:).model
-    driver = ApplyMate::Client::Browser::Driver::Playwright.new(lease:, deadline:)
+    ttl_s = (deadline - Time.current).ceil + LEASE_MARGIN_S
+    lease = ApplyMate::Client::Browser::Operation::AcquireLease.call(owner:, humanize:, identity:, ttl_s:).model
+    driver = ApplyMate::Client::Browser::Driver::Playwright.new(
+      lease:, deadline: [ deadline, lease.expires_at - LEASE_MARGIN_S ].min
+    )
     driver.start
     yield new(driver)
   ensure
@@ -29,6 +39,12 @@ class ApplyMate::Client::Browser::Session
 
   def initialize(driver)
     @driver = driver
+  end
+
+  # The Time this session gives up by (Session.open's deadline, cut to the lease's expiry): what the caller publishes
+  # as its scope deadline (Context#open_scope!).
+  def deadline
+    @driver.deadline
   end
 
   # PublicAddressGuard -> navigate -> Cloudflare wait -> network idle. Raises ApplyMate::Net::UnsafeUrlError
@@ -144,6 +160,19 @@ class ApplyMate::Client::Browser::Session
 
   def current_url
     @driver.current_url
+  end
+
+  # [{ 'url' }] of every page (tab) of the context, oldest first; a tab a click opened is the last one.
+  def pages
+    @driver.pages.map { |url| { 'url' => url } }
+  end
+
+  # Moves the session onto the page at `index` of #pages (Driver#switch_to): every later call reads and acts on it,
+  # and the NetTracker is rebound to it (network marks taken before the switch are void). Settling the new page's
+  # content (#settle_content) is the caller's job. IndexError for an unknown index.
+  def switch_to(index)
+    @driver.switch_to(index)
+    nil
   end
 
   def settle(kind)

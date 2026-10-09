@@ -11,7 +11,7 @@ RSpec.describe Apply::Operation::Engine::CaptureArtifact do
     ApplyStep.create!(apply:, attempt: ctx.attempt, key: 'fill', stage: 'fill', position: 0, state: :running, started_at: Time.current)
   end
   let(:label) { :failure }
-  let(:html) { "<html><body>write to #{apply.user.email} \nCookie: secret\nbody</body></html>" }
+  let(:html) { "<html><body onload=\"boot()\">write to #{apply.user.email} \nCookie: secret\nbody<script>location.reload()</script></body></html>" }
   let(:session) { FakeSession.new(html:, final_url: 'https://example.com/') }
 
   def names
@@ -30,6 +30,8 @@ RSpec.describe Apply::Operation::Engine::CaptureArtifact do
       expect(stored).to include('{{fact.email}}')
       expect(stored).not_to include(apply.user.email)
       expect(stored).not_to include('Cookie: secret')
+      expect(stored).not_to include('<script', 'onload')
+      expect(stored).to include('Content-Security-Policy')
       expect(ctx.scratch.artifacts_count).to eq(2)
     end
 

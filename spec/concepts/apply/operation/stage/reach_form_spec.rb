@@ -40,8 +40,11 @@ RSpec.describe Apply::Operation::Stage::ReachForm do
     expect(ctx).to have_attributes(form_url: canonical, form_root:)
   end
 
-  it 'halts not_a_form when the form never gets ready' do
+  it 'halts not_a_form when the form never gets ready and the Navigator gives up as well' do
     allow(session).to receive(:ready?).and_return(false)
+    stub_request(:post, %r{generativelanguage\.googleapis\.com.*generateContent}).to_return(gemini_json_response(
+      { status: 'give_up', reason: 'no form here', actions: [], form: nil, give_up_code: 'not_a_form' }.to_json
+    ))
 
     expect { described_class.call(ctx:) }.to raise_error(Apply::Operation::Engine::Halt, /not_a_form/)
     expect(apply.reload.navigation).to be_nil
@@ -106,6 +109,17 @@ RSpec.describe Apply::Operation::Stage::ReachForm do
       expect(apply.platform_match).to include('key' => 'ashby', 'captures' => { 'slug' => 'preply', 'jid' => jid })
     end
 
+    it 'reaches the form with a GeminiScraping integration without asking the AI inside the lease' do
+      apply.ai_integration.update!(provider: 'gemini_scraping')
+      allow(ApplyMate::Ai::Client::GeminiScraping).to receive(:new)
+
+      result = described_class.call(ctx:)[:step_result]
+
+      expect(result).to include('navigation' => [ landing, unwrap ], 'platform' => 'ashby')
+      expect(ApplyMate::Ai::Client::GeminiScraping).not_to have_received(:new)
+      expect(apply.reload.ai_calls).to eq(0)
+    end
+
     it 'restores the switched platform and the schema it read on a later attempt (the digest matches again)' do
       digest = described_class.input_digest(ctx)
       result = described_class.call(ctx:)[:step_result]
@@ -130,18 +144,145 @@ RSpec.describe Apply::Operation::Stage::ReachForm do
       }
     end
 
-    context 'when the landing page shows no known platform' do
-      let(:frame_urls) { [ preply ] }
+    context 'when the landing page shows no known platform (Generic: the AI Navigator reaches the form)' do
+      let(:form_css) { 'body > main > form' }
+      # f0:e0 the Apply button; after the click f0:e1..e3 name / email / phone in the form
+      let(:job_page) do
+        build_snapshot(frames: [ { url: preply } ], elements: [ snapshot_element(role: 'button', name: 'Apply now') ])
+      end
+      let(:form_page) do
+        build_snapshot(frames: [ { url: preply } ], elements: [
+          snapshot_element(role: 'button', name: 'Apply now', expanded: true),
+          *[ 'Full name', 'Email', 'Phone' ].each_with_index.map { |name, index|
+            snapshot_element(name:, css: "#{form_css} > input:nth-of-type(#{index + 1})", regions: [ form_css ])
+          }
+        ])
+      end
+      let(:session) { FakeSession.new(html: '', final_url: preply, snapshot: job_page) }
+      let(:answers) do
+        [ { status: 'continue', reason: 'open the form', form: nil, give_up_code: nil,
+            actions: [ { type: 'click', ref: 'f0:e0', key: nil, index: nil, max_ms: nil } ] },
+          { status: 'form_reached', reason: 'name, email, phone', actions: [], give_up_code: nil,
+            form: { frame: 'f0', scope_ref: 'f0:e1', field_refs: %w[f0:e1 f0:e2 f0:e3], submit_ref: nil, advance_ref: nil } } ]
+      end
 
-      it 'succeeds without a form and persists nothing but leaves the platform generic (the legacy path runs)' do
+      before do
+        session.on(:click) { session.show(form_page) }
+        stub_request(:post, %r{generativelanguage\.googleapis\.com.*generateContent})
+          .to_return(*answers.map { |answer| gemini_json_response(answer.to_json) })
+      end
+
+      it 'persists the navigation [goto {landing_url}, click, wait_for] and the form URL' do
+        navigation = [ landing, Apply::Recipe::Op::Click.new(target: job_page.elements.first['target']).to_h,
+                       { 'op' => 'wait_for', 'root' => form_css, 'frame_path' => [], 'min_fields' => 3 } ]
+
         result = described_class.call(ctx:)[:step_result]
 
-        expect(result).to include('navigation' => nil, 'form_url' => nil, 'platform' => 'generic', 'schema' => 0)
+        expect(result).to include('navigation' => navigation, 'form_url' => preply, 'platform' => 'generic',
+                                  'form_root' => ApplyMate::Client::Browser::Target.css(form_css).to_h.deep_stringify_keys)
+        expect(apply.reload).to have_attributes(platform: 'generic', navigation:, form_url: preply, ai_calls: 2)
         expect(session.calls_of(:goto)).to eq([ [ preply ] ])
-        expect(apply.reload).to have_attributes(platform: 'generic', navigation: nil, form_url: nil)
-        expect(ctx.platform_known?).to be(false)
-        expect(ctx.scratch.trace.pluck('event')).to include('landed', 'platform_unknown')
+        expect(session.calls_of(:ready?)).to be_empty
+        expect(ctx.scratch.trace.pluck('event')).to include('landed', 'navigator_turn', 'navigate', 'form_claim')
       end
+
+      it 'persists nothing when the Navigator gives up' do
+        stub_request(:post, %r{generativelanguage\.googleapis\.com.*generateContent}).to_return(gemini_json_response(
+          { status: 'give_up', reason: 'login', actions: [], form: nil, give_up_code: 'login_required' }.to_json
+        ))
+
+        expect { described_class.call(ctx:) }.to raise_error(Apply::Operation::Engine::Halt) { |halt| expect(halt.code).to eq(:login_required) }
+        expect(apply.reload).to have_attributes(navigation: nil, form_url: nil)
+      end
+    end
+  end
+
+  context 'with replay: true (the submit scope) and a stored navigation' do
+    let(:job) { 'https://acme.example/jobs/1' }
+    let(:click) { { 'op' => 'click', 'target' => ApplyMate::Client::Browser::Target.css('a.apply').to_h } }
+    let(:wait_for) { { 'op' => 'wait_for', 'root' => '#form[role="tabpanel"]', 'frame_path' => [], 'min_fields' => 3 } }
+    let(:stored) { [ { 'op' => 'goto', 'url_template' => '{entry_url}' }, click, wait_for ] }
+    let(:missing) { [] }
+    let(:session) { FakeSession.new(html: '', final_url: job, missing:, snapshot: form_page) }
+    # What the stored WaitFor's root holds: an application form by R2.
+    let(:form_page) do
+      build_snapshot(frames: [ { url: job } ], elements: [ 'Full name', 'Email', 'Phone' ].map { |name|
+        snapshot_element(name:, regions: [ form_root.strategies.first['css'] ])
+      })
+    end
+
+    before do
+      apply.update_columns(entry_url: job, navigation: stored, form_url: job)
+      allow(session).to receive(:current_url).and_call_original
+      ctx.scratch.scope = :submit
+    end
+
+    it 'replays it through Interpret and persists what it performed, with the switch_tab a new tab inserted' do
+      session.on(:click) { session.open_page(canonical) }
+      performed = [ stored[0], click, { 'op' => 'switch_tab', 'index' => 1 }, wait_for ]
+
+      result = described_class.call(ctx:, replay: true)[:step_result]
+
+      expect(session.calls_of(:goto)).to eq([ [ job ] ])
+      expect(session.calls_of(:click).map(&:first)).to eq([ ApplyMate::Client::Browser::Target.css('a.apply') ])
+      expect(session.calls_of(:ready?).map(&:first)).to eq([ form_root ])
+      expect(result).to include('navigation' => performed, 'form_url' => canonical)
+      expect(apply.reload).to have_attributes(navigation: performed, form_url: canonical)
+    end
+
+    context 'when the stored navigation drifted (the Apply link is gone)' do
+      let(:missing) { [ 'a.apply' ] }
+
+      it 'traces recipe_drift, reaches the form the survey way and persists that navigation' do
+        allow(session).to receive(:current_url) { session.calls_of(:goto).last&.first || 'about:blank' }
+
+        result = described_class.call(ctx:, replay: true)[:step_result]
+
+        expect(session.calls_of(:goto)).to eq([ [ job ], [ canonical ] ])
+        expect(result['navigation']).to eq([ unwrap ])
+        expect(apply.reload.navigation).to eq([ unwrap ])
+        expect(ctx.scratch.trace.pluck('event')).to include('recipe_drift')
+      end
+    end
+
+    context 'when the stored navigation of a Generic form drifted' do
+      let(:missing) { [ 'a.apply' ] }
+
+      it 'heals with the Navigator, the drifted op as its hint, and persists the healed navigation' do
+        ctx.scratch.match = nil
+        ctx.adopt_match!(Apply::Operation::Engine::Detect::Match.generic)
+        healed = [ { 'op' => 'click', 'target' => ApplyMate::Client::Browser::Target.css('a.apply-now').to_h }, wait_for ]
+        allow(Apply::Operation::Engine::Observe).to receive(:call).and_wrap_original do |original, **options|
+          original.call(**options).tap { ctx.adopt_match!(Apply::Operation::Engine::Detect::Match.generic) } # still nothing known
+        end
+        allow(Apply::Operation::Engine::Navigate).to receive(:call) do |ctx:, heal_hint:|
+          ctx.form_root = form_root
+          ctx.form_url = job
+          instance_double(ApplyMate::Operation::Result, model: healed)
+        end
+
+        result = described_class.call(ctx:, replay: true)[:step_result]
+
+        expect(Apply::Operation::Engine::Navigate).to have_received(:call)
+          .with(ctx:, heal_hint: an_object_having_attributes(to_h: click))
+        expect(result['navigation']).to eq([ stored.first, *healed ])
+        expect(apply.reload.navigation).to eq([ stored.first, *healed ])
+      end
+    end
+
+    it 'reaches the form the survey way when nothing is stored' do
+      apply.update_columns(navigation: nil)
+      allow(session).to receive(:current_url).and_return('about:blank', canonical)
+
+      expect(described_class.call(ctx:, replay: true)[:step_result]['navigation']).to eq([ unwrap ])
+    end
+
+    it 'does not replay outside replay mode (the survey re-reaches the form)' do
+      allow(session).to receive(:current_url).and_return('about:blank', canonical)
+
+      described_class.call(ctx:)
+
+      expect(session.calls_of(:goto)).to eq([ [ canonical ] ])
     end
   end
 

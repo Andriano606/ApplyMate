@@ -13,8 +13,10 @@ class Apply::Operation::Stage::AnswerFields < Apply::Operation::Stage::Base
     apply = ctx.apply
     # The semantic each field classifies to NOW (platform key, autocomplete, the field_semantics.yml lexicon), not the
     # stored one: a lexicon or platform change re-classifies, and a DiscoverFields re-run (Registry.fingerprint, below,
-    # is in its digest too) re-persists the semantics it reset to nil instead of skipping past them.
-    fields = ctx.field_list.map do |field|
+    # is in its digest too) re-persists the semantics it reset to nil instead of skipping past them. Fields of later
+    # wizard pages (Field#later_page?) are left out: Engine::AnswerFollowups added them in the submit scope, and a
+    # resumed run after an approved review must not re-answer (and so void) what the user approved.
+    fields = ctx.field_list.reject(&:later_page?).map do |field|
       semantic = Apply::Operation::Answer::Classify.call(field:, platform: ctx.platform).model
       [ field.id, field.kind, field.options, field.required, field.condition, semantic ]
     end
@@ -33,6 +35,8 @@ class Apply::Operation::Stage::AnswerFields < Apply::Operation::Stage::Base
   private
 
   def run!(ctx:, **)
+    raise ArgumentError, 'AnswerFields must run outside a session scope' if ctx.session_open?
+
     return step_result(answers: 0) if ctx.field_list.empty?
 
     # A no-op while facts_cv_digest matches the CV (the usual case: Create/Update enqueued the extraction).

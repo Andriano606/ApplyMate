@@ -1,0 +1,14 @@
+section(id="input_request_#{@apply.hashid}" class=SECTION_CLASSES role='status' *data_test_id('apply-input-request'))
+  h3.text-base.font-semibold = title
+  p.mt-1.text-sm = hint
+  - if expires_at
+    p.mt-1.text-xs.opacity-80 *data_test_id('apply-input-request-expires') = expires_at
+
+  = helpers.form_with(url: submit_path, method: :post, authenticity_token: false, \
+      class: 'mt-3 flex flex-col gap-2 sm:flex-row sm:items-end', data: { controller: 'turbo-form' }) do
+    .flex-1.space-y-1
+      label.text-sm.font-medium for=input_id = I18n.t('apply.input_request.code_label')
+      = helpers.text_field_tag 'code', nil, id: input_id, class: INPUT_CLASSES, autocomplete: 'one-time-code', \
+          inputmode: 'numeric', maxlength: MAX_CODE_LENGTH, required: true, autofocus: false
+    = button(label: I18n.t('apply.input_request.submit'), variant: :primary, type: :submit, \
+        class: 'w-full justify-center sm:w-auto', **data_test_id('apply-input-request-submit'))

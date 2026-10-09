@@ -58,6 +58,32 @@ RSpec.describe Apply::Operation::Stage::Submit do
     expect(step_record.artifacts.map { |artifact| artifact.filename.to_s }).to eq([ 'before_submit.png' ])
   end
 
+  context 'when the page already shows a success text before the click' do
+    let(:session) do
+      FakeSession.new(html: '<body><p>Thank you for applying to Preply</p><div id="form"><input id="email"></div></body>',
+                      final_url: 'https://jobs.ashbyhq.com/preply/x/application', snapshot:)
+    end
+
+    it 'records it as the baseline before the claim (VerifySubmit will not count it)' do
+      baseline_at_claim = :unset
+      allow(Apply::Operation::Engine::ClaimSubmit).to receive(:call).and_wrap_original do |original, **kwargs|
+        baseline_at_claim = ctx.scratch.submit_baseline
+        original.call(**kwargs)
+      end
+
+      submit!
+
+      expect(baseline_at_claim).to eq([ 'success_text' ])
+      expect(ctx.scratch.submit_baseline).to eq([ 'success_text' ])
+    end
+  end
+
+  it 'records an empty baseline when no page signal holds before the click' do
+    submit!
+
+    expect(ctx.scratch.submit_baseline).to eq([])
+  end
+
   it 'takes the claim after the artifact (a failing screenshot never blocks the submit)' do
     allow(session).to receive(:screenshot).and_raise(RuntimeError, 'page closed')
 
@@ -103,6 +129,28 @@ RSpec.describe Apply::Operation::Stage::Submit do
     end
 
     it_behaves_like 'a halt before the claim', :target_not_found
+  end
+
+  context 'when the button is the Next of a further wizard page (FillFields did not consume every page)' do
+    let(:frames) { [ { 'url' => 'https://careers.acme.example/apply', 'frame_path' => [], 'outline' => [ 'h2 Step 1 of 2' ] } ] }
+    let(:elements) { [ button('Next', submit_like: true) ] }
+
+    it_behaves_like 'a halt before the claim', :wizard_too_long
+
+    it 'says why' do
+      expect { submit! }.to raise_error(Apply::Operation::Engine::Halt) { |halt| expect(halt.detail).to eq('next button at submit') }
+    end
+  end
+
+  context 'when the final page still shows a Back button beside the submit button' do
+    let(:frames) { [ { 'url' => 'https://careers.acme.example/apply', 'frame_path' => [], 'outline' => [ 'h2 Step 2 of 2' ] } ] }
+    let(:elements) { [ button('Back', submit_like: true), button('Submit Application', submit_like: true) ] }
+
+    it 'claims, then clicks the submit button (ClassifyAdvance: the FINAL_LEXICON one)' do
+      expect(submit![:step_result]).to eq('button' => 'Submit Application')
+      expect(session.calls_of(:click)).to eq([ [ submit_target ] ])
+      expect(apply.reload.submit_claimed_at).to be_present
+    end
   end
 
   context 'with less than SUBMIT_RESERVE seconds left' do

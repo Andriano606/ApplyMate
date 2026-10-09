@@ -13,6 +13,9 @@
 #   read                        ReadBack(displayed, invalid, error_text) from probe/read_value.js (attached-only)
 #   expected_display(value)     what the control should show for `value`
 #   accepts?(read_back, value)  read-back verdict: not invalid and MatchOption.same?(displayed, expected_display)
+#   approximate_pick            the option label picked although it does not match the answer (Autocomplete's "first
+#                               suggestion"), nil when the write picked what was asked; SetFieldValue returns it as
+#                               result[:approximate] and FillFields stores it as an `approximate` answer (review)
 #
 # `value` is the answer in the field's own terms (Answer::CoerceValue): text, a number, true / false, an option label
 # or a list of them, or the path of the file to upload.
@@ -45,6 +48,10 @@ class Apply::Widget::Base
   end
 
   def fallback_write(_value)
+    nil
+  end
+
+  def approximate_pick
     nil
   end
 
@@ -90,6 +97,14 @@ class Apply::Widget::Base
     return strategy['css'] if strategy['css'].present?
 
     strategy.fetch('attr', {}).map { |name, value| "[#{name}=#{css_string(value)}]" }.join
+  end
+
+  # The parent of the control's own css strategy (snapshot.js nth-of-type path), nil when the path has one segment:
+  # where a styled control's label (NativeCheck) or companion input (Range) sits.
+  def parent_css
+    path = target.strategies.filter_map { |strategy| strategy['css'] }.last
+    segments = path.to_s.split(' > ')
+    segments[0..-2].join(' > ') if segments.size > 1
   end
 
   def css_string(text)

@@ -16,6 +16,14 @@ class Apply::Gate::Base
     raise NotImplementedError, "#{name} must declare events"
   end
 
+  # "host/path" of `url` (lowercase host without "www."), nil when it has no host.
+  def self.host_path(url)
+    uri = URI.parse(url.to_s)
+    uri.host && "#{uri.host.downcase.delete_prefix('www.')}#{uri.path}"
+  rescue URI::InvalidURIError
+    nil
+  end
+
   # ctx: the run's Context; event: one of EVENTS; evidence: Detect::Evidence; snapshot: Browser::Snapshot or nil.
   def call(_ctx, **)
     raise NotImplementedError, "#{self.class} must define call"
@@ -30,14 +38,6 @@ class Apply::Gate::Base
   # The page the run is on: the final URL (http level) or the top frame's URL (rendered; frame_urls list it first).
   def main_url(evidence)
     evidence.current_urls.first
-  end
-
-  # "host/path" of a URL, lowercase host without "www.", or nil.
-  def host_path(url)
-    uri = URI.parse(url.to_s)
-    uri.host && "#{uri.host.downcase.delete_prefix('www.')}#{uri.path}"
-  rescue URI::InvalidURIError
-    nil
   end
 
   def host(url)

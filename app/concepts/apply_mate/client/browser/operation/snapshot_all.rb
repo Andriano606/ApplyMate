@@ -22,6 +22,15 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
   JS
   CSS_ID = /\A[A-Za-z_][\w-]*\z/
   STYLED_TYPES = %w[radio checkbox file].freeze
+  # Element state that is part of the digest besides the fingerprint: a click that reveals a hidden section, opens an
+  # accordion or selects a tab changes the page without adding elements (the Navigator's "did anything change?").
+  DIGEST_STATE = %w[visible expanded selected pressed checked disabled].freeze
+
+  # The ONE page-state digest: SHA1 over each element's fingerprint and DIGEST_STATE values, in order. Values
+  # (`filled`) are left out, so typing never changes it.
+  def self.digest_of(elements)
+    Digest::SHA1.hexdigest(elements.map { |element| [ element['fingerprint'], *element.values_at(*DIGEST_STATE) ].join('|') }.join("\n"))
+  end
 
   def perform!(driver:, markers: [], regions: [], **)
     skip_authorize
@@ -32,7 +41,7 @@ class ApplyMate::Client::Browser::Operation::SnapshotAll < ApplyMate::Operation:
       frames: raw.map { |frame| frame_entry(frame, paths.fetch(frame[:index])) },
       elements:,
       evidence: evidence(raw, markers),
-      digest: Digest::SHA1.hexdigest(elements.pluck('fingerprint').join("\n"))
+      digest: self.class.digest_of(elements)
     )
   end
 

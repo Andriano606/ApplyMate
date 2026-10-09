@@ -3,12 +3,15 @@
 class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
   MODELS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
   CREDENTIALS_SERVICE = 'generative-language-api'
-  # Transient upstream failures worth retrying: 2 retries, sleeping 2 s then 4 s.
+  # The gemini-ai gem defaults to v1, which refuses JSON mode (response_mime_type / response_schema) with a 400
+  # "JSON mode is not enabled for api version v1"; every engine schema (Navigate, AnswerFields, VerifySubmit, ...)
+  # is native JSON schema, so the client talks v1beta like MODELS_ENDPOINT.
+  API_VERSION = 'v1beta'
+  # Transient upstream failures worth retrying (at most Request#retries times, sleeping 2 s then 4 s).
   RETRYABLE_ERROR = /503|502|429/
-  MAX_RETRIES = 2
   # JSON-Schema keys the Gemini `responseSchema` (OpenAPI subset) understands; everything else
-  # (additionalProperties, $schema, …) is dropped because the API rejects unknown fields.
-  SCHEMA_KEYS = %w[type nullable properties required items enum description].freeze
+  # (additionalProperties, $schema, minimum, …) is dropped because the API rejects unknown fields.
+  SCHEMA_KEYS = %w[type nullable properties required items enum maxItems minItems description].freeze
   # Models that accept generation_config.thinking_config: Gemini 2.5 and later text models
   # (pro / flash / flash-lite, incl. dated previews). Older models (2.0, 1.5) and image/tts
   # variants reject the field with a 400, so they only get the raised output cap.
@@ -35,7 +38,7 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
     assert_request!(request)
     client = build_client(timeout: request.timeout)
     payload = payload_for(request)
-    result = with_retries { client.generate_content(payload) }
+    result = with_retries(request.retries) { client.generate_content(payload) }
     parse(result)
   end
 
@@ -49,7 +52,7 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
   def build_client(timeout: nil)
     options = { model: @model, server_sent_events: false }
     options[:connection] = { request: { timeout: } } if timeout
-    ::Gemini.new(credentials: { service: CREDENTIALS_SERVICE, api_key: @api_key }, options:)
+    ::Gemini.new(credentials: { service: CREDENTIALS_SERVICE, api_key: @api_key, version: API_VERSION }, options:)
   end
 
   def payload_for(request)
@@ -84,11 +87,17 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
   end
 
   # JSON-Schema subset → Gemini responseSchema: `type` upcased, `['string', 'null']` →
-  # `type: 'STRING', nullable: true`, recursion into properties/items, unknown keys dropped.
+  # `type: 'STRING', nullable: true`, recursion into properties/items, unknown keys dropped. A nullable enum lists
+  # null in JSON Schema (`enum: [..., nil]`); Gemini's enum holds strings only, so null leaves the list and the field
+  # is nullable instead.
   def gemini_schema(schema)
     schema = schema.deep_stringify_keys
     converted = schema.slice(*SCHEMA_KEYS)
     converted.merge!(gemini_type(schema['type'])) if schema.key?('type')
+    if schema['enum']
+      converted['enum'] = schema['enum'].compact.map(&:to_s)
+      converted['nullable'] = true if schema['enum'].include?(nil)
+    end
     converted['properties'] = schema['properties'].transform_values { |prop| gemini_schema(prop) } if schema['properties']
     converted['items'] = gemini_schema(schema['items']) if schema['items']
     converted
@@ -104,12 +113,12 @@ class ApplyMate::Ai::Client::Gemini < ApplyMate::Ai::Client::Base
     result
   end
 
-  def with_retries
+  def with_retries(max_retries)
     retries = 0
     begin
       yield
     rescue StandardError => e
-      if retries < MAX_RETRIES && e.message.match?(RETRYABLE_ERROR)
+      if retries < max_retries && e.message.match?(RETRYABLE_ERROR)
         retries += 1
         sleep(2**retries)
         retry

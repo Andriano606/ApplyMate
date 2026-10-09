@@ -8,8 +8,15 @@
          div#form[role=tabpanel], one .ashby-application-form-field-entry[data-field-path] per field, required marked
          only by a _required_ class on the question title, an autofill pane with its own file input, a clipped resume
          input behind an "Upload File" button, an autocomplete combobox that opens ONLY on ArrowDown, opacity-0 radios
-         and checkboxes whose id/name carry a per-load instance UUID, and a submit button without type that POSTs JSON
-         to /ashby/api/non-user-graphql. The form renders 400 ms after load (client-side route). -->
+         and checkboxes whose id/name carry a per-load instance UUID, and a submit button without type. The form renders
+         400 ms after load (client-side route).
+         Submit, as on jobs.ashbyhq.com (live bundle + apply 227's post-submit DOM): ~1 s for the reCAPTCHA token,
+         then the JSON POST /ashby/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction while unrelated
+         non-GET traffic fires at the same moment (ApiSetFormValue autosaves, a RUM beacon). On FormSubmitSuccess the
+         confirmation view replaces the form INSIDE #form (role=status, a "Success" heading and the org's own copy -
+         here one that matches no generic thank-you pattern); the URL does not change. On FormRender the form stays
+         with a role=alert "Your form needs corrections". Fixture-only simplification: the field values ride in the
+         submit's variables.values (the real SPA stores them earlier through ApiSetFormValue) so specs can read them. -->
     <style>
       body { font-family: sans-serif; margin: 1rem; }
       .ashby-application-form-field-entry { margin: 1rem 0; position: relative; border: 0; padding: 0; }
@@ -269,16 +276,39 @@
           else if (pressed) values[path] = pressed.textContent === 'Yes';
           else if (boxes.length) values[path] = boxes;
         });
-        const response = await fetch('/ashby/api/non-user-graphql?op=SubmitApplicationForm', {
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // the reCAPTCHA token
+        const headers = { 'content-type': 'application/json' };
+        for (let i = 0; i < 12; i++) {
+          fetch('/ashby/api/non-user-graphql?op=ApiSetFormValue', {
+            method: 'POST', headers, body: JSON.stringify({ operationName: 'ApiSetFormValue', variables: { n: i } }),
+          });
+        }
+        fetch('/rum/api/v2/rum?ddsource=browser', { method: 'POST', body: 'view', keepalive: true });
+        const jobPostingId = location.pathname.split('/')[3];
+        const response = await fetch('/ashby/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ operationName: 'SubmitApplicationForm', variables: { values } }),
+          headers,
+          body: JSON.stringify({
+            operationName: 'ApiSubmitSingleApplicationFormAction',
+            variables: { organizationHostedJobsPageName: 'preply', jobPostingId, values },
+          }),
         });
         const json = await response.json();
-        if (json.data && json.data.submitApplicationForm && json.data.submitApplicationForm.success) {
+        const result = json.data && json.data.submitApplicationFormAction;
+        const typename = result && result.applicationFormResult && result.applicationFormResult.__typename;
+        if (typename === 'FormSubmitSuccess') {
+          window.parent.postMessage('application_submitted', '*');
           form.innerHTML =
-            '<div class="ashby-application-form-success-container"><h2>Thank you for applying</h2>' +
-            '<p>Your application was successfully submitted. We will be in touch.</p></div>';
+            '<div role="status" aria-live="polite" tabindex="-1" data-highlight="positive" ' +
+            'class="ashby-application-form-success-container _positive_f7cvd_112 _highlighted_f7cvd_138 _container_f7cvd_28">' +
+            '<h2 class="_heading_f7cvd_52 ">Success</h2>' +
+            '<p>We\u2019ll carefully review your profile and contact you once there\u2019s news to share.</p></div>';
+          window.scrollTo(0, 0);
+        } else if (typename === 'FormRender') {
+          const alert = document.createElement('div');
+          alert.setAttribute('role', 'alert');
+          alert.textContent = 'Your form needs corrections';
+          form.prepend(alert);
         }
       }
 

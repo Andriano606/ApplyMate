@@ -7,7 +7,8 @@
 //   BROWSERD_TOKEN          REQUIRED, >= 16 chars. Bearer token for every route but GET /health
 //   MAX_BROWSERS            REQUIRED, integer 1..3 (= the published ws port range 9301-9303).
 //                           Hard cap on concurrent browsers; staging sets it to APPLY_SLOTS.
-//   LEASE_TTL_S             hard lifetime of one lease in seconds (default 600, min 60)
+//   LEASE_TTL_S             longest lifetime of one lease in seconds (default 1800, 60..3600). A POST /leases
+//                           may ask for less with ttl_s (clamped to 60..LEASE_TTL_S); without it a lease gets this.
 //   HEADLESS                true | virtual | false (default true). virtual = headful under the
 //                           Xvfb display entrypoint.sh starts (DISPLAY=:99)
 //   BROWSERD_OS             fingerprint OS: windows | macos | linux (default windows)
@@ -87,7 +88,7 @@ function readConfig(env) {
     port: intEnv(env, 'PORT', 9300, { min: 1, max: 65535 }),
     token,
     maxBrowsers: intEnv(env, 'MAX_BROWSERS', undefined, { min: 1, max: 3 }),
-    ttlSeconds: intEnv(env, 'LEASE_TTL_S', 600, { min: 60, max: 3600 }),
+    ttlSeconds: intEnv(env, 'LEASE_TTL_S', 1800, { min: 60, max: 3600 }),
     wsPortBase: intEnv(env, 'WS_PORT_BASE', 9301, { min: 1024, max: 65000 }),
     advertiseHost: env.BROWSERD_ADVERTISE_HOST || os.hostname(),
     proxyUrl,
@@ -310,8 +311,8 @@ function releaseLease(id, reason) {
   return startTeardown(lease, reason);
 }
 
-async function createLease(owner, humanize, identity, req) {
-  const lease = table.acquire(owner, { humanize, identity });
+async function createLease(owner, humanize, identity, ttlSeconds, req) {
+  const lease = table.acquire(owner, { humanize, identity, ttlSeconds });
   if (!lease) return null;
 
   const wsPath = crypto.randomBytes(32).toString('hex');
@@ -475,11 +476,17 @@ async function handle(req, res) {
     });
     if (body.humanize !== undefined && typeof body.humanize !== 'boolean')
       throw new HttpError(422, 'humanize_invalid');
+    if (
+      body.ttl_s !== undefined &&
+      (!Number.isInteger(body.ttl_s) || body.ttl_s < 1)
+    )
+      throw new HttpError(422, 'ttl_invalid');
 
     const lease = await createLease(
       owner,
       body.humanize === true,
       identity,
+      body.ttl_s,
       req,
     );
     if (!lease) {

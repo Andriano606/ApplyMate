@@ -7,6 +7,10 @@ class VacancyCv::Job::Create < ApplicationJob
   # would serialise unrelated records that happen to share an integer.
   limits_concurrency to: 1, key: ->(vacancy_cv_id, _user_id) { "vacancy_cv:#{vacancy_cv_id}" }, duration: 15.minutes
 
+  # The process-wide local Chrome slot (GeminiScraping's call, another job's Grover render) stayed taken for the whole
+  # wait: a few spaced retries, then the job fails like any other generation error.
+  retry_on ApplyMate::Client::LocalChrome::Busy, attempts: 3, wait: :polynomially_longer
+
   def perform(vacancy_cv_id, user_id)
     vacancy_cv = VacancyCv.includes(:ai_integration, :user_profile, :generate_cv_prompt, :vacancy).find(vacancy_cv_id)
     vacancy    = vacancy_cv.vacancy

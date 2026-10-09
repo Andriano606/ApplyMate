@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# POST /leases on browserd. model = ApplyMate::Client::Browser::Lease.
+# POST /leases on browserd. model = ApplyMate::Client::Browser::Lease (its expires_at reflects the granted TTL).
 #
 # Termination: 503 (pool busy) is retried at most BUSY_ATTEMPTS POSTs in total, sleeping the server's
 # Retry-After (default 5 s, capped at 10 s; via Clock.sleep_ms) between them, so a full pool costs ≤ ~20 s of
@@ -21,10 +21,13 @@ class ApplyMate::Client::Browser::Operation::AcquireLease < ApplyMate::Operation
   MAX_RETRY_AFTER_S = 10
   LAUNCH_TIMEOUT_S = 75
 
-  def perform!(owner:, humanize: false, identity: nil, **)
+  # ttl_s: the lease lifetime asked for (browserd clamps it to [60, LEASE_TTL_S]); nil = browserd's LEASE_TTL_S.
+  def perform!(owner:, humanize: false, identity: nil, ttl_s: nil, **)
     skip_authorize
     http = ApplyMate::Client::Browser::Browserd.http
-    lease = parse_lease(request_lease(http, JSON.generate(owner:, humanize:, identity:)))
+    payload = { owner:, humanize:, identity: }
+    payload[:ttl_s] = ttl_s if ttl_s
+    lease = parse_lease(request_lease(http, JSON.generate(payload)))
     assert_compatible!(lease)
     self.model = lease
   end

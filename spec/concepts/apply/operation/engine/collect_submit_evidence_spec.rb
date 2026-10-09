@@ -30,8 +30,8 @@ RSpec.describe Apply::Operation::Engine::CollectSubmitEvidence do
       end
       let(:read_values) { { '#email' => { 'invalid' => true, 'error_text' => 'Email is required' } } }
 
-      it 'reads the form root text and the errors of the known fields' do
-        expect(evidence).to have_attributes(text: 'Email is required Submit', form_present: true,
+      it 'reads the form root text first, then the rest of the frame, and the errors of the known fields' do
+        expect(evidence).to have_attributes(text: 'Email is required Submit Lead', form_present: true,
                                             field_errors: { 'email' => 'Email is required' })
         expect(session.calls_of(:html)).to eq([ [ { frame_path: [] } ] ])
       end
@@ -60,9 +60,40 @@ RSpec.describe Apply::Operation::Engine::CollectSubmitEvidence do
       let(:html) { '<body><h1>Lead</h1><div id="form"><h2>Thank you for applying</h2></div></body>' }
 
       it 'has no form and never probes the fields' do
-        expect(evidence).to have_attributes(text: 'Thank you for applying', form_present: false, field_errors: {})
+        expect(evidence).to have_attributes(text: 'Thank you for applying Lead', form_present: false, field_errors: {})
         expect(session.calls_of(:probe)).to be_empty
       end
+    end
+
+    context 'when the confirmation renders beside the root (a live region outside the form)' do
+      let(:html) do
+        '<body><h1>Lead</h1><div id="form"><p>Your details</p></div>' \
+          '<div role="status"><h2>Success</h2><p>Application received!</p></div></body>'
+      end
+
+      it 'reads it after the root text' do
+        expect(evidence.text).to eq('Your details Lead Success Application received!')
+      end
+    end
+
+    context 'with platform success and failure selectors' do
+      subject(:evidence) do
+        described_class.call(ctx:, success_selectors: [ '.ashby-application-form-success-container', '.done' ],
+                             failure_selectors: [ '.ashby-application-form-failure-container' ]).model
+      end
+
+      let(:html) do
+        '<body><div id="form"><div role="status" class="ashby-application-form-success-container">' \
+          '<h2>Success</h2></div></div></body>'
+      end
+
+      it 'lists those present in the form root frame' do
+        expect(evidence).to have_attributes(success_dom: [ '.ashby-application-form-success-container' ], failure_dom: [])
+      end
+    end
+
+    it 'matches no selector unless asked' do
+      expect(evidence).to have_attributes(success_dom: [], failure_dom: [])
     end
 
     context 'when the root itself is gone' do
@@ -70,6 +101,17 @@ RSpec.describe Apply::Operation::Engine::CollectSubmitEvidence do
 
       it "reads the frame's body text" do
         expect(evidence).to have_attributes(text: 'Lead Application received.', form_present: false)
+      end
+    end
+
+    context 'when the page keeps a confirmation it has not shown yet (hidden by its markup)' do
+      let(:html) do
+        '<body><h1>Lead</h1><div id="form"><input id="name"><button>Submit</button></div>' \
+          '<p hidden>Thank you for applying</p><div style="display: none"><p>Application received</p></div></body>'
+      end
+
+      it 'never reads the hidden text' do
+        expect(evidence).to have_attributes(text: 'Submit Lead', form_present: true)
       end
     end
 
@@ -113,23 +155,48 @@ RSpec.describe Apply::Operation::Engine::CollectSubmitEvidence do
   end
 
   context 'after a real submit on the Ashby fixture', :browser do
-    it 'reads the success message in the form root and the GraphQL answer since the claim' do
-      adopt_fixture_ashby!(ctx)
-      in_fixture_scope(ctx, scope: :submit) do |session|
-        Apply::Operation::Engine::ReachForm.call(ctx:)
-        session.network_watch(ctx.platform.success_evidence.dig(:submit_request, :url))
-        ctx.scratch.claim_mark = session.network_mark
-        session.click(ApplyMate::Client::Browser::Target.css('button.ashby-application-form-submit-button'))
-        session.settle(:submit)
+    def submit_on_fixture(session)
+      Apply::Operation::Engine::ReachForm.call(ctx:)
+      session.network_watch(ctx.platform.success_evidence.dig(:submit_request, :url))
+      ctx.scratch.claim_mark = session.network_mark
+      session.click(ApplyMate::Client::Browser::Target.css('button.ashby-application-form-submit-button'))
+      session.settle(:submit)
+    end
 
-        # The fixture's request starts ~1 s after the click, past the :submit quiet window: VerifySubmit's
-        # bounded wait is what sees it.
-        expect(Apply::Operation::Engine::VerifySubmit.call(ctx:).model.status).to eq(:submitted)
+    before { adopt_fixture_ashby!(ctx) }
+
+    it "is submitted on Ashby's confirmation view and the submit mutation, whatever the org's copy" do
+      in_fixture_scope(ctx, scope: :submit) do |session|
+        submit_on_fixture(session)
+
+        # The fixture's submit starts ~1 s after the click (the reCAPTCHA token), past the :submit quiet window, with
+        # a dozen unrelated POSTs at the same moment: VerifySubmit's bounded wait is what sees it.
+        verdict = Apply::Operation::Engine::VerifySubmit.call(ctx:).model
+        expect(verdict.status).to eq(:submitted)
+        expect(verdict.evidence['signals']).to include('success_text' => false, 'success_dom' => true, 'submit_request' => true)
+        expect(verdict.evidence['submit_op']).to eq([ { 'status' => 200, 'body' => 'ok' } ])
+
         expect(evidence).to have_attributes(form_present: false, field_errors: {})
-        expect(evidence.text).to start_with('Thank you for applying')
-        expect(evidence.requests.sole).to include(status: 200, body: include('"success":true'),
-                                                  url: include('/ashby/api/non-user-graphql?op=SubmitApplicationForm'))
-        expect(FixtureSite.submissions.sole[:op]).to eq('SubmitApplicationForm')
+        expect(evidence.text).to start_with('Success We’ll carefully review your profile')
+        submit, others = evidence.requests.partition { |record| record[:url].include?('op=ApiSubmitSingleApplicationFormAction') }
+        expect(submit.sole).to include(status: 200, body: include('"FormSubmitSuccess"'))
+        expect(others).to be_present.and all(include(body: nil))
+        expect(FixtureSite.submissions.sole[:op]).to eq('ApiSubmitSingleApplicationFormAction')
+      end
+    end
+
+    it 'stays unknown when Ashby re-renders the form (HTTP 200, FormRender), saying why' do
+      FixtureSite.ashby_submit_result = :form_render
+      stub_const('Apply::Operation::Engine::VerifySubmit::EVIDENCE_WAIT', 4)
+
+      in_fixture_scope(ctx, scope: :submit) do |session|
+        submit_on_fixture(session)
+        session.wait_until(timeout: 10) { session.html(frame_path: []).include?('Your form needs corrections') }
+
+        verdict = Apply::Operation::Engine::VerifySubmit.call(ctx:).model
+        expect(verdict.status).to eq(:unknown)
+        expect(verdict.evidence).to include('form_present' => true, 'submit_op' => [ { 'status' => 200, 'body' => 'not_ok' } ])
+        expect(verdict.detail).to include('submit_request=no', 'submit_op [200 not_ok]')
       end
     end
   end

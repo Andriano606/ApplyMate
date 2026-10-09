@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_08_000006) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_08_000007) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -103,6 +103,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_000006) do
     t.datetime "reviewed_at"
     t.datetime "duplicate_confirmed_at"
     t.string "landing_url"
+    t.integer "ai_calls", default: 0, null: false
+    t.integer "ai_calls_total", default: 0, null: false
+    t.bigint "ai_input_tokens", default: 0, null: false
+    t.bigint "ai_output_tokens", default: 0, null: false
+    t.jsonb "input_request"
+    t.jsonb "input_response"
     t.index "COALESCE(heartbeat_at, updated_at)", name: "index_applies_stale_candidates", where: "(state = ANY (ARRAY[0, 1, 2]))"
     t.index ["ai_integration_id"], name: "index_applies_on_ai_integration_id"
     t.index ["fill_form_prompt_id"], name: "index_applies_on_fill_form_prompt_id"
@@ -142,6 +148,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_000006) do
     t.string "scope"
     t.string "input_digest"
     t.jsonb "trace"
+    t.integer "ai_input_tokens", default: 0, null: false
+    t.integer "ai_output_tokens", default: 0, null: false
     t.index ["apply_id", "attempt", "key"], name: "index_apply_steps_on_apply_id_and_attempt_and_key", unique: true
     t.index ["apply_id", "key", "input_digest"], name: "index_apply_steps_resume_lookup", where: "(state = 1)"
     t.index ["finished_at"], name: "index_apply_steps_on_finished_at"

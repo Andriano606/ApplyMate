@@ -11,9 +11,16 @@ class Apply::Gate::SignInWall < Apply::Gate::Base
     %i[http_resolved after_goto after_action]
   end
 
+  # "host/path" of `url` when it is on a sign-in host (OAUTH_HOSTS prefix), else nil. The one sign-in host rule: this
+  # gate and Apply::Operation::Recipe::Interpret (a tab a click opened) call it.
+  def self.oauth_location(url)
+    location = host_path(url)
+    location if location && OAUTH_HOSTS.any? { |prefix| location.start_with?(prefix) }
+  end
+
   def call(_ctx, evidence:, snapshot: nil, **)
-    location = host_path(main_url(evidence))
-    halt!(:login_required, detail: location) if location && OAUTH_HOSTS.any? { |prefix| location.start_with?(prefix) }
+    location = self.class.oauth_location(main_url(evidence))
+    halt!(:login_required, detail: location) if location
     halt!(:login_required, detail: 'password field') if snapshot && password_field?(snapshot)
   end
 

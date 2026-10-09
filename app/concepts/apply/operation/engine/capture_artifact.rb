@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 # Failure / pre-submit evidence of the open browser session, attached to the step row (design §13.2): a screenshot
-# with every fillable control painted over (`<label>.png`) and, for the :failure label, the redacted HTML of each
-# frame (`<label>_f<i>.html`, at most HTML_LIMIT characters each). No-op without an open session or a step row, or once
-# ApplyStep::MAX_ARTIFACTS_PER_ATTEMPT artifacts were stored this attempt. Never raises: evidence must not replace
+# with every fillable control painted over (`<label>.png`) and, for the :failure label, the HTML of each frame made
+# inert (SanitizeHtml: no scripts, frames or handlers, a CSP meta) and redacted (`<label>_f<i>.html`, at most
+# HTML_LIMIT characters each; Artifact::Operation::Show serves it as a download, never inline). No-op without an open
+# session or a step row, or once ApplyStep::MAX_ARTIFACTS_PER_ATTEMPT artifacts were stored this attempt. Never raises: evidence must not replace
 # the error being recorded. model = number of artifacts attached.
 class Apply::Operation::Engine::CaptureArtifact < ApplyMate::Operation::Base
   include ApplyMate::Logging
@@ -24,8 +25,8 @@ class Apply::Operation::Engine::CaptureArtifact < ApplyMate::Operation::Base
   def capture_html(ctx, step_record, label)
     ctx.session.frames.each_with_index do |frame, index|
       attach(ctx, step_record, 'text/html', "#{label}_f#{index}.html") do
-        Apply::Operation::Engine::Redact.call(text: ctx.session.html(frame_path: frame_path(frame, index)),
-                                              apply: ctx.apply, max_length: HTML_LIMIT).model
+        html = Apply::Operation::Engine::SanitizeHtml.call(html: ctx.session.html(frame_path: frame_path(frame, index))).model
+        Apply::Operation::Engine::Redact.call(text: html, apply: ctx.apply, max_length: HTML_LIMIT).model
       end
     end
   end

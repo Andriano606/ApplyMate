@@ -55,6 +55,17 @@ RSpec.describe Apply::Operation::Engine::Context do
     expect { ctx.check_fence! }.to raise_error(Apply::Operation::Engine::Fenced)
   end
 
+  it 'starts every run with empty counters (no follow-up answer calls yet)' do
+    expect(ctx.scratch).to have_attributes(followup_calls: 0, wizard_page: 1, platform_switches: 0, artifacts_count: 0,
+                                           consent_clicks: 0)
+  end
+
+  it 'shares the scratch (followup_calls included) between copies' do
+    ctx.scratch.followup_calls += 1
+
+    expect(ctx.with(attempt: 3).scratch.followup_calls).to eq(1)
+  end
+
   it 'shares the flag between copies (the heartbeat thread holds the same object)' do
     copy = ctx.with(attempt: 3)
     ctx.fence!
@@ -139,25 +150,6 @@ RSpec.describe Apply::Operation::Engine::Context do
       apply.platform = 'ashby'
 
       expect(ctx).to be_platform_known
-    end
-  end
-
-  describe '#platform_reachable?' do
-    it 'is true for a known platform and for a generic match with a probable one, false otherwise' do
-      ashby = Apply::Operation::Engine::Detect::Match.new(key: 'ashby', confidence: 0.6, captures: { 'jid' => 'j' },
-                                                          frame_path: nil, from_alias: false, probable: nil)
-      ctx.scratch.match = Apply::Operation::Engine::Detect::Match.generic
-
-      expect(ctx).not_to be_platform_reachable
-
-      ctx.scratch.match = Apply::Operation::Engine::Detect::Match.generic(probable: ashby)
-
-      expect(ctx).to be_platform_reachable
-      expect(ctx).not_to be_platform_known
-
-      ctx.scratch.match = ashby.with(confidence: 0.95, captures: { 'slug' => 's', 'jid' => 'j' })
-
-      expect(ctx).to be_platform_reachable
     end
   end
 

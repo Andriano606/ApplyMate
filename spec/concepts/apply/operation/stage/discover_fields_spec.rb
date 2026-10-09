@@ -82,6 +82,41 @@ RSpec.describe Apply::Operation::Stage::DiscoverFields do
     end
   end
 
+  context 'with a Generic form (the Navigator reached it: R2 once more)' do
+    let(:generic_page) do
+      build_snapshot(frames: [ { url: 'https://acme.example/jobs/1' } ], elements: names.map { |name, type|
+        snapshot_element(name:, type:, regions: [ 'form' ])
+      })
+    end
+    let(:session) { FakeSession.new(html: '', final_url: 'https://acme.example/jobs/1', snapshot: generic_page) }
+
+    before do
+      ctx.adopt_match!(Apply::Operation::Engine::Detect::Match.generic)
+      ctx.schema = nil
+      ctx.form_root = ApplyMate::Client::Browser::Target.css('form')
+    end
+
+    context 'when it asks who the candidate is' do
+      let(:names) { [ [ 'Full name', 'text' ], [ 'Email', 'email' ], [ 'Phone', 'tel' ] ] }
+
+      it 'builds the inventory from the DOM' do
+        expect(described_class.call(ctx:)[:step_result]).to eq('fields' => 3)
+        expect(ctx.fields.map(&:label)).to eq([ 'Full name', 'Email', 'Phone' ])
+      end
+    end
+
+    context 'when the root now holds an e-mail-only box' do
+      let(:names) { [ [ 'Email', 'email' ] ] }
+
+      it 'halts not_a_form and persists no fields' do
+        expect { described_class.call(ctx:) }.to raise_error(Apply::Operation::Engine::Halt) { |halt|
+          expect(halt).to have_attributes(code: :not_a_form, detail: 'not an application form (too_few_fields)')
+        }
+        expect(apply.reload.fields).to be_nil
+      end
+    end
+  end
+
   describe '.input_digest' do
     it 'is stable for the same match and schema' do
       expect(described_class.input_digest(ctx)).to eq(described_class.input_digest(ctx))

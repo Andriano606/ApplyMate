@@ -16,9 +16,15 @@ Apply::Operation::Engine::Context = Data.define(:apply, :attempt, :run_token, :d
 
 # Reopened (not `Data.define do … end`) so methods and docs read like a normal class.
 class Apply::Operation::Engine::Context
-  # Longest a single browser session may live; shorter than browserd's LEASE_TTL_S = 600, so the client
-  # gives up (DeadlineExceeded) before browserd reaps the lease under it.
+  # Longest a single browser session may live with a fast AI. A slow AI (CallAi.allowance) adds SCOPE_AI_CALLS calls'
+  # worth of time. Session.open asks browserd for a lease TTL of that deadline plus a margin, and caps its own deadline
+  # by the lease's expires_at, so the client always gives up (DeadlineExceeded) before browserd reaps the lease under it.
   SCOPE_DEADLINE = 8.minutes
+  # AI calls one browser scope is sized for beyond SCOPE_DEADLINE when the AI is slow (Navigator turns in the survey,
+  # follow-up answers / field recovery / verify corroboration in the submit scope).
+  SCOPE_AI_CALLS = 4
+  # AI calls a whole run is sized for beyond Apply::RUN_DEADLINE (StartContext): both scopes.
+  RUN_AI_CALLS = 2 * SCOPE_AI_CALLS
   # At most this many platform switches per run (generic -> ashby counts): redetection after every page change
   # cannot flip-flop between two adapters forever.
   MAX_PLATFORM_SWITCHES = 2
@@ -38,14 +44,22 @@ class Apply::Operation::Engine::Context
   # canonical_unwrapped  platform keys whose canonical_form_url ReachForm already opened in this session (at most
   #                  one canonical navigation per platform per scope; reset with the session)
   # claim_mark       NetTracker mark taken right after the submit claim
+  # submit_baseline  [String] page signals that held before the submit click (Engine::SubmitBaseline); VerifySubmit
+  #                  never counts them
   # http             the run's ImpersonateHttp (built once)
   # step_record      the ApplyStep row of the running step (set by the Runner; Stage::Submit attaches the
   #                  before_submit artifact to it)
+  # followup_calls   wizard pages that brought new fields this run (Engine::AnswerFollowups; capped at
+  #                  AnswerFollowups::MAX_FOLLOWUP_ANSWER_CALLS)
+  # wizard_page      the wizard page the submit scope is on (1, advanced by Stage::FillFields on every Next click);
+  #                  Engine::ClassifyAdvance tells a stored follow-up field still ahead from one already behind
   Scratch = Struct.new(:session, :scope, :scope_deadline, :platform, :match, :evidence, :schema, :fields, :form_root,
                        :form_url, :trace, :platform_switches, :claim_mark, :artifacts_count, :consent_clicks, :http,
-                       :canonical_unwrapped, :step_record, keyword_init: true) do
+                       :canonical_unwrapped, :step_record, :submit_baseline, :followup_calls, :wizard_page,
+                       keyword_init: true) do
     def self.fresh
-      new(trace: [], platform_switches: 0, artifacts_count: 0, consent_clicks: 0, canonical_unwrapped: [])
+      new(trace: [], platform_switches: 0, artifacts_count: 0, consent_clicks: 0, canonical_unwrapped: [],
+          followup_calls: 0, wizard_page: 1)
     end
   end
 
@@ -64,9 +78,14 @@ class Apply::Operation::Engine::Context
     [ seconds, remaining ].min.clamp(0, nil)
   end
 
-  # The deadline a browser Session gets: its own budget, never past the run's deadline.
+  # The deadline a browser Session gets: its own budget (plus the slow-AI allowance), never past the run's deadline.
   def scope_deadline
-    [ Time.current + SCOPE_DEADLINE, deadline_at ].min
+    [ Time.current + SCOPE_DEADLINE + ai_allowance(SCOPE_AI_CALLS), deadline_at ].min
+  end
+
+  # Extra time a budget planned around `calls` AI calls needs with this apply's AI integration (0 for a fast API).
+  def ai_allowance(calls)
+    Apply::Operation::Engine::CallAi.allowance(apply.ai_integration, calls).seconds
   end
 
   def fenced?
@@ -162,14 +181,6 @@ class Apply::Operation::Engine::Context
 
   def platform_known?
     match&.known? || apply.platform_known?
-  end
-
-  # Can the engine reach this application form? A known platform, or a generic match with a `probable` known platform
-  # (a sub-threshold signal hit, e.g. Preply's ?ashby_jid= at the HTTP level) that the rendered landing page may
-  # confirm (Engine::ReachForm's landing path). Phase 3a has no Navigator, so any other unknown platform cannot be
-  # reached and keeps the legacy external path; phase 3b drops this predicate.
-  def platform_reachable?
-    platform_known? || match&.probable.present?
   end
 
   # Where a survey of a still unidentified platform starts: the final URL of the HTTP redirect walk (applies.landing_url,
