@@ -1387,6 +1387,12 @@ most `MAX_WIZARD_PAGES` pages (≤ 5 Next clicks), finite fields per page,
 ≤ `MAX_FOLLOWUP_ANSWER_CALLS` follow-up AI calls (each also counted by `CallAi`'s per-attempt budget), the scope
 deadline over all of it. step_result `{ filled: n, unfilled: [ids], pages: n }`.
 
+Text read-back (`Widget::Text#accepts?`, inherited by ContentEditable) is the one equality for text-like controls:
+whitespace-normalised exact match, except a masked number — a `tel` / `phone` field, or a value of only digits and mask
+separators — which is compared by its digits: the site's mask may add spaces, dashes, dots, parentheses, a `+` and the
+dial code shown beside the input (`field.prefix` "+380" → "380"), but every typed digit must be there, in order, and
+nothing else (fixture `spec/support/fixture_site/pages/generic/masked_phone.html`, the real Hurma markup).
+
 Adding a driver: a class under `apply/widget/` with `handles?(field)` and `write`, override `read` /
 `expected_display` / `accepts?` / `fallback_write` / `settle_kind` / `approximate_pick` as needed, add it to
 `Registry::DRIVERS` at its precedence (`registry_spec` checks every file is listed), and a `:browser` spec on a fixture
@@ -1615,7 +1621,7 @@ error_detail, step result / trace through `RedactTree`, artifact HTML). Nil-safe
 | `csrfmiddlewaretoken= sessionid= code=` values (`SESSION_PARAM`) | `name=[REDACTED]` |
 | the apply's `source_profile.session_id`, `user.email` (>= 6 chars) | `{{fact.session_id}}`, `{{fact.email}}` |
 | any other email | `{{email}}` |
-| phone-like digit runs (`\+?\d[\d\s().-]{8,}\d`) | `{{phone}}` (also hits long ids / dates, on purpose) |
+| phone-like digit runs (`Redact::PHONE`) | `{{phone}}` (also hits long ids; dates and ISO-8601 timestamps — `Redact::DATE`, a 19xx/20xx year with a valid month and day, optional time and zone — are matched first and kept, so a trace's `at` survives) |
 
 ## User operations
 
