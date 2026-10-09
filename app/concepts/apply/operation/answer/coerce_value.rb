@@ -6,6 +6,9 @@
 #                  (a field with dynamic or unknown options takes the text as given)
 #   checkbox       true / false from yes / true / 1 / так ...
 #   number, range  a number
+#   salary         a plain number for a text input too (#salary): "500$ (gross)" -> "500", "1 500 USD" -> "1500",
+#                  "2k" -> "2000"; the currency belongs to its own control. Sites validate it as a number (PeopleForce
+#                  answered 422 "це не число" to "500$ (gross)").
 #   anything else  text, cut to max_length; after a fixed dial-code prefix ("+380") an international phone is typed
 #                  without that code (#after_prefix)
 # A required field that ends up blank (or an unticked checkbox) is an error too. result[:error] = the reason, nil when
@@ -31,6 +34,7 @@ class Apply::Operation::Answer::CoerceValue < ApplyMate::Operation::Base
     return option(value) if field.option_kind? && field.options.is_a?(Array)
     return checkbox(value) if field.kind == 'checkbox'
     return number(value) if %w[number range].include?(field.kind)
+    return salary(value) if field.semantic == 'salary' && %w[text textarea].include?(field.kind)
 
     text(value)
   end
@@ -61,6 +65,19 @@ class Apply::Operation::Answer::CoerceValue < ApplyMate::Operation::Base
     number.finite? && number == number.to_i ? number.to_i : number
   rescue ArgumentError, TypeError
     reject('is not a number')
+  end
+
+  # The first amount in the text: digits with space / thin-space / comma / dot thousand separators, an optional decimal
+  # part and a "k" (thousand) suffix. Whole numbers are written without separators ("1500"), fractions with a dot.
+  SALARY_AMOUNT = /(\d{1,3}(?:[\s\u00a0\u202f,.]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(k|к|тис)?/i
+
+  def salary(value)
+    match = SALARY_AMOUNT.match(value.to_s)
+    return reject('is not a number') if match.nil?
+
+    amount = BigDecimal(match[1].gsub(/[^\d]/, '') + (match[2] ? ".#{match[2]}" : ''))
+    amount *= 1000 if match[3]
+    amount.frac.zero? ? amount.to_i.to_s : amount.to_s('F')
   end
 
   def text(value)

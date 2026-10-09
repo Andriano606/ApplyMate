@@ -1,6 +1,7 @@
 // Read-back of one control after a write (widgets verify every write with it). `displayed` is what the person sees:
 // the selected option text, the contenteditable text, a combobox chip (react-select singleValue / multiValue, chip
 // classes) inside the field root, the file names, or the input value. `invalid` = aria-invalid or :invalid;
+// `marked_invalid` = an error class on the control (INVALID_CLASS);
 // `error_text` = alert / live-region / aria-describedby text inside the field root; `pressed` = aria-pressed or
 // aria-checked as written; `expanded` = aria-expanded="true" (a combobox whose menu is still open).
 (el) => {
@@ -57,6 +58,12 @@
   else if (buttonish) displayed = text(fieldRoot || el.parentElement || el);
   else displayed = value;
 
+  // A framework's error class on the control (Bootstrap is-invalid, is-error, has-error ...): server-side validation (a
+  // 422 re-render) often sets only that. Reported apart as `marked_invalid`: a server-rendered class can outlive a
+  // corrected value, so a write's read-back (`invalid`) must not depend on it; the post-submit evidence uses both.
+  const INVALID_CLASS =
+    /(^|[\s_-])(is-invalid|invalid|is-error|has-error|error)(?=$|[\s_-])/i;
+  const markedInvalid = INVALID_CLASS.test(el.getAttribute('class') || '');
   let invalid = el.getAttribute('aria-invalid') === 'true';
   try {
     invalid = invalid || el.matches(':invalid');
@@ -92,6 +99,7 @@
     text: tag === 'select' ? text(el.selectedOptions[0]) : text(el),
     displayed,
     invalid,
+    marked_invalid: markedInvalid,
     error_text: errorText || null,
     pressed,
     expanded: attr('aria-expanded') === 'true',

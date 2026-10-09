@@ -7,6 +7,28 @@ RSpec.describe Apply::Operation::Answer::CoerceValue do
     described_class.call(field: answer_field(**field), value:)
   end
 
+  describe 'salary in a text input (PeopleForce answered 422 "це не число" to "500$ (gross)")' do
+    {
+      '500$ (gross)' => '500', '1 500 USD' => '1500', '2,500' => '2500', '3000' => '3000', '2k' => '2000',
+      '2.5k' => '2500', 'від 1200 до 1500 $' => '1200', '1500.50' => '1500.5'
+    }.each do |given, expected|
+      it "types #{given.inspect} as #{expected.inspect}" do
+        outcome = coerce(given, kind: 'text', semantic: 'salary')
+
+        expect(outcome.model).to eq(expected)
+        expect(outcome[:error]).to be_nil
+      end
+    end
+
+    it 'rejects a salary answer without an amount' do
+      expect(coerce('договірна', kind: 'text', semantic: 'salary')[:error]).to eq('is not a number')
+    end
+
+    it 'leaves other text fields alone' do
+      expect(coerce('500$ (gross)', kind: 'text', semantic: 'other').model).to eq('500$ (gross)')
+    end
+  end
+
   it 'replaces an option answer by the matched option label' do
     outcome = coerce('yes', kind: 'radio_group', options: AnswerHelpers::YES_NO)
 

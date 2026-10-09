@@ -91,9 +91,17 @@ semantics:
   salary:
     - salary
     - compensation
+    - (expected|desired) (pay|rate)
+    - pay expectation
+    - rate expectation
     - зарплат
     - заробітн
     - оплат[аи] праці
+    - компенсаці
+    - оклад
+    - винагород
+    - вознагражден
+    - (бажан|очікуван)[аиа]? ставк
   first_name:
     - ^(your |legal |preferred )?(first|given) name$
     - ^(ваше )?ім['’ʼ]я$

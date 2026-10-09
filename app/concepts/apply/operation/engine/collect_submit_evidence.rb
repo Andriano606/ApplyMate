@@ -14,8 +14,9 @@
 #   success_dom   the given success_selectors (platform success_evidence[:selectors]) present in the form root's frame
 #   failure_dom   the given failure_selectors present there
 #   form_present  the form root is still there and still holds controls
-#   field_errors  { field id => error text or 'invalid' } of known fields whose read-back is invalid (aria-invalid or
-#                 :invalid). An error text alone is not enough: read_value.js gathers every live region and
+#   field_errors  { field id => error text or 'invalid' } of known fields whose read-back is invalid (aria-invalid,
+#                 :invalid or an error class on the control - read_value.js `marked_invalid`, e.g. Bootstrap
+#                 is-invalid). An error text alone is not enough: read_value.js gathers every live region and
 #                 aria-describedby node of the field, which also holds hints and upload notices ("CV.pdf uploaded").
 #                 Only while the form is present; at most MAX_FIELD_PROBES fields probed.
 #
@@ -60,7 +61,7 @@ class Apply::Operation::Engine::CollectSubmitEvidence < ApplyMate::Operation::Ba
   def field_errors(ctx, session)
     Array(ctx.fields).select(&:target).first(MAX_FIELD_PROBES).each_with_object({}) do |field, errors|
       read = session.probe(:read_value, field.target)
-      errors[field.id] = read['error_text'].presence || 'invalid' if read['invalid']
+      errors[field.id] = read['error_text'].presence || 'invalid' if read['invalid'] || read['marked_invalid']
     rescue ApplyMate::Client::Browser::TargetNotFound
       next
     end
