@@ -40,6 +40,9 @@ servers:
     options:
       ulimit:
         - "nofile=65536:65536"
+      # Hard cap so a runaway job gets this container OOM-killed instead of freezing the
+      # whole Pi (no swap; shared with taxmate and the Home Assistant VM).
+      memory: "3g"
     env:
       clear:
         SQ_QUEUES: "*"
@@ -92,6 +95,9 @@ accessories:
         - POSTGRES_PASSWORD
     directories:
       - data:/var/lib/postgresql/data
+    options:
+      # Same reason as the worker's cap. Applied on `bin/kamal accessory reboot db -d staging`.
+      memory: "2g"
 
   minio:
     # minio/minio is gone from Docker Hub — pgsty community build (amd64 + arm64).

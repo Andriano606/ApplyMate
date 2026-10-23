@@ -1,16 +1,47 @@
 # frozen_string_literal: true
 
 require 'async'
+require 'async/barrier'
+require 'async/semaphore'
+require 'kernel/sync'
 require 'set'
 
+# Downloads the public proxy lists and streams the parsed candidates to `on_batch` in
+# slices of BATCH_SIZE, so neither Ruby nor Postgres ever holds a whole dump at once.
+#
+# The three gfpcom dumps alone are ~560–600k lines each (~1.75M together). Collecting all
+# of them into one array and inserting it in a single statement ran the Raspberry Pi out of
+# memory every night and froze the whole host. Every run is now bounded:
+#
+#   max_per_list   — each list contributes a random sample of at most ~this many entries
+#                    (Bernoulli, p = max_per_list / lines). Taking the first N instead would
+#                    pick the same alphabetically-first IPs of a sorted dump every night.
+#   max_candidates — hard cap on unique candidates per run; once hit, the remaining lines
+#                    and lists are skipped.
+#   max_depth      — levels of catalog links (a list linking to other lists) followed.
+#   max_urls       — lists fetched in total, roots included.
+#
+# Model: the number of unique candidates handed to `on_batch`.
 class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
   SCHEMED_PROXY_URI  = /\A(socks5h|socks5a|socks5|https?)\z/i.freeze
-  FETCH_CONCURRENCY  = Integer(ENV.fetch('FETCH_PROXIES_FETCH_CONCURRENCY', '50'))
+  # Each fetching fiber holds a whole list body (~15 MB for a gfpcom dump) while parsing,
+  # so this bounds peak memory as well as sockets. One per root list.
+  FETCH_CONCURRENCY  = Integer(ENV.fetch('FETCH_PROXIES_FETCH_CONCURRENCY', '6'))
   FETCH_OPEN_TIMEOUT = 10
   FETCH_READ_TIMEOUT = 60
   FETCH_RETRIES      = 2
+  # Proxy::Job::Validate probes ~2000 proxies every 5 minutes (~576k/day), so a 200k
+  # nightly intake is fully probed within the day.
+  MAX_CANDIDATES     = Integer(ENV.fetch('FETCH_PROXIES_MAX_CANDIDATES', '200000'))
+  MAX_PER_LIST       = Integer(ENV.fetch('FETCH_PROXIES_MAX_PER_LIST', '50000'))
+  MAX_DEPTH          = Integer(ENV.fetch('FETCH_PROXIES_MAX_DEPTH', '1'))
+  MAX_URLS           = Integer(ENV.fetch('FETCH_PROXIES_MAX_URLS', '50'))
+  BATCH_SIZE         = 5_000
+  # Parsing a 600k-line dump is CPU-bound; hand the reactor back periodically so the other
+  # lists' downloads are not starved into read timeouts.
+  YIELD_EVERY_LINES  = 10_000
 
   LIST_URLS = [
     'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/socks5.txt',
@@ -21,62 +52,105 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
     'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/http.txt'
   ].freeze
 
-  def perform!(**)
-    proxies = log('Fetch') { fetch_from_sources }
-    unique  = proxies.uniq { |p| [ p[:protocol], p[:host], p[:port] ] }.size
-    log("Parsed #{unique}/#{proxies.size} unique candidates")
-    self.model = proxies
+  def perform!(on_batch:, urls: LIST_URLS, max_candidates: MAX_CANDIDATES, max_per_list: MAX_PER_LIST,
+               max_depth: MAX_DEPTH, max_urls: MAX_URLS, **)
+    @on_batch       = on_batch
+    @max_candidates = max_candidates
+    @max_per_list   = max_per_list
+    @max_depth      = max_depth
+    @max_urls       = max_urls
+    @seen           = Set.new # "protocol://host:port" of every candidate handed out this run
+    @visited        = Set.new
+    @buffer         = []
+
+    log('Fetch') { crawl(urls) }
+    log("Collected #{@seen.size} unique candidates from #{@visited.size} lists")
+    self.model = @seen.size
   end
 
   private
 
-  def fetch_from_sources
-    fetch_queue = Async::Queue.new
-    visited     = Set.new
-    proxies     = []
-    pending     = 0
+  def crawl(urls)
+    Sync do
+      @barrier   = Async::Barrier.new
+      @semaphore = Async::Semaphore.new(FETCH_CONCURRENCY)
+      # One writer at a time: under fiber isolation every fiber in a query holds its own
+      # pooled connection, so this keeps the run to a single extra connection.
+      @db        = Async::Semaphore.new(1)
 
-    enqueue = ->(url) {
-      return if url.blank? || visited.include?(url)
-      visited.add(url)
-      pending += 1
-      fetch_queue.enqueue(url)
-    }
+      urls.each { |url| schedule(url, depth: 0) }
 
-    LIST_URLS.each { |url| enqueue.call(url) }
-
-    Async do
-      FETCH_CONCURRENCY.times.map do
-        Async do
-          loop do
-            url = fetch_queue.dequeue
-            break unless url
-
-            body     = fetch_body(url)
-            new_urls = []
-
-            if body
-              ingest_body(body, default_protocol: infer_protocol(url)) do |entry|
-                if entry[:type] == :catalog
-                  new_urls << entry[:url].to_s
-                elsif entry[:host].present? && entry[:port].present? && entry[:protocol].present?
-                  proxies << entry
-                end
-              end
-            end
-
-            # Increment pending for children BEFORE decrementing for self so it never
-            # hits zero while work still exists.
-            new_urls.each { |u| enqueue.call(u) }
-            pending -= 1
-
-            FETCH_CONCURRENCY.times { fetch_queue.enqueue(nil) } if pending.zero?
-          end
-        end
-      end.each(&:wait)
+      begin
+        # Lists scheduled while waiting (catalog links) join the barrier, so this returns
+        # only once every list is done. A failed list (DB error) re-raises here.
+        @barrier.wait
+      ensure
+        @barrier.cancel
+        flush # batches parsed before a failure are still persisted
+      end
     end
+  end
 
-    proxies
+  # Spawns the fetch without waiting for a slot: a list scheduling its catalog children
+  # while holding a slot would otherwise deadlock once every slot did the same.
+  def schedule(url, depth:)
+    return if url.blank? || @visited.include?(url) || @visited.size >= @max_urls
+
+    @visited.add(url)
+    @barrier.async { @semaphore.acquire { ingest_list(url, depth) } }
+  end
+
+  def ingest_list(url, depth)
+    return if full?
+
+    body = fetch_body(url)
+    return unless body
+
+    sample   = [ @max_per_list.fdiv(body.count("\n") + 1), 1.0 ].min
+    protocol = infer_protocol(url)
+    task     = Async::Task.current
+
+    body.each_line.with_index(1) do |raw, i|
+      break if full?
+      task.yield if (i % YIELD_EVERY_LINES).zero?
+
+      parse_line(raw, default_protocol: protocol) do |entry|
+        if entry[:type] == :catalog
+          schedule(entry[:url].to_s, depth: depth + 1) if depth < @max_depth
+        elsif rand < sample
+          add(entry)
+        end
+      end
+    end
+  end
+
+  def full?
+    @seen.size >= @max_candidates
+  end
+
+  def add(entry)
+    return unless @seen.add?("#{entry[:protocol]}://#{entry[:host]}:#{entry[:port]}")
+
+    @buffer << entry
+    flush if @buffer.size >= BATCH_SIZE
+  end
+
+  # The buffer is swapped yield-free before the write, so entries parsed by other fibers
+  # meanwhile land in the fresh one. A write that does not complete — it raised, or the
+  # fiber was cancelled after a sibling failed (Async::Cancel is not a StandardError) —
+  # puts its batch back so the final flush in `crawl` retries it.
+  def flush
+    return if @buffer.empty?
+
+    batch   = @buffer
+    @buffer = []
+    written = false
+    @db.acquire do
+      ActiveRecord::Base.connection_pool.with_connection { @on_batch.call(batch) }
+      written = true
+    end
+  ensure
+    @buffer.concat(batch) if batch && !written
   end
 
   def fetch_body(url)
@@ -129,12 +203,6 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
     'http'
   end
 
-  def ingest_body(body, default_protocol:)
-    body.each_line do |raw|
-      parse_line(raw, default_protocol: default_protocol) { |parsed| yield parsed }
-    end
-  end
-
   def parse_line(raw, default_protocol:)
     line = raw.to_s.split(',,').first.to_s.strip
     return if line.empty? || line.start_with?('#')
@@ -184,15 +252,16 @@ class Proxy::Operation::FetchCandidates < ApplyMate::Operation::Base
       # fall through to host:port
     end
 
-    return unless trimmed.match?(
+    # `match`, not `match?` — the latter does not set the captures read below.
+    match = trimmed.match(
       /\A(?<host>(?:\d{1,3}\.){3}\d{1,3}|[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?):(?<port>\d{1,5})\z/i
     )
+    return unless match
 
-    host = Regexp.last_match(:host)
-    port = Regexp.last_match(:port).to_i
+    port = match[:port].to_i
     return unless port.between?(1, 65_535)
 
-    { host: host, port: port, protocol: default_protocol }
+    { host: match[:host], port: port, protocol: default_protocol }
   end
 
   def normalize_scheme(scheme)

@@ -99,10 +99,14 @@ Without the guard, `update_column` on a destroyed record raises `ActiveRecord::R
 
 | Class | Responsibility |
 |-------|---------------|
-| `Proxy::Job::FetchProxies` | Orchestrator — calls the three operations in sequence |
-| `Proxy::Operation::FetchCandidates` | Downloads public proxy lists, parses candidates |
-| `Proxy::Operation::ValidateCandidates` | Async fiber validation (Phase 1 + Phase 2); receives `candidates:` |
-| `Proxy::Operation::PersistProxies` | Upserts valid proxies; receives `proxies:` |
+| `Proxy::Job::FetchProxies` | Thin job (`limits_concurrency`, 1 h) → `Proxy::Operation::FetchProxies` |
+| `Proxy::Operation::FetchProxies` | Orchestrator — fetch streaming batches into persist, then prune |
+| `Proxy::Operation::PruneProxies` | Deletes proxies older than 3 days that work for no source |
+| `Proxy::Operation::FetchCandidates` | Downloads public proxy lists; bounded sample streamed to `on_batch:` in 5 000-row slices |
+| `Proxy::Operation::PersistProxies` | `insert_all` (ON CONFLICT DO NOTHING) in 5 000-row slices; receives `proxies:` |
+| `Proxy::Operation::Validate` | Probes untested/working proxies per source (`Proxy::Job::Validate`, every 5 min) |
+
+See `.ai/docs/fetch_proxies.md` for limits and the memory rationale.
 
 ## `https` in proxy lists means HTTP CONNECT, not TLS
 

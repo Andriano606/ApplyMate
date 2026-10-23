@@ -32,7 +32,26 @@ RSpec.describe Proxy::Operation::PersistProxies, type: :operation do
       expect(proxy.updated_at).to eq(now)
     end
 
-    it "returns the number of persisted records" do
+    it "returns the number of inserted records" do
+      expect(perform.model).to eq(1)
+    end
+  end
+
+  context "with more proxies than one batch" do
+    let(:proxies) do
+      Array.new(described_class::BATCH_SIZE + 1) { |i| proxy_attrs(host: "10.0.#{i / 256}.#{i % 256}") }
+    end
+
+    it "inserts all of them" do
+      expect { perform }.to change(Proxy, :count).by(described_class::BATCH_SIZE + 1)
+    end
+  end
+
+  context "with duplicates in the input" do
+    let(:proxies) { [ proxy_attrs(host: "5.5.5.5"), proxy_attrs(host: "5.5.5.5") ] }
+
+    it "inserts the proxy once" do
+      expect { perform }.to change(Proxy, :count).by(1)
       expect(perform.model).to eq(1)
     end
   end
@@ -49,6 +68,10 @@ RSpec.describe Proxy::Operation::PersistProxies, type: :operation do
 
     it "does not insert a duplicate row" do
       expect { perform }.not_to change(Proxy, :count)
+    end
+
+    it "does not count it as inserted" do
+      expect(perform.model).to eq(0)
     end
 
     it "leaves created_at and updated_at untouched" do
