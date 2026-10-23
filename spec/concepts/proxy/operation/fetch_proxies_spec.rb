@@ -23,19 +23,4 @@ RSpec.describe Proxy::Operation::FetchProxies, type: :operation do
 
     expect(perform.model).to eq(2)
   end
-
-  it "prunes stale proxies after fetching" do
-    stale = create(:proxy, created_at: (Proxy::Operation::PruneProxies::PRUNE_AFTER + 1.day).ago)
-
-    perform
-
-    expect(Proxy.exists?(stale.id)).to be(false)
-  end
-
-  it "persists the fetched proxies even when pruning fails" do
-    allow(Proxy::Operation::PruneProxies).to receive(:call).and_raise(ActiveRecord::Deadlocked)
-
-    expect { perform }.to raise_error(ActiveRecord::Deadlocked)
-    expect(Proxy.count).to eq(3)
-  end
 end

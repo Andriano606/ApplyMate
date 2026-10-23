@@ -131,7 +131,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/models_and_db.md` — nullable FK patterns, inverse associations for multiple FKs to the same table, uniqueness errors on `:base`.
 - `.ai/docs/ruby_style.md` — project Ruby style rules (no endless methods, etc.).
 - `.ai/docs/proxy.md` — proxy model fail tracking (`increment_fail!` / `reset_fail!`), `https`→`http` normalization gotcha, 2xx/3xx reachability rule.
-- `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: prune → bounded fetch streamed into batched persist (no validation), why every limit exists (the run used to OOM the Pi), per-list sampling, stop conditions, catalog URL recursion caps, protocol inference, persist insert semantics, pruning. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, `Proxy::Operation::PersistProxies`, or `Proxy::Operation::PruneProxies`.**
+- `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: bounded fetch streamed into batched persist (no validation), why every limit exists (the run used to OOM the Pi), per-list sampling, stop conditions, catalog URL recursion caps, protocol inference, persist insert semantics, why proxies are never pruned. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
 - `.ai/docs/sync_vacancies.md` — `Vacancy::Operation::SyncVacancies` internals: fiber count per source, stop conditions, empty-page confirmation logic (LAST_PAGE_CONFIRMATIONS), boundary narrowing, shared data structures. **Read before modifying the vacancy sync pipeline.**
 
 ## Delegation to Subagents
