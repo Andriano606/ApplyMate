@@ -40,7 +40,7 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   # The `sh-info` line (city / remote / office) is prepended as its own paragraph so
   # it survives the narrower scope.
   # SyncVacancies stores this in `description_html` and derives the plain-text
-  # `description` (Elasticsearch, AI prompts, card preview) from it.
+  # `description` (Elasticsearch, card preview) from it.
   def fetch_description(url)
     response = via_proxy { @client.get(url) }
 
@@ -57,35 +57,6 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     # line is already part of the markup and would otherwise appear twice.
     info = section && doc.at_css('div.sh-info')&.text&.squish
     [ info.presence && "<p>#{ERB::Util.html_escape(info)}</p>", content_html(node) ].compact.join
-  end
-
-  def fetch_details(url)
-  end
-
-  def form_selector
-    'form#replied-id'
-  end
-
-  def fetch_applyble(url, session_id:)
-    headers = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
-    html    = @client.get(url, headers:)&.body
-    return false if html.blank?
-
-    doc = Nokogiri::HTML(html)
-    doc.at_css('a.replied-external').present? || doc.at_css('a#reply-btn-id').present?
-  end
-
-  def fetch_apply_type(url, session_id:)
-    headers = session_id.present? ? { 'Cookie' => "sessionid=#{session_id}" } : {}
-    html    = @client.get(url, headers:)&.body
-    return nil if html.blank?
-
-    doc = Nokogiri::HTML(html)
-    if (link = doc.at_css('a.replied-external'))
-      { type: 'external', external_url: link['href'] }
-    elsif doc.at_css('a#reply-btn-id')
-      { type: 'internal', external_url: nil }
-    end
   end
 
   def fetch_listing(page:)
