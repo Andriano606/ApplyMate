@@ -1,5 +1,7 @@
 # ApplyMate
 
+Банк вакансій: застосунок через проксі швидко та ефективно підтримує актуальний список вакансій з різних платформ (DOU, Djinni, …) і дає шукати по ньому через Elasticsearch.
+
 ## Local Development
 
 | Service        | URL                        | Notes                        |
@@ -35,9 +37,6 @@ Deployed via [Kamal](https://kamal-deploy.org/).
 | MinIO S3 API   | [http://192.168.50.155:9002](http://192.168.50.155:9002)           | S3-compatible endpoint         |
 | MinIO Console  | [http://192.168.50.155:9003](http://192.168.50.155:9003)           | Web UI for bucket management   |
 | Elasticsearch  | [http://192.168.50.155:9201](http://192.168.50.155:9201)           | REST API                       |
-| Chrome noVNC   | [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html) | Browser-based VNC UI  |
-| Chrome VNC     | `192.168.50.155:5901`                                             | VNC client (RealVNC/TigerVNC)  |
-| Chrome CDP     | `192.168.50.155:9222`                                             | Chrome DevTools Protocol       |
 
 ### Prerequisites
 
@@ -133,12 +132,6 @@ bin/kamal accessory reboot minio -d staging
 
 # Логи MinIO
 bin/kamal accessory logs minio -d staging
-
-# Перезапуск Chrome VNC
-bin/kamal accessory reboot chrome_vnc -d staging
-
-# Логи Chrome VNC
-bin/kamal accessory logs chrome_vnc -d staging -f
 ```
 
 ### MinIO (staging)
@@ -162,57 +155,6 @@ ssh andrii@192.168.50.155 "sudo ufw allow from 192.168.31.0/24 to any port 9002 
 **Доступ:**
 - S3 API: `http://192.168.50.155:9002`
 - Веб-консоль: `http://192.168.50.155:9003`
-
-### Chrome VNC (staging)
-
-Chrome з VNC-доступом для автоматизації та дебагу скрейпінгу.
-Dockerfile: `docker/chrome_vnc/Dockerfile`.
-
-Архітектура всередині контейнера:
-- **Xvfb** — віртуальний дисплей
-- **Fluxbox** — мінімальний window manager
-- **x11vnc** — VNC-сервер (порт 5900)
-- **websockify + noVNC** — веб-інтерфейс для VNC (порт 6080)
-- **Chromium** — браузер з CDP на `127.0.0.1:19222`
-- **nginx** — проксі на порт 9222 → 19222, переписує `Host: localhost` та `webSocketDebuggerUrl` у відповідях, щоб Ferrum міг підключитися з worker-контейнера
-
-Застосунок підключається через `ApplyMate::Client::Browser` → `CHROME_HOST=chrome-vnc` (мережевий аліас контейнера) → nginx → Chromium CDP.
-
-**Перший запуск:**
-
-```bash
-# 0. Одноразово — створити multi-platform builder (якщо ще не створений)
-docker buildx create --name multiarch --driver docker-container --use
-# Якщо вже існує:
-docker buildx use multiarch
-
-# 1. Збудувати мульти-арх образ і запушити (amd64 + arm64 для RPi)
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t andriano606/apply_mate_chrome_vnc:latest \
-  --push \
-  docker/chrome_vnc
-
-# 2. Підняти контейнер
-bin/kamal accessory boot chrome_vnc -d staging
-```
-
-**Доступ:**
-- noVNC (веб): [http://192.168.50.155:6081/vnc.html](http://192.168.50.155:6081/vnc.html)
-- VNC клієнт: `192.168.50.155:5901`
-- Chrome CDP: `192.168.50.155:9222`
-
-**Після зміни Dockerfile або entrypoint.sh:**
-
-```bash
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t andriano606/apply_mate_chrome_vnc:latest \
-  --push \
-  docker/chrome_vnc
-
-bin/kamal accessory reboot chrome_vnc -d staging
-```
 
 ### Credentials
 

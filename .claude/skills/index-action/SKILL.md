@@ -5,7 +5,7 @@ description: Instructions for creating a full index action cycle (operation, com
 
 # Create a full index action
 
-An index action consists of several pieces that must all be created together. Use the resource name (e.g. `Apply`, `Vacancy`) as `<Resource>` throughout.
+An index action consists of several pieces that must all be created together. Use the resource name (e.g. `Proxy`, `Vacancy`) as `<Resource>` throughout.
 
 ## 1. Operation
 

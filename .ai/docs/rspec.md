@@ -15,23 +15,28 @@ All specs with `type: :operation` automatically include the `"with shared operat
 Override with `let(:params) { { ... } }` or `let(:current_user) { create(:user) }`.
 
 ```ruby
-RSpec.describe SourceProfile::Operation::Index, type: :operation do
+RSpec.describe HiddenVacancy::Operation::Create, type: :operation do
   let(:current_user) { create(:user) }
+  let(:vacancy)      { create(:vacancy, source: create(:source)) }
+  let(:params)       { { vacancy_id: vacancy.hashid } }
 
-  it "returns source profiles scoped to user" do
+  it "hides the vacancy for the user" do
     expect(result).to be_success
-    expect(model).to all(satisfy { |sp| sp.user == current_user })
+    expect(model).to be_persisted
+    expect(current_user.hidden_vacancies.pluck(:vacancy_id)).to eq([ vacancy.id ])
   end
 
-  context "with pagination" do
-    let(:params) { { page: "2" } }
+  context "when nobody is signed in" do
+    let(:current_user) { nil }
 
-    it "returns page 2" do
-      expect(model.current_page).to eq(2)
+    it "is not authorized" do
+      expect { result }.to raise_error(Pundit::NotAuthorizedError)
     end
   end
 end
 ```
+
+Real requests deliver `ActionController::Parameters`, not a Hash — wrap `params` in `ActionController::Parameters.new(...)` when the operation relies on parameter methods (see `spec/concepts/vacancy/operation/index_spec.rb`).
 
 ## Elasticsearch Specs
 
@@ -74,15 +79,16 @@ end
 The `rails_helper.rb` swaps the queue adapter to `:test` for `type: :job` specs:
 
 ```ruby
-RSpec.describe Apply::Job::Apply, type: :job do
+RSpec.describe Vacancy::Job::SyncVacancies, type: :job do
   it "enqueues without error" do
-    expect { described_class.perform_later(apply.id) }
+    expect { described_class.perform_later }
       .to have_enqueued_job(described_class)
   end
 
-  it "runs inline" do
-    perform_enqueued_jobs { described_class.perform_now(apply.id) }
-    expect(apply.reload.status).to eq("completed")
+  it "runs the operation inline" do
+    allow(Vacancy::Operation::SyncVacancies).to receive(:call)
+    perform_enqueued_jobs { described_class.perform_now }
+    expect(Vacancy::Operation::SyncVacancies).to have_received(:call)
   end
 end
 ```
@@ -97,7 +103,6 @@ FactoryBot.define do
     name     { "Test Source" }
     base_url { "https://example.com" }
     scraper  { "ApplyMate::Scraper::Djinni" }
-    # no `client` — the Source model hardcodes the client in build_scraper
 
     after(:build) do |source|
       source.logo.attach(
@@ -112,7 +117,7 @@ end
 
 **Stale factory attributes cause `NoMethodError: undefined method 'x=' for an instance of Model`** — the column was dropped but the factory still sets it. Fix: remove the attribute from the factory.
 
-**Check enum values before using them in specs** — `Apply` has no `:pending` status. Use an actual value from the model's enum declaration (e.g. `:generating_cv`). Passing an invalid symbol raises `ArgumentError: 'x' is not a valid status`.
+**Check enum values before using them in specs** — use an actual value from the model's enum declaration; passing an invalid symbol raises `ArgumentError: 'x' is not a valid status`.
 
 Use `sequence` for columns that must be unique:
 
@@ -123,200 +128,45 @@ factory :vacancy do
 end
 ```
 
-## Testing Apply Pipeline Operations
+## Scraper and Client Specs
 
-`Apply::Operation::*` classes inherit `Apply::Operation::Base` and call `skip_authorize` internally, so invoke them without `current_user:`:
-
-```ruby
-described_class.call(apply:)
-```
-
-`perform!` sets `start_status` at the top, calls `run!`, then sets `success_status` (if non-nil). After calling:
-- `apply.reload.status` reflects the last status set by the operation
-- `apply.reload.error` is `nil` on success
-
-Some operations receive extra keyword args via `add_step` options (e.g. `prompt_class:`, `schema_class:`). Pass them explicitly when calling directly:
+Scrapers take `(source, client)`, so pass an `instance_double` of the client class the scraper declares and stub only `get`/`post` (`spec/concepts/apply_mate/scraper/dou_spec.rb`):
 
 ```ruby
-described_class.call(
-  apply:,
-  prompt_class:  Apply::Ai::Prompt::FillForm,
-  schema_class:  Apply::Ai::ResponseSchema::FillForm
-)
+let(:source)  { create(:source, name: 'Dou', base_url: 'https://jobs.dou.ua', scraper: described_class.name) }
+let(:client)  { instance_double(ApplyMate::Client::ImpersonateHttp) }
+let(:scraper) { described_class.new(source, client) }
+
+before { allow(client).to receive(:get).and_return(Struct.new(:status, :body).new(200, page_html)) }
 ```
 
-Pre-populate `apply` with jsonb_accessor attributes using `update!`:
-
-```ruby
-before do
-  apply.update!(
-    external_url:    'https://example.com/apply',
-    submit_selector: 'button[type="submit"].btn',
-    submit_text:     'Apply Now',
-    filled_inputs:   [{ 'name' => 'email', 'selector' => '[name="email"]',
-                        'tag' => 'input', 'type' => 'email',
-                        'form_index' => 0, 'value' => 'dev@example.com' }]
-  )
-  apply.cv.attach(io: StringIO.new('%PDF-1.4 fake'), filename: 'CV.pdf',
-                  content_type: 'application/pdf')
-end
-```
-
-## Browser Double
-
-Stub `ApplyMate::Client::Browser` for any spec that exercises browser-based operations:
-
-```ruby
-let(:browser) { instance_double(ApplyMate::Client::Browser) }
-
-before do
-  allow(ApplyMate::Client::Browser).to receive(:new).and_return(browser)
-
-  allow(browser).to receive(:fetch_rendered).with(url).and_return([final_url, html, ''])
-  allow(browser).to receive(:navigate_to)
-  allow(browser).to receive(:click).and_return(true)   # must return truthy — falsy raises in operation
-  allow(browser).to receive(:fill_field)
-  allow(browser).to receive(:attach_file)
-  allow(browser).to receive(:attempt_recaptcha_refresh)
-  allow(browser).to receive(:wait_for_idle)
-  allow(browser).to receive(:body).and_return('<p>Thank you</p>')
-  allow(browser).to receive(:screenshot).and_return('')
-  allow(browser).to receive(:quit)
-end
-```
-
-Assert call order with `.ordered`:
-
-```ruby
-expect(browser).to have_received(:click).with('#trigger').ordered
-expect(browser).to have_received(:click).with('button[type="submit"]', text: 'Apply').ordered
-```
+HTTP-level specs for the clients use WebMock (`spec/support/webmock.rb` — only localhost is allowed, everything else must be stubbed).
 
 ## Spec File Naming Convention
 
-Spec files must be named after the **class under test**, not after the company/fixture. The path mirrors the class hierarchy:
+Spec files must be named after the **class under test**; the path mirrors the class hierarchy:
 
 | Class | Spec file |
 |-------|-----------|
-| `Apply::Operation::FetchInternalForm` | `spec/concepts/apply/operation/fetch_internal_form_spec.rb` |
-| `Apply::Operation::SendApply::Http` | `spec/concepts/apply/operation/send_apply/http_spec.rb` |
-| `Apply::Handler::Dou` | `spec/concepts/apply/handler/dou_spec.rb` |
+| `Vacancy::Operation::SyncVacancies` | `spec/concepts/vacancy/operation/sync_vacancies_spec.rb` |
+| `ApplyMate::Scraper::Dou` | `spec/concepts/apply_mate/scraper/dou_spec.rb` |
+| `ApplyMate::Client::AsyncHttp` | `spec/concepts/apply_mate/client/async_http_spec.rb` |
 
-When multiple company fixtures test the **same class**, wrap each in a `context` block inside one file — do not create `honeytech_spec.rb`, `coidea_spec.rb`, etc. If the file already has `include_context` at the top-level `RSpec.describe`, move the existing content into a context block and keep shared helpers (e.g. `http_response`) at the describe level:
+When several fixtures exercise the **same class**, wrap each in a `context` block inside one file — do not create one spec file per fixture or per company.
 
-```ruby
-RSpec.describe Apply::Operation::FetchInternalForm do
-  context 'Djinni internal apply (Art of Spin)' do
-    include_context 'art of spin djinni'
-    # stubs + examples
-  end
+## Shared Contexts
 
-  context 'DOU internal apply (Coidea Agency)' do
-    include_context 'coidea dou'
-    # stubs + examples
-  end
-end
-```
+Defined in `spec/support/` and loaded by `spec/rails_helper.rb`:
 
-## Shared Contexts for Multi-Operation Specs
+| Context / helper | File | Provides |
+|---|---|---|
+| `"with shared operation spec variables"` | `shared_operation_variables.rb` | `operation`, `result`, `model`, `params`, `current_user` (auto-included for `type: :operation`) |
+| `"with elasticsearch index"` | `elasticsearch.rb` | Creates/drops the `Vacancy` index around the example group |
+| `ViewComponent::TestHelpers` | `view_component.rb` | Included for `type: :component` |
+| WebMock | `webmock.rb` | Blocks real HTTP except localhost |
 
-When testing several operations against the same company fixture, put common setup in a named shared context. Keep constants in a companion module to avoid Ruby's constant-hoisting problem (constants inside `RSpec.describe` blocks are silently promoted to `Object` and clash across files):
-
-```ruby
-# spec/support/shared_contexts/honeytech_dou.rb
-module HoneytechDou
-  VACANCY_URL  = 'https://jobs.dou.ua/companies/honeytech/vacancies/354709/'
-  DOU_REDIRECT = 'https://dou.ua/goto/vacancy/?id=354709'
-end
-
-RSpec.shared_context 'honeytech dou' do
-  let(:vacancy_external_url) { nil }          # override per spec to pre-set external_url
-  let(:vacancy) { create(:vacancy, external_url: vacancy_external_url, ...) }
-
-  # Canned AI responses reused across specs
-  let(:gemini_check_form_page)     { gemini_json_response('{"has_form":true,...}') }
-  let(:gemini_check_submit_result) { gemini_json_response('{"success":true,...}') }
-
-  # Canonical filled inputs for this company — reuse in FillForm / SendApply specs
-  let(:filled_inputs) { [{ 'name' => 'email', 'value' => 'dev@example.com', ... }] }
-
-  # Pre-AI state: same fields with blank values (input to FillForm)
-  let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
-end
-```
-
-Each spec `include_context 'honeytech dou'` and adds only what it owns — its HTTP stubs and AI response sequence.
-
-**Always define `filled_inputs` and `raw_inputs` in every shared context**, even if the first spec written doesn't use them. `SendApply` and `FillForm` specs will need them, and omitting them forces a retroactive edit. `raw_inputs` is always derived:
-
-```ruby
-let(:raw_inputs) { filled_inputs.map { |i| i.merge('value' => '') } }
-```
-
-Include only the fields relevant to filling and submission — hidden/checkbox ancillaries (e.g. `save_msg_template`) can be omitted.
-
-**Full-pipeline handler spec** stubs all four Gemini calls in order; uses shared `let`s for first and last:
-
-```ruby
-stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
-  .to_return(gemini_check_form_page, gemini_fill_form, gemini_generate_cv, gemini_check_submit_result)
-```
-
-**Single-operation spec** stubs only its one call:
-
-```ruby
-stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
-  .to_return(gemini_check_form_page)
-```
-
-`stub_request(...).to_return(r1, r2, r3)` serves responses in call order — each invocation consumes the next entry.
-
-## Stubbing Gemini (WebMock)
-
-```ruby
-def gemini_json_response(text)
-  {
-    status:  200,
-    body:    { candidates: [{ content: { parts: [{ text: }] } }] }.to_json,
-    headers: { 'Content-Type' => 'application/json' }
-  }
-end
-
-stub_request(:post, /generativelanguage\.googleapis\.com.*generateContent/)
-  .to_return(gemini_json_response('```json\n{"key":"value"}\n```'))
-```
-
-Always suppress `Apply::TurboHandler::StatusUpdate.broadcast`, `VacancyCv::TurboHandler::Index.broadcast` and `.broadcast_row` (called by `Apply::Operation::Ai::GeneratePdfCv`), `VacancyQuestion::TurboHandler::Index.broadcast` (called by the fetch-form operations) and `Grover#to_pdf` in specs that run operations end-to-end:
-
-```ruby
-before do
-  allow(Apply::TurboHandler::StatusUpdate).to receive(:broadcast)
-  allow(VacancyCv::TurboHandler::Index).to receive(:broadcast)
-  allow(VacancyCv::TurboHandler::Index).to receive(:broadcast_row)
-  allow(VacancyQuestion::TurboHandler::Index).to receive(:broadcast)
-  allow_any_instance_of(Grover).to receive(:to_pdf).and_return('%PDF-1.4 fake')
-end
-```
+For setup shared between several spec files, add a `RSpec.shared_context` under `spec/support/`. Keep constants in a companion module — constants inside `RSpec.describe` blocks are silently promoted to `Object` and clash across files.
 
 ## Fixture HTML Files
 
-Store real scraped pages under `spec/fixtures/files/<source>/<apply_type>/<company>/`. Use the actual production page — not a hand-crafted stub — so that CSS selectors and field names reflect reality.
-
-```
-spec/fixtures/files/
-  dou/
-    external/
-      honeytech/
-        dou_honeytech_vacancy_page.html   # DOU job listing (vacancy source page)
-        honeytech_apply_page.html         # employer's external application form
-    internal/
-      <company>/                          # for internal DOU apply pages
-```
-
-Point `FIXTURES_DIR` in the companion module at the leaf directory so all specs in the shared context resolve paths consistently:
-
-```ruby
-module HoneytechDou
-  FIXTURES_DIR = Rails.root.join('spec/fixtures/files/dou/external/honeytech')
-end
-```
+Store real scraped pages under `spec/fixtures/files/<source>/...` (currently `djinni/list/` and `dou/list/`, with per-vacancy pages in `dou/list/details/`). Use the actual production page — not a hand-crafted stub — so CSS selectors reflect reality.

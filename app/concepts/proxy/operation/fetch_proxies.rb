@@ -4,10 +4,12 @@ class Proxy::Operation::FetchProxies < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
   def perform!(**)
-    candidates = Proxy::Operation::FetchCandidates.call.model
-    persisted  = Proxy::Operation::PersistProxies.call(proxies: candidates).model
+    inserted = 0
+    persist  = ->(batch) { inserted += Proxy::Operation::PersistProxies.call(proxies: batch).model }
 
-    log("Fetched #{candidates.size} candidates, persisted #{persisted} proxies", color: :green)
-    self.model = persisted
+    candidates = Proxy::Operation::FetchCandidates.call(on_batch: persist).model
+
+    log("Fetched #{candidates} candidates, inserted #{inserted} new proxies", color: :green)
+    self.model = inserted
   end
 end

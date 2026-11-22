@@ -27,8 +27,8 @@ Values are auto-coerced: integers (`42`), floats (`3.14`), booleans (`true`/`fal
 
 ```gherkin
 # Update the last record of that model
-Given the last Apply record has:
-  | status | completed |
+Given the last SavedFilter record has:
+  | name | Backend |
 
 # Update by attribute value
 Given the Vacancy with title "Rails Developer" has:
@@ -38,9 +38,9 @@ Given the Vacancy with title "Rails Developer" has:
 ### Create child records on the last parent
 
 ```gherkin
-Given the last User has the following SourceProfile records:
-  | name    | source_id |
-  | My Profile | 1      |
+Given the last User has the following SavedFilter records:
+  | name    |
+  | Backend |
 ```
 
 ### OAuth / session setup
@@ -73,21 +73,6 @@ refresh, and the default interval (1s) is too slow to rely on mid-scenario:
 Given the vacancy search index is refreshed
 ```
 
-### Applies of the signed-in user
-
-`Apply` needs a profile, an AI integration and a source profile, so these steps build it
-with FactoryBot for the user logged in by `I am logged in as Andrii Kuluev`
-(`features/steps/apply/given.rb`):
-
-```gherkin
-Given I have a "failed_sending_cv" apply for the last Vacancy
-Given I have a "completed" apply with a CV for the last Vacancy   # also lists it in the CV section
-Given I have a generated CV for the last Vacancy                    # a manual VacancyCv, created a day ago
-Given I have a "completed" apply for the last Vacancy with the filled form:
-  | name | tag      | type     | label   | value       |
-  | why  | textarea | textarea | Why us? | I love Ruby |
-```
-
 ## When Steps
 
 ### Navigate to a page
@@ -95,10 +80,9 @@ Given I have a "completed" apply for the last Vacancy with the filled form:
 ```gherkin
 When I visit the home page
 When I open the admin dashboard
-When I visit the SourceProfile index page
-When I visit the new SourceProfile page
-When I visit the edit SourceProfile page            # uses SourceProfile.last
-When I visit the SourceProfile index page with source_id 5
+When I visit the Vacancy index page
+When I visit the show Vacancy page                  # uses @vacancy or Vacancy.last
+When I visit the Vacancy index page with source_id 5   # "with <param> <value>" adds a query param
 ```
 
 The step infers the route using `polymorphic_path`. Namespace prefix `admin` routes to `admin_*_path`.
@@ -113,7 +97,7 @@ When I check "Active"
 When I choose "Option A"
 When I select "Value" from "Dropdown"
 When I set field "vacancy[title]" to "Rails"   # by name attribute
-When I attach the file "resume.pdf" to "CV"    # from spec/fixtures/files/
+When I attach the file "photo.jpg" to "Logo"    # from spec/fixtures/files/
 ```
 
 ### Buttons and links
@@ -162,35 +146,14 @@ Then the vacancy card "Ruby Developer" is not hidden
 Then I do not see button "Повернути"                    # visibility-aware: opacity 0 counts as not visible
 ```
 
-### Apply cards on the vacancy page
-
-There is no apply page — `/applies/:id` redirects to `/vacancies/:id#apply_<hashid>`:
+### Vacancy page
 
 ```gherkin
-Then I am on the vacancy page at the last Apply card          # path + #apply_<hashid> fragment + card present
-Then the last Apply card shows status "Завершено"
-Then the last Apply card shows the field "Why us?" filled with "I love Ruby"   # by aria-label
+When I click on "Description" in the vacancy page navigation   # scoped to the vacancy page nav (I18n vacancy.show.nav.title)
+Then the vacancy description renders 3 bullet points
+Then the vacancy description renders "Requirements" in bold
+Then the vacancy description contains no "script" element
 ```
-
-### CV cards and in-page anchors on the vacancy page
-
-A CV card is `the last VacancyCv` or `the CV of the last Apply` (`features/steps/vacancy_cv/`):
-
-```gherkin
-Then I see the last VacancyCv                       # waits for the CV frame's [complete] (= its turbo:frame-load ran)
-When I click on "Резюме" in the vacancy page navigation
-Then the vacancy page is at the "vacancy-cvs" anchor
-Then the vacancy page is at the CV of the last Apply
-When I expand the last VacancyCv / When I collapse the CV of the last Apply
-When I click on "Промпт" in the last VacancyCv      # waits for the tab frame to swap in
-Then the CV of the last Apply is expanded / collapsed
-```
-
-The anchor-scroll controller opens accordions from `hashchange`, `turbo:frame-load` and
-`requestAnimationFrame` callbacks, which can still be queued when the next step runs. The toggle and
-"collapsed" steps let them run first (`settle_page`) — otherwise a negative assertion passes before
-the wrong expand happens. Wait for `Then I see the last VacancyCv` before following a link into the
-CV list, or its first frame-load may land after the click.
 
 ### Saved filter pills
 
@@ -220,11 +183,11 @@ Then I see error "can't be blank" under "vacancy[title]"
 ### Database assertions (async-safe)
 
 ```gherkin
-Then the last Apply record should have:
-  | status | completed |
+Then the last SavedFilter record should have:
+  | name | Backend |
 
-Then the Apply with status "pending" record should have:
-  | status | completed |
+Then the SavedFilter with name "Backend" record should have:
+  | name | Backend |
 
 Then the following Vacancy records should exist:
   | title           | company_name |
@@ -271,7 +234,7 @@ Documents indexed via `after_commit` callbacks **do** fire in Cucumber (no trans
 `rspec/wait` is included globally via `features/support/wait_for.rb`. Use it in custom steps:
 
 ```ruby
-wait_for { Apply.last&.status }.to eq("completed")
+wait_for { SavedFilter.last&.name }.to eq("Backend")
 ```
 
 `Capybara.default_max_wait_time` is set to **30 seconds** in `features/support/jobs.rb`.
