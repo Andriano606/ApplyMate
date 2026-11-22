@@ -1,19 +1,10 @@
 # frozen_string_literal: true
 
 class User < ApplicationRecord
-  has_many :user_profiles, dependent: :destroy
-  has_many :ai_integrations, dependent: :destroy
-  has_many :applies, dependent: :destroy
-  has_many :source_profiles, dependent: :destroy
-  has_many :prompts, dependent: :destroy
   has_many :api_tokens, dependent: :destroy
   has_many :saved_filters, dependent: :destroy
   has_many :hidden_vacancies, dependent: :delete_all
 
-  belongs_to :default_profile, class_name: 'UserProfile', optional: true
-  belongs_to :default_ai_integration, class_name: 'AiIntegration', optional: true
-  belongs_to :default_fill_form_prompt, class_name: 'Prompt', optional: true
-  belongs_to :default_generate_cv_prompt, class_name: 'Prompt', optional: true
   belongs_to :default_saved_filter, class_name: 'SavedFilter', optional: true
 
   has_one_attached :avatar do |attachable|

@@ -5,8 +5,6 @@ require 'kernel/sync'
 require 'resolv'
 
 class ApplyMate::Client::AsyncHttp
-  include ApplyMate::Client::Multipart
-
   Response = ApplyMate::Client::Response
 
   USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -30,12 +28,6 @@ class ApplyMate::Client::AsyncHttp
 
   def post(url, body:, headers: {}, **)
     perform(:POST, url, body: body, headers: headers, follow_redirects: true)
-  end
-
-  def post_multipart(url, payload:, headers: {})
-    body, content_type = build_multipart(payload)
-    extra_headers      = headers.merge('Content-Type' => content_type)
-    perform(:POST, url, body: body, headers: extra_headers, follow_redirects: false)
   end
 
   private

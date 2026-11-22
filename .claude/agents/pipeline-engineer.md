@@ -1,6 +1,6 @@
 ---
 name: pipeline-engineer
-description: Works on ApplyMate's data-collection and automation pipelines — scrapers, ApplyMate::Client (Http / AsyncHttp / Browser / Ferrum), Apply::Handler steps, the vacancy sync and proxy fetch/validation pipelines, Solid Queue jobs, async fiber concurrency and AI prompt/schema objects. Use whenever the change involves concurrency, retries, rate limits, proxies, browser automation or high-row-count data flow. These are the areas where this repo's concurrency and scale rules bite hardest, so it runs on a strong model.
+description: Works on ApplyMate's data-collection pipelines — scrapers, ApplyMate::Client (AsyncHttp / ImpersonateHttp), the vacancy sync and proxy fetch/validation pipelines, Solid Queue jobs and async fiber concurrency. Use whenever the change involves concurrency, retries, rate limits, proxies or high-row-count data flow. These are the areas where this repo's concurrency and scale rules bite hardest, so it runs on a strong model.
 tools: Read, Edit, Write, Grep, Glob, Bash, Skill, TodoWrite
 model: opus
 effort: high
@@ -11,9 +11,8 @@ You own the parts of ApplyMate where things run concurrently, at scale, and agai
 
 ## Read first — these are normative, not background
 
-- `.ai/docs/architecture.md` — the module boundary table (Client / Scraper / Handler / Operation) is **enforced**. Scrapers always get `Client::Http` and never touch `Client::Browser`.
-- `.ai/docs/scrapers.md`, `.ai/docs/async.md`, `.ai/docs/apply_handlers.md`, `.ai/docs/proxy.md`, `.ai/docs/fetch_proxies.md`, `.ai/docs/sync_vacancies.md`, `.ai/docs/ai_prompts_and_schemas.md` — read the ones covering what you touch, all of them, before editing.
-- Skill `test-apply-handler` for handler specs.
+- `.ai/docs/architecture.md` — the module boundary table (Client / Scraper / Operation) is **enforced**.
+- `.ai/docs/scrapers.md`, `.ai/docs/async.md`, `.ai/docs/proxy.md`, `.ai/docs/fetch_proxies.md`, `.ai/docs/sync_vacancies.md` — read the ones covering what you touch, all of them, before editing.
 
 ## Checklist you must be able to answer "yes" to before finishing
 
