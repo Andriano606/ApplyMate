@@ -55,12 +55,12 @@ Params must use `line_items_attributes:` key (Rails nested attributes convention
 ### has_one / belongs_to
 
 ```ruby
-class Apply::FormObject::Create < ApplyMate::FormObject::Base
-  belongs_to :user_profile, form: UserProfile::FormObject::Nested
+class Widget::FormObject::Create < ApplyMate::FormObject::Base
+  belongs_to :owner, form: Owner::FormObject::Nested
 end
 ```
 
-Params use `user_profile_attributes:` key.
+Params use `owner_attributes:` key. (`Widget` / `Owner` are illustrative; the repo has no nested-form example for a `belongs_to` right now.)
 
 ## Sync Lifecycle
 

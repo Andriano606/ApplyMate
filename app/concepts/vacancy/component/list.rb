@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 class Vacancy::Component::List < ApplyMate::Component::Base
-  def initialize(vacancies:, applies_by_vacancy: {}, hidden_vacancy_ids: [])
+  def initialize(vacancies:, hidden_vacancy_ids: [])
     @vacancies = vacancies
-    @applies_by_vacancy = applies_by_vacancy
     @hidden_vacancy_ids = hidden_vacancy_ids
   end
 

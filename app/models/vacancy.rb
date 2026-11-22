@@ -6,10 +6,7 @@ class Vacancy < ApplicationRecord
 
   belongs_to :source
 
-  has_many :applies,           dependent: :destroy
-  has_many :vacancy_cvs,       dependent: :destroy
-  has_many :vacancy_questions, dependent: :destroy
-  has_many :hidden_vacancies,  dependent: :delete_all
+  has_many :hidden_vacancies, dependent: :delete_all
 
   index_name [ 'vacancies', Rails.env, ENV['ES_INDEX_NAMESPACE'].presence ].compact.join('_')
 
