@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rails 8 + Hotwire (Stimulus + Turbo) **vacancy bank**. Its single job is to keep the list of live vacancies from several job boards (DOU, Djinni, …) up to date — quickly and efficiently, through a pool of free proxies — and let users search, filter and hide them via Elasticsearch.
 
-The core is two background pipelines: `Proxy::Operation::FetchProxies` (collects the proxy pool) and `Vacancy::Operation::SyncVacancies` (scrapes every source through that pool). There is no auto-apply, no AI integration, no user/source profiles, no prompts and no CV generation — they were removed on purpose; do not reintroduce them.
+The core is two background pipelines: `Proxy::Operation::FetchProxies` (collects the proxy pool) and `Vacancy::Operation::SyncVacancies` (scrapes every source through that pool). The bank is also exposed to Claude as an MCP server at `/mcp` (search, read, hide vacancies; API-token auth). There is no auto-apply, no AI integration, no user/source profiles, no prompts and no CV generation — they were removed on purpose; do not reintroduce them.
 
 ## Essential Commands
 
@@ -104,6 +104,7 @@ Apply these to ALL new and modified code. They are distilled from real review fi
 | `solid_queue` + `solid_cable` + `solid_cache` | Background jobs, ActionCable, caching |
 | `async` + `async-http` | Fiber concurrency for the sync/proxy pipelines (`ApplyMate::Client::AsyncHttp`) |
 | `will_paginate` | Pagination; operations return `WillPaginate::Collection` |
+| `mcp` | Official MCP SDK; `/mcp` server for Claude (`Mcp::Tool::*` → `Mcp::Operation::*`) |
 
 ## Stimulus Controllers
 
@@ -131,6 +132,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/ruby_style.md` — project Ruby style rules (no endless methods, etc.).
 - `.ai/docs/proxy.md` — proxy model fail tracking (`increment_fail!` / `reset_fail!`), `https`→`http` normalization gotcha, 2xx/3xx reachability rule.
 - `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: bounded fetch streamed into batched persist (no validation), why every limit exists (the run used to OOM the Pi), per-list sampling, stop conditions, catalog URL recursion caps, protocol inference, persist insert semantics, why proxies are never pruned. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
+- `.ai/docs/mcp.md` — MCP server at `/mcp`: stateless Streamable HTTP, API-token auth, tool → operation layering, how `search_vacancies` composes the ES query, adding a tool, connecting Claude. **Read before adding or changing an MCP tool.**
 - `.ai/docs/sync_vacancies.md` — `Vacancy::Operation::SyncVacancies` internals: fiber count per source, stop conditions, empty-page confirmation logic (LAST_PAGE_CONFIRMATIONS), boundary narrowing, shared data structures. **Read before modifying the vacancy sync pipeline.**
 
 ## Delegation to Subagents

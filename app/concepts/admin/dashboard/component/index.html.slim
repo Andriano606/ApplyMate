@@ -37,6 +37,12 @@
       description: I18n.t('admin.dashboard.index.api_tokens_description'),
       turbo: false)
     = icon(:key, size: 6, class: 'text-amber-600')
+  = dashboard_card(path: admin_mcp_path,
+      icon_bg: 'bg-rose-100',
+      title: I18n.t('admin.dashboard.index.mcp'),
+      description: I18n.t('admin.dashboard.index.mcp_description'),
+      turbo: false)
+    = icon(:sparkles, size: 6, class: 'text-rose-600')
   = dashboard_card(path: '/admin/api-docs/index.html',
       icon_bg: 'bg-teal-100',
       title: I18n.t('admin.dashboard.index.api_docs'),

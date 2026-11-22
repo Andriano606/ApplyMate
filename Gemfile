@@ -96,6 +96,9 @@ gem 'rubyzip'
 gem 'rswag-api'
 gem 'rswag-ui'
 
+# Model Context Protocol server (POST /mcp) — lets Claude search and read vacancies
+gem 'mcp', '~> 1.11'
+
 group :development, :test do
   # Load environment variables from .env
   gem 'dotenv-rails'
