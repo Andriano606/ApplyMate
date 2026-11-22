@@ -21,9 +21,14 @@ module ApplyMate::Logging
   #
   # When `event:` is given, a JSON line is emitted instead of the colored text line.
   # The file logger has ANSI stripped and no prefix, so this lands as valid JSON.
+  # Every event carries `operation` (the emitting class) and `level` (Grafana colours
+  # log lines by it). `source` is left to the caller: in the sync/proxy events it is
+  # always the job board name. Avoid `status`, `method`, `controller`: Promtail promotes
+  # those JSON keys to stream labels (they belong to the request log).
+  # Event catalogue and the dashboard built on it: .ai/docs/observability.md
   def log(message = nil, color: nil, level: :info, event: nil, **fields)
     if event
-      payload = { event: event, source: self.class.name }.merge(fields)
+      payload = { event: event, operation: self.class.name, level: level }.merge(fields)
       if block_given?
         t0     = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         result = yield

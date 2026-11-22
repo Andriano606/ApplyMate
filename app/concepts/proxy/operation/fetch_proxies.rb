@@ -7,9 +7,11 @@ class Proxy::Operation::FetchProxies < ApplyMate::Operation::Base
     inserted = 0
     persist  = ->(batch) { inserted += Proxy::Operation::PersistProxies.call(proxies: batch).model }
 
+    started    = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     candidates = Proxy::Operation::FetchCandidates.call(on_batch: persist).model
 
-    log("Fetched #{candidates} candidates, inserted #{inserted} new proxies", color: :green)
+    log(event: 'proxy_fetch_finished', candidates: candidates, inserted: inserted,
+        duration_s: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
     self.model = inserted
   end
 end

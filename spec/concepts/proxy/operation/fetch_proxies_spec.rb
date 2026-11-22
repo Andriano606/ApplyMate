@@ -18,6 +18,16 @@ RSpec.describe Proxy::Operation::FetchProxies, type: :operation do
     expect(Proxy.find_by(host: "1.1.1.1", port: 1080)).to have_attributes(protocol: "socks5")
   end
 
+  it "reports the fetched and inserted counts to Grafana" do
+    create(:proxy, host: "2.2.2.2", port: 1080, protocol: "socks5")
+    events = capture_logged_events
+
+    perform
+
+    expect(events.find { |e| e["event"] == "proxy_fetch_finished" })
+      .to include("candidates" => 3, "inserted" => 2, "duration_s" => a_kind_of(Numeric))
+  end
+
   it "returns the number of newly inserted proxies" do
     create(:proxy, host: "2.2.2.2", port: 1080, protocol: "socks5")
 

@@ -29,6 +29,18 @@ RSpec.describe Proxy::Operation::Validate, type: :operation do
     expect(dead_stat.failed_at).to be_present
   end
 
+  it 'reports how many of the checked proxies are alive per source to Grafana' do
+    events = capture_logged_events
+
+    described_class.call(limit: 10, sources: [ source ])
+    described_class.call(limit: 10, sources: [ source ]) # every proxy is tested now → idle run
+
+    expect(events.select { |e| e['event'] == 'proxy_validation_finished' }).to match([
+      a_hash_including('source' => 'Dou', 'scope' => 'untested', 'checked' => 2, 'alive' => 1),
+      a_hash_including('source' => 'Dou', 'scope' => 'untested', 'checked' => 0, 'alive' => 0)
+    ])
+  end
+
   it 'accepts a 403 Cloudflare challenge as alive, but not a plain 403 block' do
     challenged = create(:proxy, host: 'cf.example.com')
     hardblock  = create(:proxy, host: 'blocked.example.com')

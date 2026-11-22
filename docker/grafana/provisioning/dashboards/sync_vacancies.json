@@ -1,480 +1,2267 @@
 {
   "uid": "applymate-sync-vacancies",
   "title": "Синхронізація вакансій",
-  "tags": ["applymate", "vacancy-sync"],
+  "description": "Як проходить щоденна синхронізація вакансій і в якому стані пул проксі. Події та поля: .ai/docs/observability.md",
+  "tags": [
+    "applymate"
+  ],
   "timezone": "browser",
-  "schemaVersion": 39,
-  "version": 23,
   "editable": true,
-  "refresh": "30s",
-  "time": { "from": "now-7d", "to": "now+1d" },
+  "graphTooltip": 1,
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
   "templating": {
-    "list": [
-      {
-        "name": "source",
-        "label": "Джерело",
-        "type": "custom",
-        "query": "Усі : (Djinni|Dou), Djinni : Djinni, DOU : Dou",
-        "current": { "text": "Усі", "value": "(Djinni|Dou)", "selected": true },
-        "options": [
-          { "text": "Усі",    "value": "(Djinni|Dou)", "selected": true },
-          { "text": "Djinni", "value": "Djinni" },
-          { "text": "DOU",    "value": "Dou" }
-        ],
-        "includeAll": false,
-        "multi": false,
-        "skipUrlSync": false,
-        "hide": 0
-      }
-    ]
+    "list": []
   },
   "annotations": {
     "list": [
       {
-        "name": "Початок синхронізації",
-        "datasource": { "type": "loki", "uid": "loki" },
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
-        "iconColor": "blue",
-        "target": {
-          "expr": "{job=\"rails\"} | json | event=\"vacancy_sync_started\"",
-          "refId": "Anno"
-        }
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
       }
     ]
   },
+  "links": [],
   "panels": [
     {
-      "id": 8,
+      "type": "row",
+      "id": 1,
+      "title": "Останній запуск",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
       "type": "stat",
-      "title": "Останній запуск SyncVacancies",
-      "description": "Коли востаннє стартувала джоба Vacancy::Operation::SyncVacancies. Береться поле started_at_ms (Unix ms) з події vacancy_sync_started, відображається як «N тому».",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 5 },
+      "id": 2,
+      "title": "Коли стартував",
+      "description": "Старт останньої синхронізації. Джоба Vacancy::Job::SyncVacancies запускається щодня о 03:00.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max (max_over_time({job=\"rails\"} |= \"vacancy_sync_started\" | json | __error__=\"\" | event=\"vacancy_sync_started\" | unwrap started_at_ms [$__interval]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "value"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "purple" },
-          "unit": "dateTimeFromNow"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "expr": "max(last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | unwrap started_at_ms [24h]))"
-        }
-      ]
+        "textMode": "auto",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
     },
     {
-      "id": 9,
-      "type": "barchart",
-      "title": "Час sync_source за найновішу сесію дня — $source",
-      "description": "Тривалість sync_source (фаза listing) останньої сесії SyncVacancies кожного дня. sum by (session_id) сумує duration_s по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію (за started_at_ms). Подія: vacancy_sync_source_completed, phase=listing.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 9 },
+      "type": "stat",
+      "id": 3,
+      "title": "Результат",
+      "description": "Чи завершився останній запуск без збоїв (усі джерела синхронізовані). Що саме пішло не так — у панелі «Помилки та попередження» внизу. Якщо тут давно «Успішно», а «Коли стартував» свіжіший за кінець запуску — запуск ще йде або його вбили.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(last_over_time({job=\"rails\"} |= \"vacancy_sync_finished\" | json | __error__=\"\" | event=\"vacancy_sync_finished\" | label_format failed=`{{ if eq .result \"ok\" }}0{{ else }}1{{ end }}` | keep failed | unwrap failed [$__interval]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "blue" },
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
           },
-          "unit": "dtdurations"
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Успішно",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "Збій",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_source_completed\" | phase=\"listing\" | source=~\"$source\" | session_id != \"\" | unwrap duration_s [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "sync_source"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "type": "barchart",
-      "title": "Час fetch_description_for_source за найновішу сесію дня — $source",
-      "description": "Тривалість fetch_description_for_source (фаза description) останньої сесії SyncVacancies кожного дня. sum by (session_id) сумує duration_s по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію за started_at_ms. Подія: vacancy_sync_source_completed, phase=description.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 9 },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "blue" },
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
-          },
-          "unit": "dtdurations"
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_source_completed\" | phase=\"description\" | source=~\"$source\" | session_id != \"\" | unwrap duration_s [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "fetch_description"
-        }
-      ]
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
     },
     {
+      "type": "stat",
       "id": 4,
-      "type": "barchart",
-      "title": "Пропущені вакансії за найновішу сесію дня — $source",
-      "description": "Поле skipped події vacancy_sync_description_summary за найновішу (за started_at_ms) сесію SyncVacancies кожного дня. sum by (session_id) групує per session, and on(session_id) topk(1, ... unwrap started_at_ms) лишає лише найновішу сесію.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 9 },
+      "title": "Тривалість",
+      "description": "Скільки тривав останній запуск від старту до кінця (усі джерела паралельно).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max (max_over_time({job=\"rails\"} |= \"vacancy_sync_finished\" | json | __error__=\"\" | event=\"vacancy_sync_finished\" | unwrap duration_s [$__interval]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "red" },
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+          "unit": "s",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
           },
-          "unit": "none",
-          "decimals": 0
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap skipped [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "Пропущено"
-        }
-      ]
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
     },
     {
-      "id": 12,
-      "type": "barchart",
-      "title": "Скрапнуто сторінок за найновішу сесію дня — $source",
-      "description": "Поле pages події vacancy_sync_listing_summary за найновішу сесію (за started_at_ms) SyncVacancies кожного дня. sum by (session_id) сумує pages по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 9 },
+      "type": "stat",
+      "id": 5,
+      "title": "Вакансій у банку",
+      "description": "Скільки вакансій кожного сайту лежить у базі після останнього запуску.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (source) (max_over_time({job=\"rails\"} |= \"vacancy_sync_listing_finished\" | json | __error__=\"\" | event=\"vacancy_sync_listing_finished\" | unwrap vacancies_total [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "green" },
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
           },
-          "unit": "none",
-          "decimals": 0
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_listing_summary\" | source=~\"$source\" | session_id != \"\" | unwrap pages [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "Сторінок"
-        }
-      ]
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
     },
     {
-      "id": 14,
-      "type": "barchart",
-      "title": "Завантажено описів за найновішу сесію дня — $source",
-      "description": "Поле descriptions події vacancy_sync_description_summary за найновішу сесію (за started_at_ms) SyncVacancies кожного дня. sum by (session_id) групує per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 9 },
+      "type": "stat",
+      "id": 6,
+      "title": "Нових за останній запуск",
+      "description": "Вакансії, яких до запуску в базі не було.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (source) (max_over_time({job=\"rails\"} |= \"vacancy_sync_listing_finished\" | json | __error__=\"\" | event=\"vacancy_sync_listing_finished\" | unwrap new_vacancies [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "green" },
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
           },
-          "unit": "none",
-          "decimals": 0
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap descriptions [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "Описів"
-        }
-      ]
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
     },
     {
-      "id": 15,
-      "type": "barchart",
-      "title": "Скрапнуто вакансій за найновішу сесію дня — $source",
-      "description": "Поле vacancies події vacancy_sync_listing_summary за найновішу сесію (за started_at_ms) SyncVacancies кожного дня. sum by (session_id) сумує vacancies по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 9 },
+      "type": "stat",
+      "id": 7,
+      "title": "Видалено за останній запуск",
+      "description": "Вакансії, що зникли з сайту (закриті), тому їх прибрано з бази.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (source) (max_over_time({job=\"rails\"} |= \"vacancy_sync_listing_finished\" | json | __error__=\"\" | event=\"vacancy_sync_listing_finished\" | unwrap stale_deleted [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "green" },
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
           },
-          "unit": "none",
-          "decimals": 0
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_listing_summary\" | source=~\"$source\" | session_id != \"\" | unwrap vacancies [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "Вакансій"
-        }
-      ]
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
     },
     {
-      "id": 16,
-      "type": "barchart",
-      "title": "Всього проксі за найновішу сесію дня",
-      "description": "Значення total_proxies (Proxy.count) на момент запуску найновішої (за started_at_ms) сесії SyncVacancies кожного дня. and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію. Без розбивки за джерелом, бо total_proxies глобальний.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 0, "y": 41, "w": 12, "h": 9 },
+      "type": "row",
+      "id": 8,
+      "title": "Вакансії",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 9,
+      "title": "Скільки вакансій зараз на сайтах",
+      "description": "Унікальні вакансії, які синхронізація знайшла на кожному сайті. Кожна точка — один запуск.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (source) (max_over_time({job=\"rails\"} |= \"vacancy_sync_listing_finished\" | json | __error__=\"\" | event=\"vacancy_sync_listing_finished\" | unwrap vacancies [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "unit": "short",
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "unit": "none",
-          "decimals": 0
+          "color": {
+            "mode": "palette-classic"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap total_proxies [1d]) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "Проксі"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ]
+      }
     },
     {
-      "id": 17,
-      "type": "barchart",
-      "title": "Видалено проксі за найновішу сесію дня — $source",
-      "description": "Поле proxies_deleted подій vacancy_sync_listing_summary/vacancy_sync_description_summary за найновішу (за started_at_ms) сесію SyncVacancies кожного дня. sum by (session_id) сумує proxies_deleted по обраних source per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 12, "y": 41, "w": 12, "h": 9 },
+      "type": "timeseries",
+      "id": 10,
+      "title": "Нові та видалені вакансії",
+      "description": "Над нулем — нові вакансії за запуск, під нулем — видалені, бо зникли з сайту. Кожна точка — один запуск.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (source) (sum_over_time({job=\"rails\"} |= \"vacancy_sync_listing_finished\" | json | __error__=\"\" | event=\"vacancy_sync_listing_finished\" | unwrap new_vacancies [$__interval]))",
+          "legendFormat": "{{source}} · нові",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (source) (sum_over_time({job=\"rails\"} |= \"vacancy_sync_listing_finished\" | json | __error__=\"\" | event=\"vacancy_sync_listing_finished\" | unwrap stale_deleted [$__interval]))",
+          "legendFormat": "{{source}} · видалені",
+          "refId": "B",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "red" },
+          "unit": "short",
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "unit": "none",
-          "decimals": 0
+          "color": {
+            "mode": "palette-classic"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*видалені/"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "loki" },
-          "refId": "A",
-          "queryType": "range",
-          "step": "1d",
-          "expr": "sum by (session_id) (last_over_time({job=\"rails\"} | json | event=~\"vacancy_sync_listing_summary|vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap proxies_deleted [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "Видалено"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ]
+      }
     },
     {
+      "type": "row",
       "id": 11,
-      "type": "barchart",
-      "title": "Макс. ретраїв опису за найновішу сесію дня — $source",
-      "description": "Поле max_attempt події vacancy_sync_description_summary за найновішу (за started_at_ms) сесію SyncVacancies кожного дня. max by (session_id) дає максимальний attempt per session; and on(session_id) topk(1, ... unwrap started_at_ms) залишає лише найновішу сесію. Якщо значення близьке до MAX_VACANCY_RETRIES — окремі вакансії викликають багато fallback-ретраїв.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 9 },
+      "title": "Швидкість і проксі під час синхронізації",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 12,
+      "title": "Тривалість синхронізації",
+      "description": "Скільки тривала кожна фаза. «Список» — обхід сторінок зі списком вакансій; «описи» — другий прохід по сторінках окремих вакансій (лише DOU). Джерела йдуть паралельно, тож весь запуск ≈ найдовше джерело.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (source) (max_over_time({job=\"rails\"} |= \"vacancy_sync_listing_finished\" | json | __error__=\"\" | event=\"vacancy_sync_listing_finished\" | unwrap duration_s [$__interval]))",
+          "legendFormat": "{{source}} · список",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (source) (max_over_time({job=\"rails\"} |= \"vacancy_sync_descriptions_finished\" | json | __error__=\"\" | event=\"vacancy_sync_descriptions_finished\" | unwrap duration_s [$__interval]))",
+          "legendFormat": "{{source}} · описи",
+          "refId": "B",
+          "queryType": "range",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max (max_over_time({job=\"rails\"} |= \"vacancy_sync_finished\" | json | __error__=\"\" | event=\"vacancy_sync_finished\" | unwrap duration_s [$__interval]))",
+          "legendFormat": "Весь запуск",
+          "refId": "C",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "unit": "s",
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 80,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "gradientMode": "none"
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "unit": "none",
-          "decimals": 0
+          "color": {
+            "mode": "palette-classic"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "auto",
-        "xTickLabelRotation": 0,
-        "showValue": "always",
-        "stacking": "none",
-        "groupWidth": 0.7,
-        "barWidth": 0.97,
-        "barRadius": 0,
-        "fullHighlight": false,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 13,
+      "title": "Невдалі запити через проксі",
+      "description": "Частка запитів до сайту, що впали: мертвий проксі, таймаут або інша помилка. Чим вище — тим гірший пул проксі і тим довше триває синхронізація. Типові помилки — у журналі запусків.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "100 * sum by (source) (sum_over_time({job=\"rails\"} |~ \"vacancy_sync_(listing|descriptions)_finished\" | json | __error__=\"\" | event=~\"vacancy_sync_(listing|descriptions)_finished\" | unwrap failed_requests [$__interval])) / sum by (source) (sum_over_time({job=\"rails\"} |~ \"vacancy_sync_(listing|descriptions)_finished\" | json | __error__=\"\" | event=~\"vacancy_sync_(listing|descriptions)_finished\" | unwrap requests [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 14,
+      "title": "Живі проксі на старті",
+      "description": "На старті для кожного сайту перевіряється до 1500 найкращих проксі; тут — скільки з них відповіли. 0 означає, що сайт пропущено.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 8,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (source) (max_over_time({job=\"rails\"} |= \"vacancy_sync_proxy_pool_ready\" | json | __error__=\"\" | event=\"vacancy_sync_proxy_pool_ready\" | unwrap alive [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 15,
+      "title": "Мертві проксі за запуск",
+      "description": "Скільки проксі перестали відповідати посеред запуску і були викинуті з ротації.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 26,
+        "w": 8,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (source) (sum_over_time({job=\"rails\"} |~ \"vacancy_sync_(listing|descriptions)_finished\" | json | __error__=\"\" | event=~\"vacancy_sync_(listing|descriptions)_finished\" | unwrap dead_proxies [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 16,
+      "title": "Описи вакансій",
+      "description": "Другий прохід (лише DOU): відкриваємо сторінку кожної вакансії, якої ще бракує опису. «Не вдалося» — здалися після 20 спроб.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 26,
+        "w": 8,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (source) (sum_over_time({job=\"rails\"} |= \"vacancy_sync_descriptions_finished\" | json | __error__=\"\" | event=\"vacancy_sync_descriptions_finished\" | unwrap fetched [$__interval]))",
+          "legendFormat": "{{source}} · завантажено",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (source) (sum_over_time({job=\"rails\"} |= \"vacancy_sync_descriptions_finished\" | json | __error__=\"\" | event=\"vacancy_sync_descriptions_finished\" | unwrap gave_up [$__interval]))",
+          "legendFormat": "{{source}} · не вдалося",
+          "refId": "B",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 17,
+      "title": "Пул проксі (фонові задачі)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 18,
+      "title": "Валідатор: знайдено живих проксі",
+      "description": "Proxy::Job::Validate кожні 5 хвилин перевіряє пачку (до 2000) нових проксі на кожному сайті. Кожна точка — скільки живих знайдено за 6 годин. Живі поповнюють пул, з якого стартує синхронізація; якщо лінія падає до нуля, пул перестав рости.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "6h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (source) (sum_over_time({job=\"rails\"} |= \"proxy_validation_finished\" | json | __error__=\"\" | event=\"proxy_validation_finished\" | unwrap alive [$__interval]))",
+          "legendFormat": "{{source}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 19,
+      "title": "Нові проксі з публічних списків",
+      "description": "Proxy::Job::FetchProxies раз на добу збирає проксі з публічних списків; тут — скільки з них виявились новими для бази. Пунктир — скільки всього зібрано (права вісь).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum (sum_over_time({job=\"rails\"} |= \"proxy_fetch_finished\" | json | __error__=\"\" | event=\"proxy_fetch_finished\" | unwrap inserted [$__interval]))",
+          "legendFormat": "нових",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum (sum_over_time({job=\"rails\"} |= \"proxy_fetch_finished\" | json | __error__=\"\" | event=\"proxy_fetch_finished\" | unwrap candidates [$__interval]))",
+          "legendFormat": "зібрано",
+          "refId": "B",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 7,
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "axisCenteredZero": false,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Djinni.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3274D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Dou.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*описи.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*не вдалося.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Весь запуск/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "зібрано"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "нових"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 20,
+      "title": "Журнал",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "logs",
+      "id": 21,
+      "title": "Журнал запусків",
+      "description": "Кожен запуск по кроках: старт → живі проксі по сайтах → підсумок списку і описів по сайтах → результат. Розгорніть рядок, щоб побачити всі поля події.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 24,
+        "h": 14
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=\"rails\"} |~ \"vacancy_sync_(started|proxy_pool_ready|listing_finished|descriptions_finished|finished)\" | json | __error__=\"\" | event=~\"vacancy_sync_(started|proxy_pool_ready|listing_finished|descriptions_finished|finished)\" | line_format \"{{ if eq .event \\\"vacancy_sync_started\\\" }}▶ Старт синхронізації · джерела: {{ .sources }}{{ else if eq .event \\\"vacancy_sync_proxy_pool_ready\\\" }}{{ if eq .alive \\\"0\\\" }}⚠ {{ .source }}: жодного живого проксі з {{ .checked }} перевірених — джерело пропущено{{ else }}🔌 {{ .source }}: живих проксі {{ .alive }} з {{ .checked }} перевірених{{ end }}{{ else if eq .event \\\"vacancy_sync_listing_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅ {{ .source }} · список: {{ .vacancies }} вакансій на {{ .pages }} стор. · нових {{ .new_vacancies }}, видалено {{ .stale_deleted }}, у банку {{ .vacancies_total }}{{ else }}❌ {{ .source }} · список зупинився на {{ .pages }} стор.: {{ .error }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}, мертвих проксі {{ .dead_proxies }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_descriptions_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅{{ else }}❌{{ end }} {{ .source }} · описи: завантажено {{ .fetched }} з {{ .missing }}{{ if ne .gave_up \\\"0\\\" }}, не вдалося {{ .gave_up }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}{{ if .error }} · {{ .error }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_finished\\\" }}{{ if eq .result \\\"ok\\\" }}🏁 Синхронізація завершена успішно{{ else if eq .result \\\"partial\\\" }}⚠ Синхронізація завершена частково: джерел зі збоєм — {{ .sources_failed }}{{ else }}❌ Синхронізація не вдалася{{ if .error }}: {{ .error }}{{ end }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }}{{ else }}{{ __line__ }}{{ end }}\"",
+          "legendFormat": "",
           "refId": "A",
           "queryType": "range",
-          "step": "1d",
-          "expr": "max by (session_id) (last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_description_summary\" | source=~\"$source\" | session_id != \"\" | unwrap max_attempt [1d])) and on(session_id) topk(1, last_over_time({job=\"rails\"} | json | event=\"vacancy_sync_started\" | session_id != \"\" | unwrap started_at_ms [1d]))",
-          "legendFormat": "Макс. ретраї"
+          "editorMode": "code"
         }
-      ]
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "type": "logs",
+      "id": 22,
+      "title": "Помилки та попередження",
+      "description": "Збої синхронізації та проксі-задач: джерело зупинилось, сайт пропущено через відсутність живих проксі, запуск не вдався.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=\"rails\"} |~ \"(vacancy_sync|proxy)_\" | json | __error__=\"\" | level=~\"warn|error\" | line_format \"{{ if eq .event \\\"vacancy_sync_started\\\" }}▶ Старт синхронізації · джерела: {{ .sources }}{{ else if eq .event \\\"vacancy_sync_proxy_pool_ready\\\" }}{{ if eq .alive \\\"0\\\" }}⚠ {{ .source }}: жодного живого проксі з {{ .checked }} перевірених — джерело пропущено{{ else }}🔌 {{ .source }}: живих проксі {{ .alive }} з {{ .checked }} перевірених{{ end }}{{ else if eq .event \\\"vacancy_sync_listing_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅ {{ .source }} · список: {{ .vacancies }} вакансій на {{ .pages }} стор. · нових {{ .new_vacancies }}, видалено {{ .stale_deleted }}, у банку {{ .vacancies_total }}{{ else }}❌ {{ .source }} · список зупинився на {{ .pages }} стор.: {{ .error }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}, мертвих проксі {{ .dead_proxies }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_descriptions_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅{{ else }}❌{{ end }} {{ .source }} · описи: завантажено {{ .fetched }} з {{ .missing }}{{ if ne .gave_up \\\"0\\\" }}, не вдалося {{ .gave_up }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}{{ if .error }} · {{ .error }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_finished\\\" }}{{ if eq .result \\\"ok\\\" }}🏁 Синхронізація завершена успішно{{ else if eq .result \\\"partial\\\" }}⚠ Синхронізація завершена частково: джерел зі збоєм — {{ .sources_failed }}{{ else }}❌ Синхронізація не вдалася{{ if .error }}: {{ .error }}{{ end }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }}{{ else }}{{ __line__ }}{{ end }}\"",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
     }
-  ]
+  ],
+  "version": 1
 }

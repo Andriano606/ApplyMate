@@ -17,6 +17,8 @@ require 'kernel/sync'
 # Run recurringly (Proxy::Job::Validate): it churns through proxies not yet tested
 # for the sources, a batch at a time.
 class Proxy::Operation::Validate < ApplyMate::Operation::Base
+  include ApplyMate::Logging
+
   # Sized to run every 5 minutes on a Raspberry Pi 5 (4 cores, 16 GB) without heavy load.
   # The probes are I/O-bound; the only real cost is concurrent TLS handshakes, so ~100 in
   # flight keeps CPU/FDs light. DEFAULT_LIMIT bounds one run to a few minutes (each batch
@@ -33,9 +35,13 @@ class Proxy::Operation::Validate < ApplyMate::Operation::Base
   def perform!(limit: DEFAULT_LIMIT, scope: :untested, sources: nil, **)
     skip_authorize
 
+    started    = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     sources    = Array(sources).presence || Source.all.to_a
     candidates = candidate_scope(scope).limit(limit).to_a
-    return self.model = { validated: 0, alive: {} } if candidates.empty? || sources.empty?
+    if candidates.empty? || sources.empty?
+      log_results(sources, scope, [], {}, started)
+      return self.model = { validated: 0, alive: {} }
+    end
 
     alive_by_source = {}
     Sync do
@@ -43,10 +49,21 @@ class Proxy::Operation::Validate < ApplyMate::Operation::Base
     end
 
     record(candidates, sources, alive_by_source)
+    log_results(sources, scope, candidates, alive_by_source, started)
     self.model = { validated: candidates.size, alive: alive_by_source.transform_values(&:size) }
   end
 
   private
+
+  # One event per source (the "Пул проксі" row of the sync dashboard). Also emitted
+  # when there was nothing to check, so an idle validator is visible as zeros, not gaps.
+  def log_results(sources, scope, candidates, alive_by_source, started)
+    duration = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3)
+    sources.each do |source|
+      log(event: 'proxy_validation_finished', source: source.name, scope: scope.to_s,
+          checked: candidates.size, alive: alive_by_source.fetch(source.id, []).size, duration_s: duration)
+    end
+  end
 
   def candidate_scope(scope)
     case scope

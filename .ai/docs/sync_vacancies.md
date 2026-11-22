@@ -118,6 +118,8 @@ Phase 2: fetch_description — fetch description URLs → buffer {id,description
 
 Phase 2 запускається **лише для джерел з `Scraper.fetches_description?` == `true`** (Dou). У Djinni опис уже є в лістингу — детальних сторінок відвідувати нічого.
 
+Збій одного джерела не зупиняє інші: `sync_source_pipeline` ловить помилку фази (вона вже записана в підсумкову подію фази) і просто не додає джерело до `@synced`. Джерело без жодного живого проксі на старті (`seed_pool` → `pool.size.zero?`) пропускається; `NoProxiesError` летить з `perform!` лише коли пропущено всі. `perform!` назовні не кидає помилку джерела — результат запуску видно в події `vacancy_sync_finished` (`result: ok | partial | failed`).
+
 ---
 
 ## Скільки файберів створюється
@@ -219,9 +221,11 @@ last_page[:boundary] = [last_page[:boundary], page].compact.min
 ## Обробка помилок у воркерах
 
 ```
-DeadProxyError  → @proxy_pool.release(proxy, status: :dead)  → proxy = nil → page/vacancy back to queue → retry
-StandardError   → log error → @proxy_pool.release(proxy, status: :keep) → proxy = nil → page/vacancy back to queue → retry
+DeadProxyError  → stats.dead!       → pool.release(proxy, status: :dead) → proxy = nil → page/vacancy back to queue → retry
+StandardError   → stats.error!(e)   → pool.release(proxy, status: :keep) → proxy = nil → page/vacancy back to queue → retry
 ```
+
+Помилки не логуються по одній (на поганому пулі це тисячі рядків) — `RequestStats` фази рахує їх за класом і віддає в підсумковій події три найчастіші з першим повідомленням (`errors`), разом з `requests`, `empty_responses`, `dead_proxies`, `failed_requests`.
 
 `:dead` прибирає проксі з ротації і буферизує `increment_fail!` (фактичний запис у БД — під час наступного `refill` або фінального `flush!`). `:keep` лише ставить проксі на кулдаун, без зміни статистики.
 
@@ -235,12 +239,14 @@ StandardError   → log error → @proxy_pool.release(proxy, status: :keep) → 
 
 ```ruby
 barrier.wait
+buffer.flush
 raise NoProxiesError if stop[0]
-clean_old_vacancies(source, external_ids)
+stale = clean_old_vacancies(source, external_ids.uniq)
 Vacancy::Operation::CountBySource.expire!
+total = with_db { source.vacancies.count }   # new_vacancies = total − count_before + stale
 ```
 
-`clean_old_vacancies` видаляє всі вакансії цього джерела, яких **не було** серед зібраних `external_ids`. Захищений від порожнього запуску: `return if active_ids.empty?`.
+`clean_old_vacancies` видаляє (через `with_db`) всі вакансії цього джерела, яких **не було** серед зібраних `external_ids`, і повертає їх кількість. Захищений від порожнього запуску: `return 0 if active_ids.empty?`. Кількість нових вакансій — це різниця `source.vacancies.count` до і після фази плюс видалені; вона точна, бо джерело пише лише один запуск (`limits_concurrency`).
 
 `expire!` скидає кеш лічильників вакансій по джерелах (`Vacancy::Operation::CountBySource::CACHE_KEY`, TTL 5 хв; його читають віджет «всього вакансій» і MCP-тул `list_sources`) — інакше головна сторінка ще до 5 хвилин після синку показує числа попереднього запуску.
 
@@ -324,11 +330,4 @@ last_page[:counts].delete_if { |p, _| p < page }
 
 ## Логування
 
-Кожен рядок лога містить `ctx`-тег:
-
-```
-[Djinni|p42|1.2.3.4|f7890] 20 items
-[DOU|p501|—|f1234] confirmed last page (50 empty hits)
-```
-
-Формат: `[source|сторінка_або_external_id|proxy_host|fiber_id(останні 4 символи)]`
+Операція пише JSON-події для Grafana/Loki: `vacancy_sync_started` → `vacancy_sync_proxy_pool_ready` (на джерело) → `vacancy_sync_listing_finished` / `vacancy_sync_descriptions_finished` (на джерело і фазу, через `log_phase` — також коли фаза впала) → `vacancy_sync_finished` (завжди, з `result`). Усі несуть `session_id`. Поля кожної події, дашборд і алерти — у `.ai/docs/observability.md`; змінюючи поле, оновлюйте й дашборд.

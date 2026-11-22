@@ -133,6 +133,7 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/proxy.md` — proxy model fail tracking (`increment_fail!` / `reset_fail!`), `https`→`http` normalization gotcha, 2xx/3xx reachability rule.
 - `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: bounded fetch streamed into batched persist (no validation), why every limit exists (the run used to OOM the Pi), per-list sampling, stop conditions, catalog URL recursion caps, protocol inference, persist insert semantics, why proxies are never pruned. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
 - `.ai/docs/mcp.md` — MCP server at `/mcp`: stateless Streamable HTTP, API-token auth, tool → operation layering, how `search_vacancies` composes the ES query, adding a tool, connecting Claude. **Read before adding or changing an MCP tool.**
+- `.ai/docs/observability.md` — JSON log events (`ApplyMate::Logging`), the Grafana dashboard «Синхронізація вакансій» and its alerts: event/field catalogue, LogQL conventions, how to deploy dashboard changes. **Read before adding/renaming a logged event field or editing the dashboard.**
 - `.ai/docs/sync_vacancies.md` — `Vacancy::Operation::SyncVacancies` internals: fiber count per source, stop conditions, empty-page confirmation logic (LAST_PAGE_CONFIRMATIONS), boundary narrowing, shared data structures. **Read before modifying the vacancy sync pipeline.**
 
 ## Delegation to Subagents

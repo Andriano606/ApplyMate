@@ -182,7 +182,7 @@ accessories:
       - docker/grafana/provisioning/dashboards/applymate.yml:/etc/grafana/provisioning/dashboards/applymate.yml
       - docker/grafana/provisioning/dashboards/sync_vacancies.json:/etc/grafana/provisioning/dashboards/sync_vacancies.json
       - docker/grafana/provisioning/datasources/loki.staging.yml:/etc/grafana/provisioning/datasources/loki.yml
-      - docker/grafana/provisioning/alerting/proxy_validation.yml:/etc/grafana/provisioning/alerting/proxy_validation.yml
+      - docker/grafana/provisioning/alerting/sync_vacancies.yml:/etc/grafana/provisioning/alerting/sync_vacancies.yml
     directories:
       - data:/var/lib/grafana
     # Run as root because Kamal's bind-mount host dir is owned by the SSH
