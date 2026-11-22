@@ -24,18 +24,12 @@ Details: `.ai/docs/scrapers.md`, `.ai/docs/sync_vacancies.md`, `.ai/docs/proxy.m
 `ApplyMate::Scraper::Base.http_client_class` defaults to `ApplyMate::Client::AsyncHttp`; a scraper overrides it (Dou → `ImpersonateHttp`). Everything that needs a client for a source asks the scraper class, never hardcodes one:
 
 ```ruby
-# Source
-def build_scraper
-  klass = scraper.constantize
-  klass.new(self, klass.http_client_class.new)
-end
-
-def http_client(**options)
-  scraper.constantize.http_client_class.new(**options)
-end
+# Vacancy::Operation::SyncVacancies — one client + scraper per proxied request
+client  = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
+scraper = scraper_class.new(source, client)
 ```
 
-`SyncVacancies` builds a per-request client with `http_client_class.new(proxy: proxy.url, request_timeout:, connect_timeout:)`, so every client class must accept that constructor.
+Every client class must therefore accept the `(proxy:, request_timeout:, connect_timeout:)` constructor.
 
 **Scrapers only parse.**
 A scraper receives `(source, client)`, makes the HTTP calls it needs through `@client` wrapped in `via_proxy`, and returns `ApplyMate::Operation::Struct`s. It does not touch the database, the proxy pool or Elasticsearch.

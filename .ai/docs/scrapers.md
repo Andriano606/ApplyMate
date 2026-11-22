@@ -65,18 +65,15 @@ Only listing-carries-the-description sources (`fetches_description?` == `false`)
 description keys here; for the others the listing must leave both out so the second pass owns
 them (see `.ai/docs/sync_vacancies.md`).
 
-## Source#build_scraper
+## Building a scraper
 
-`Source#build_scraper` instantiates the configured scraper with the client class the scraper declares (`Scraper.http_client_class`: `AsyncHttp` by default, `ImpersonateHttp` for Dou):
+`SyncVacancies` instantiates the configured scraper with the client class the scraper declares (`Scraper.http_client_class`: `AsyncHttp` by default, `ImpersonateHttp` for Dou), one client per proxied request:
 
 ```ruby
-scraper = source.build_scraper
-# equivalent to:
-klass   = source.scraper.constantize
-scraper = klass.new(source, klass.http_client_class.new)
+scraper_class = source.scraper.constantize
+client        = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout:, connect_timeout:)
+scraper       = scraper_class.new(source, client)
 ```
-
-`Source#http_client(**options)` builds just the client (e.g. with `proxy:`).
 
 ## Cloudflare-protected sites — ImpersonateHttp (TLS fingerprint, no browser)
 

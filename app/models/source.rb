@@ -11,22 +11,9 @@ class Source < ApplicationRecord
   validates :logo, presence: true
   validates :scraper, presence: true, inclusion: { in: SCRAPERS.map(&:to_s) }
 
-  def build_scraper
-    klass = scraper.constantize
-    # Use the source's own client (Dou → ImpersonateHttp) so the apply flow reaches a
-    # Cloudflare-protected vacancy page too, not just the sync — plain AsyncHttp gets 403.
-    klass.new(self, klass.http_client_class.new)
-  end
-
   # Public listing page of this source (Dou → /vacancies/, Djinni → /jobs/), owned by
   # the scraper so the URL lives next to the code that scrapes it.
   def listing_url
     scraper.constantize.listing_url(self)
-  end
-
-  # The HTTP client this source must be talked to with, for callers that need raw
-  # requests rather than a scraper (the apply pipeline fetches the form and POSTs it).
-  def http_client(**options)
-    scraper.constantize.http_client_class.new(**options)
   end
 end
