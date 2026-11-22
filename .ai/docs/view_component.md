@@ -91,6 +91,8 @@ the next. The vacancy page (`Vacancy::Component::Show`) guards on `Vacancy#descr
 
 ## Shared component (reusable)
 
+The `StatusBadge` and `ScoreChart` components below are illustrative skeletons — they do not exist in the repo.
+
 ### 1. Create the class
 
 ```ruby
@@ -123,7 +125,7 @@ end
 ### 4. Use via helper (not `render` directly)
 
 ```slim
-= status_badge(status: @vacancy.status)
+= status_badge(status: :active)
 ```
 
 ## Resource-scoped component (not reusable)
@@ -174,7 +176,7 @@ def initialize(vacancy:, **)
 end
 
 def before_render
-  @apply = @vacancy.applies.where(user: current_user).last
+  @hidden = @vacancy.hidden_vacancies.exists?(user: current_user)
 end
 ```
 
@@ -182,28 +184,27 @@ end
 
 `ApplicationController.renderer.render_to_string(MyComponent.new(...))` has **no request context** — `current_user` returns `nil`. Components rendered this way must not rely on `current_user`.
 
-**Pattern:** accept the record and the user directly as keyword arguments (bypassing the lookup), defaulting to a `LAZY` sentinel that is resolved in `before_render`:
+**Pattern:** accept the record and the user directly as keyword arguments (bypassing the lookup), defaulting to a `LAZY` sentinel that is resolved in `before_render` (generic example — no component in the repo uses it right now):
 
 ```ruby
 LAZY = :lazy
 
-def initialize(vacancy:, apply: LAZY, user: LAZY, **)
-  @vacancy      = vacancy
-  @apply_preset = apply
-  @user_preset  = user
+def initialize(vacancy:, user: LAZY, **)
+  @vacancy     = vacancy
+  @user_preset = user
 end
 
 def before_render
-  # In a normal request, fall back to current_user and look the apply up.
-  # In a broadcast (ApplicationController.renderer), apply: and user: are passed directly.
-  @user  = @user_preset == LAZY ? current_user : @user_preset
-  @apply = @apply_preset == LAZY ? Apply.latest_for(vacancy: @vacancy, user: @user) : @apply_preset
+  # In a normal request, fall back to current_user.
+  # In a broadcast (ApplicationController.renderer), user: is passed directly.
+  @user   = @user_preset == LAZY ? current_user : @user_preset
+  @hidden = @vacancy.hidden_vacancies.exists?(user: @user)
 end
 ```
 
-Broadcast call passes everything explicitly — including `user:`, because `apply` may be `nil` (nothing to derive the user from):
+Broadcast call passes everything explicitly:
 ```ruby
-Apply::Component::StatusBadge.new(vacancy:, apply:, user:)  # no current_user needed
+Widget::Component::Badge.new(vacancy:, user:)  # no current_user needed
 ```
 
 ## Slots

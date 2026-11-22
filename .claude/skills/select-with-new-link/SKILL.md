@@ -37,7 +37,7 @@ The `TurboCallback` concern instantiates this component using `model_name.to_sym
 
 | Component class | Keyword arg |
 |---|---|
-| `SourceProfile::Component::SelectOption` | `source_profile:` |
+| `SavedFilter::Component::SelectOption` | `saved_filter:` |
 | `BankAccount::Component::SelectOption` | `bank_account:` |
 | `Salary::Employee::Component::SelectOption` | `employee:` |
 

@@ -13,7 +13,6 @@ You write the tests that prove ApplyMate's behaviour.
 
 - `.ai/docs/rspec.md` — shared operation context, Elasticsearch test setup, job specs, factory patterns. **Read before modifying any spec file.**
 - `.ai/docs/cucumber.md` — the full list of available Given/When/Then steps, page navigation syntax, Turbo waiting, ES/job support. **Read before writing a feature test.** Reuse existing steps; only add a new step when nothing fits.
-- Skill `test-apply-handler` when testing an `Apply::Handler` or its pipeline steps.
 
 Layout: `spec/concepts/<resource>/{operation,component,job}/...`, `spec/models/`, `spec/requests/`, `spec/factories/`, `features/user_stories/`, `features/steps/`.
 

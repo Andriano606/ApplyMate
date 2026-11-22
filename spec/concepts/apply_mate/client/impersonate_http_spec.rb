@@ -106,22 +106,4 @@ RSpec.describe ApplyMate::Client::ImpersonateHttp do
       expect(response.status).to eq(201)
     end
   end
-
-  describe '#post_multipart' do
-    it 'builds a multipart body, sets the boundary content type and does not follow redirects' do
-      stub_curl(code: 302)
-      response = described_class.new.post_multipart('https://x', payload: { 'name' => 'Ada' })
-
-      expect(@captured).to include('-X', 'POST')
-      expect(@captured).not_to include('-L')
-
-      headers = @captured.each_cons(2).select { |flag, _| flag == '-H' }.map(&:last)
-      boundary_header = headers.find { |h| h.start_with?('Content-Type:') }
-      expect(boundary_header).to match(%r{multipart/form-data; boundary=----RubyMultipart})
-
-      expect(@request_body).to include('Content-Disposition: form-data; name="name"')
-      expect(@request_body).to include('Ada')
-      expect(response.status).to eq(302)
-    end
-  end
 end

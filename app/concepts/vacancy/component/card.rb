@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 class Vacancy::Component::Card < ApplyMate::Component::Base
-  def initialize(vacancy:, apply: nil, hidden: false)
+  def initialize(vacancy:, hidden: false)
     @vacancy = vacancy
-    @apply = apply
     @hidden = hidden
   end
 
