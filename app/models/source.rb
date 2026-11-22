@@ -5,7 +5,6 @@ class Source < ApplicationRecord
 
   has_one_attached :logo
   has_many :vacancies, dependent: :destroy
-  has_many :source_profiles, dependent: :destroy
 
   validates :name, presence: true
   validates :base_url, presence: true
