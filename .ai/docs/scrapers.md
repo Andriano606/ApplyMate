@@ -8,25 +8,12 @@ Scrapers live in `app/concepts/apply_mate/scraper/`. Each scraper inherits `Appl
 |--------|---------|
 | `fetch_listing(page:)` | Makes **one** HTTP request for that page/offset. Returns array of vacancy structs, or `nil` when the page is empty. No per-vacancy HTTP calls. |
 | `fetch_description(url)` | Fetches a single vacancy's description and returns it as **HTML**. Called in the second async pass by `fetch_description_worker`. Only implemented by scrapers whose `fetches_description?` is `true`. |
-| `fetch_details(url)` | Used by the **apply flow** (not sync). Returns structured details needed to fill an application form. |
-| `fetch_applyble(url, session_id:)` | Returns `true`/`false` — can the user apply to this vacancy? |
-| `fetch_form_data(url, session_id: nil)` | Returns a hash representing the HTML application form (inputs, action, method, cookies) |
 
 ### fetch_listing must stay pure
 
-`fetch_listing` must make **exactly one** HTTP request and return immediately. Never call `fetch_description`, `fetch_details`, or any per-vacancy URL inside `fetch_listing` — that was a past mistake in Dou where the listing fetched each vacancy's details inline, blocking the entire page until all detail requests finished. Per-vacancy enrichment belongs exclusively in the second-pass `fetch_description_worker`.
+`fetch_listing` must make **exactly one** HTTP request and return immediately. Never call `fetch_description` or any per-vacancy URL inside `fetch_listing` — that was a past mistake in Dou where the listing fetched each vacancy's details inline, blocking the entire page until all detail requests finished. Per-vacancy enrichment belongs exclusively in the second-pass `fetch_description_worker`.
 
-### fetch_description vs fetch_details
-
-These two methods serve different callers:
-
-| | `fetch_description` | `fetch_details` |
-|---|---|---|
-| Called by | `SyncVacancies` second pass | Apply flow |
-| Purpose | Enrich vacancy description in DB | Provide form/apply details |
-| Returns | HTML string | plain text |
-| Dou | ✅ implemented | empty |
-| Djinni | not implemented | ✅ implemented |
+### fetch_description
 
 `fetch_description` is called **only** when the scraper's `fetches_description?` is `true`
 — `SyncVacancies` skips the whole second pass otherwise, so a source whose listing already
@@ -36,7 +23,7 @@ string from it to make the pipeline stop is what this predicate replaced.
 Constructor always takes `(source, client)`:
 
 ```ruby
-def initialize(source = Source.find_by(name: 'MySite'), client = ApplyMate::Client::Http.new)
+def initialize(source, client)
   @source = source
   @client = client
 end
@@ -66,7 +53,7 @@ ApplyMate::Operation::Struct.new(
   source_id:,
   title:,
   url:,
-  description:,       # plain text — Elasticsearch, AI prompts, card preview
+  description:,       # plain text — Elasticsearch, card preview
   description_html:,  # the source's own markup — what the vacancy page renders
   company_name:,
   company_icon_url:,
@@ -78,26 +65,20 @@ Only listing-carries-the-description sources (`fetches_description?` == `false`)
 description keys here; for the others the listing must leave both out so the second pass owns
 them (see `.ai/docs/sync_vacancies.md`).
 
-## Source#build_scraper
+## Building a scraper
 
-`Source` has a `build_scraper` helper that instantiates the configured scraper with `Client::Http` (default 15s timeout). The client is always `Http` — scrapers never receive `Client::Browser`:
-
-```ruby
-scraper = source.build_scraper
-# equivalent to:
-scraper = source.scraper.constantize.new(source, ApplyMate::Client::Http.new)
-```
-
-Use this in operations that need a scraper from an `apply` record:
+`SyncVacancies` instantiates the configured scraper with the client class the scraper declares (`Scraper.http_client_class`: `AsyncHttp` by default, `ImpersonateHttp` for Dou), one client per proxied request:
 
 ```ruby
-scraper = apply.vacancy.source.build_scraper
+scraper_class = source.scraper.constantize
+client        = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout:, connect_timeout:)
+scraper       = scraper_class.new(source, client)
 ```
 
 ## Cloudflare-protected sites — ImpersonateHttp (TLS fingerprint, no browser)
 
 Some sources (e.g. **Dou** = `jobs.dou.ua`) sit behind **Cloudflare**. A raw request
-(`AsyncHttp`/`Http`) gets a **403 "Just a moment…"** page regardless of HTTP headers —
+(`AsyncHttp`) gets a **403 "Just a moment…"** page regardless of HTTP headers —
 masking `Accept`/`Sec-*` does not help (measured: 22 vs 20 of 120 proxies). The discriminator
 is the **TLS/JA3 fingerprint**: Ruby's OpenSSL handshake isn't Chrome's, so Cloudflare blocks it.
 
@@ -116,9 +97,9 @@ scraper.fetch_description(url)                           # GET detail page
 Measured (datacenter proxies that raw HTTP can't use): **~43%** become usable via the Chrome TLS
 fingerprint, and a usable proxy sustains **12–15/15** sequential requests (no quick ban). The
 remaining proxies split into a true JS-challenge minority and hard IP-blocks (1020) — see
-`.ai/docs/proxy.md`. Compare a real headless browser: it also passes CF but yields only **~2
+`.ai/docs/proxy.md`. A real headless browser also passes CF but yields only **~2
 pages per proxy before a ban** and carries full Chrome overhead — so ImpersonateHttp is the
-primary path; `ApplyMate::Client::Browser` is reserved for the rare interactive JS challenge.
+primary path for Cloudflare-protected sources.
 
 **Install:** the curl-impersonate binary is arch-specific and NOT committed. Run
 `bin/install-curl-impersonate` once per host (downloads into `vendor/curl-impersonate/`, which is
@@ -149,57 +130,32 @@ else
 end
 ```
 
-`Source::SCRAPERS` lists allowed class name strings. Add the new class there and add a migration to backfill existing rows.
+`Source::SCRAPERS` lists allowed class name strings. Add the new class there.
 
 ## Adding a new scraper
 
 1. Create `app/concepts/apply_mate/scraper/my_site.rb` inheriting `ApplyMate::Scraper::Base`
-2. Add `'ApplyMate::Scraper::MySite'` to `Source::SCRAPERS` in `app/models/source.rb`
-3. Add migration: `add_column :sources, :scraper, :string` (if not yet present) + backfill migration
-4. Update the admin form select (uses `Source::SCRAPERS` collection)
+2. Add `'ApplyMate::Scraper::MySite'` to `Source::SCRAPERS` in `app/models/source.rb` (the admin source form select reads this constant)
+3. Create the `Source` row with `scraper: 'ApplyMate::Scraper::MySite'`
+4. Override class methods as needed: `listing_url`, `http_client_class`, `fetches_description?`, `burst_cooldown`
 
-## ApplyMate::Client::Http API
+See `.ai/docs/architecture.md`.
 
-All methods use the shared connection (browser User-Agent, follow redirects, 15s timeout). Requests fail fast — there is no internal retrying.
+## Client API (`AsyncHttp` / `ImpersonateHttp`)
 
-Returns a `Response` struct: `.body`, `.headers`, `.status`.
+Both share the constructor `(proxy: nil, request_timeout:, connect_timeout:)` and the same methods. Requests fail fast — there is no internal retrying. Both return `ApplyMate::Client::Response` (`.body`, `.headers`, `.status`, `.final_url`).
 
 ```ruby
-client = ApplyMate::Client::Http.new
+client = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url)
 
-# GET — returns Response or nil on redirect to unexpected URL
 response = client.get(url)
 response = client.get(url, headers: { 'Cookie' => '...' })
-
-# GET — follow redirects (skips the nil-on-redirect guard)
-# Use when the target URL is expected to redirect (e.g. external employer apply pages)
-response = client.get(url, follow_redirects: true)
-
-# Convenience: GET body only
-body = client.fetch_body(url)
-
-# POST — returns Response
-response = client.post(url, body: form_encoded_string, headers: {})
-
-# Convenience: POST body only (for XHR endpoints)
-body = client.post_xhr(url, URI.encode_www_form(count: 0), xhr_headers)
+response = client.post(url, body: URI.encode_www_form(count: 0), headers: xhr_headers)
 ```
 
-`get` returns `nil` (body is `nil`) if the server redirects to a different URL than requested — log and skip rather than raise. Pass `follow_redirects: true` to bypass this guard when redirects are expected (e.g. `Apply::Operation::Ai::FetchExternalForm`).
+Redirects are followed by default (`MAX_REDIRECTS = 5`); compare `response.final_url` with the requested URL to detect a redirect (Djinni uses this to detect the last page). Inside a scraper always wrap calls in `via_proxy { ... }` so transport errors, `nil` responses and `502/503/504` become `DeadProxyError`.
 
-`Response` also has `success?` which returns true for 2xx status codes.
-
-```ruby
-# Multipart POST without redirect-following — use for form submissions where
-# you need to inspect 3xx responses yourself (e.g. to detect apply success).
-# File parts: use Faraday::Multipart::FilePart in the payload hash.
-client = ApplyMate::Client::Http.new(timeout: 30)
-response = client.post_multipart(url, payload: { field: 'value', file_field: file_part }, headers: { 'Cookie' => '...' })
-response.success?        # true for 2xx
-response.status          # Integer
-response.headers         # Hash (check 'location' for redirects)
-response.body            # String
-```
+`Response` also has `cloudflare_challenge?` and `alive_or_cf_challenge?` (used by proxy validation).
 
 ## CSRF session init pattern (DOU-style XHR scrapers)
 
@@ -207,8 +163,8 @@ Some sites require a CSRF token extracted from cookies before XHR requests will 
 
 ```ruby
 def initialize_session
-  response = @client.get(VACANCIES_URL)
-  csrf_match = response&.headers&.[]('set-cookie').to_s.match(/csrftoken=([^;,\s]+)/)
+  response = via_proxy { @client.get(VACANCIES_URL) }
+  csrf_match = Array(response.headers['set-cookie']).join('; ').match(/csrftoken=([^;,\s]+)/)
   @csrf_token = csrf_match&.[](1)
 end
 
@@ -228,7 +184,7 @@ Call `initialize_session` at the top of `fetch_listing` (not in the constructor)
 If CSRF extraction fails (proxy served a captcha), raise `DeadProxyError` immediately — continuing with a nil token causes every subsequent request to fail silently:
 
 ```ruby
-raise ApplyMate::Client::Base::DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
+raise DeadProxyError, 'could not extract CSRF token (proxy blocked)' if @csrf_token.blank?
 ```
 
 ## Proxy-blocked responses — raise DeadProxyError
@@ -241,7 +197,7 @@ When a proxy is blocked the site returns HTML instead of expected content. Two g
 begin
   data = JSON.parse(body)
 rescue JSON::ParserError
-  raise ApplyMate::Client::Base::DeadProxyError, 'non-JSON response (proxy blocked)'
+  raise DeadProxyError, 'non-JSON response (proxy blocked)'
 end
 ```
 
@@ -268,7 +224,7 @@ string so they can never describe different content:
 | Column | Content | Read by |
 |---|---|---|
 | `description_html` | the source's markup, kept as-is | `Vacancy::Component::Show` → `rich_text` → `ApplyMate::Component::RichText` |
-| `description` | plain-text projection of that markup | Elasticsearch `as_indexed_json`, AI prompts, `Vacancy::Component::Card` preview |
+| `description` | plain-text projection of that markup | Elasticsearch `as_indexed_json`, `Vacancy::Component::Card` preview |
 
 `ApplyMate::Scraper::Base` owns both halves — never hand-roll tag stripping in a scraper:
 

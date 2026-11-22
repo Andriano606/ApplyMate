@@ -17,8 +17,6 @@ require 'tempfile'
 # `bin/install-curl-impersonate` (downloads the right build into vendor/, gitignored)
 # or point CURL_IMPERSONATE_BIN at a wrapper (e.g. curl_chrome136) on the host.
 class ApplyMate::Client::ImpersonateHttp
-  include ApplyMate::Client::Multipart
-
   Response = ApplyMate::Client::Response
 
   class RequestError < StandardError; end
@@ -45,16 +43,6 @@ class ApplyMate::Client::ImpersonateHttp
     run(url, method: 'POST', body: body, headers: headers, follow_redirects: true)
   end
 
-  # Mirrors AsyncHttp#post_multipart so a Cloudflare-protected source can submit the
-  # apply form through the same Chrome TLS fingerprint it scraped with. Redirects are
-  # NOT followed: the caller inspects the 3xx Location to tell success from failure.
-  def post_multipart(url, payload:, headers: {})
-    body, content_type = build_multipart(payload)
-    run(url, method: 'POST', body: body,
-             headers: headers.merge('Content-Type' => content_type),
-             follow_redirects: false)
-  end
-
   private
 
   def run(url, method: 'GET', body: nil, headers: {}, follow_redirects: true)
@@ -74,8 +62,8 @@ class ApplyMate::Client::ImpersonateHttp
     end
   end
 
-  # The request body goes through a file, not argv: a multipart payload carries a
-  # binary PDF and would blow past ARG_MAX (and lose NUL bytes) as a command argument.
+  # The request body goes through a file, not argv: a large body would blow past
+  # ARG_MAX (and lose NUL bytes) as a command argument.
   def write_request_body(body)
     return nil if body.nil?
 

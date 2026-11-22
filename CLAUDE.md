@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # ApplyMate
 
-Rails 8 + Hotwire (Stimulus + Turbo) job-application automation app. Users find vacancies via Elasticsearch, then the app automates fetching vacancy details, generating a tailored CV, and submitting the application via browser automation (Ferrum + Chrome).
+Rails 8 + Hotwire (Stimulus + Turbo) **vacancy bank**. Its single job is to keep the list of live vacancies from several job boards (DOU, Djinni, …) up to date — quickly and efficiently, through a pool of free proxies — and let users search, filter and hide them via Elasticsearch.
+
+The core is two background pipelines: `Proxy::Operation::FetchProxies` (collects the proxy pool) and `Vacancy::Operation::SyncVacancies` (scrapes every source through that pool). There is no auto-apply, no AI integration, no user/source profiles, no prompts and no CV generation — they were removed on purpose; do not reintroduce them.
 
 ## Essential Commands
 
@@ -37,12 +39,12 @@ Controllers call `endpoint(OperationClass, ComponentClass)` (defined in `Operati
 
 ```ruby
 # Typical minimal controller
-class AppliesController < ApplicationController
+class Admin::SourcesController < Admin::BaseController
   def index
-    endpoint Apply::Operation::Index, Apply::Component::Index
+    endpoint Admin::Source::Operation::Index, Admin::Source::Component::Index
   end
   def create
-    endpoint Apply::Operation::Create, Apply::Component::NewModal
+    endpoint Admin::Source::Operation::Create, Admin::Source::Component::NewModal
   end
 end
 ```
@@ -99,9 +101,8 @@ Apply these to ALL new and modified code. They are distilled from real review fi
 | `view_component` | Component rendering |
 | `simple_form` + `slim-rails` | Forms in `.html.slim` templates |
 | `dry-matcher` | `Matcher::MatcherWithDefaults` used by Endpoint for success/invalid dispatch |
-| `ferrum` | Headless Chrome via CDP for scraping/form-filling |
 | `solid_queue` + `solid_cable` + `solid_cache` | Background jobs, ActionCable, caching |
-| `grover` + `redcarpet` | Markdown CV → PDF pipeline |
+| `async` + `async-http` | Fiber concurrency for the sync/proxy pipelines (`ApplyMate::Client::AsyncHttp`) |
 | `will_paginate` | Pagination; operations return `WillPaginate::Collection` |
 
 ## Stimulus Controllers
@@ -123,15 +124,13 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/turbo_form_controller.md` — `turbo-form` Stimulus controller: live re-render on field change, dependent selects, submit-button management, custom fetch URL.
 - `.ai/docs/view_component.md` — component decision tree (check helper first, shared vs resource-scoped), base class features, `before_render` / `current_user` pitfalls, broadcast-safe sentinel pattern.
 - `.ai/docs/turbo_handler.md` — TurboHandler class API, user-scoped broadcasts (`[user, record]` channels), `ApplicationController.renderer` limitations, how to pass user context to components in broadcasts.
-- `.ai/docs/ai_prompts_and_schemas.md` — Prompt::Base / ResponseSchema::Base API, AiHandler wiring, per-field instructions, JSON vs binary schemas, skeleton for new pairs. **Read before adding or modifying AI prompt/schema objects.**
-- `.ai/docs/architecture.md` — Module boundary table (Client/Scraper/Handler/Operation), enforced rules, how to add a new job board end-to-end. **Read before modifying any pipeline module.**
-- `.ai/docs/scrapers.md` — Scraper base interface, vacancy struct shape, `ApplyMate::Client::Http` API, CSRF session init pattern, graceful termination, adding a new scraper. **Read before adding or modifying scrapers.**
+- `.ai/docs/architecture.md` — Module boundary table (Client/Scraper/Operation), enforced rules, how to add a new job board end-to-end. **Read before modifying any pipeline module.**
+- `.ai/docs/scrapers.md` — Scraper base interface, vacancy struct shape, HTTP client API (`AsyncHttp` / `ImpersonateHttp`), CSRF session init pattern, graceful termination, adding a new scraper. **Read before adding or modifying scrapers.**
 - `.ai/docs/async.md` — Async fiber pattern for jobs, `AsyncHttp` client, `Protocol::HTTP::Headers` API gotchas, `ErrorHandler` transport compatibility. **Read before adding concurrency to a job or touching `ApplyMate::Client::AsyncHttp`.**
-- `.ai/docs/apply_handlers.md` — Apply::Handler `add_step` DSL, pipeline declaration, handler resolution, adding a new source. **Read before modifying the apply flow or adding a new job board.**
 - `.ai/docs/models_and_db.md` — nullable FK patterns, inverse associations for multiple FKs to the same table, uniqueness errors on `:base`.
 - `.ai/docs/ruby_style.md` — project Ruby style rules (no endless methods, etc.).
 - `.ai/docs/proxy.md` — proxy model fail tracking (`increment_fail!` / `reset_fail!`), `https`→`http` normalization gotcha, 2xx/3xx reachability rule.
-- `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: single-threaded fetch→persist (no validation, no shards), fiber count in FetchCandidates, stop conditions, catalog URL recursion, protocol inference, persist upsert semantics. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
+- `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: bounded fetch streamed into batched persist (no validation), why every limit exists (the run used to OOM the Pi), per-list sampling, stop conditions, catalog URL recursion caps, protocol inference, persist insert semantics, why proxies are never pruned. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
 - `.ai/docs/sync_vacancies.md` — `Vacancy::Operation::SyncVacancies` internals: fiber count per source, stop conditions, empty-page confirmation logic (LAST_PAGE_CONFIRMATIONS), boundary narrowing, shared data structures. **Read before modifying the vacancy sync pipeline.**
 
 ## Delegation to Subagents
@@ -144,7 +143,7 @@ Agent definitions live in `.claude/agents/`. Each one pins its own model and eff
 | Design for a multi-layer, pipeline, schema or state-machine change | `planner` | fable / high |
 | Operations, form objects, components, turbo handlers, jobs, policies, migrations | `concept-builder` | sonnet / medium |
 | Slim, Tailwind, simple_form, Stimulus/TS, Turbo frames | `frontend-builder` | sonnet / medium |
-| Scrapers, Client::Http/AsyncHttp/Browser, apply handlers, vacancy sync, proxies, fibers, AI prompts | `pipeline-engineer` | opus / high |
+| Scrapers, Client::AsyncHttp/ImpersonateHttp, vacancy sync, proxies, fibers | `pipeline-engineer` | opus / high |
 | RSpec, Cucumber, factories | `spec-writer` | sonnet / medium |
 | Just run the checks and report what is red | `checks-runner` | haiku / low |
 | Locale keys, i18n-tasks failures | `i18n-keeper` | haiku / low |
