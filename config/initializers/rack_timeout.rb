@@ -4,7 +4,7 @@
 #
 # With `config.enable_reloading = true`, the code reloader takes the load
 # interlock exclusively on the first request after a file change. If another
-# request is parked in a no-timeout blocking call (external HTTP, Ferrum/Chrome,
+# request is parked in a no-timeout blocking call (external HTTP,
 # a stuck socket) it holds the interlock in "sharing" mode, so the reload — and
 # then every following request — waits forever on a ConditionVariable that has no
 # deadline. Once all Puma threads are parked, new connections sit in the accept

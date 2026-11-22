@@ -2,52 +2,51 @@
 
 ## Nullable FK columns — use `dependent: :nullify` on the association
 
-When a FK column is nullable (`null: true`, model side `optional: true`), add `dependent: :nullify` to the `has_many` (or `has_one`) on the parent model. ActiveRecord will NULL out the FK before destroying the parent, so no `PG::ForeignKeyViolation` is raised. DB-level `on_delete: :nullify` is **not** needed and should be avoided — keep FK constraints as plain restrict.
+When a FK column is nullable (`null: true`, model side `optional: true`), add `dependent: :nullify` to the `has_many` (or `has_one`) on the parent model. ActiveRecord will NULL out the FK before destroying the parent, so no `PG::ForeignKeyViolation` is raised. Keep the DB FK as a plain restrict.
+
+Generic example (`Widget` / `Part` are illustrative, not real models):
 
 ```ruby
-# app/models/prompt.rb — correct approach
-has_many :fill_form_applies,   class_name: 'Apply', foreign_key: :fill_form_prompt_id,   dependent: :nullify, inverse_of: :fill_form_prompt
-has_many :generate_cv_applies, class_name: 'Apply', foreign_key: :generate_cv_prompt_id, dependent: :nullify, inverse_of: :generate_cv_prompt
-```
+# app/models/widget.rb — correct approach
+has_many :parts, dependent: :nullify, inverse_of: :widget
 
-```ruby
-# app/models/apply.rb — model side must match
-belongs_to :fill_form_prompt, class_name: 'Prompt', optional: true
-```
+# app/models/part.rb — model side must match
+belongs_to :widget, optional: true
 
-```ruby
-# migration — plain FK, no on_delete rule
-add_foreign_key :applies, :prompts, column: :fill_form_prompt_id
+# migration — plain FK
+add_foreign_key :parts, :widgets
 ```
 
 Rule of thumb: **nullable FK → `dependent: :nullify` on the AR association; keep DB FK as default restrict.**
 
+Exception: a circular reference such as `users.default_saved_filter_id` → `saved_filters` (`User belongs_to :default_saved_filter, optional: true`; `SavedFilter belongs_to :user`) uses `on_delete: :nullify` at the DB level (`db/schema.rb`), because destroying a user cascades to its saved filters while the user row still points at one of them.
+
 ## Inverse associations for non-standard FKs
 
-When a model has multiple FKs to the same table (e.g. `applies.fill_form_prompt_id` and `applies.generate_cv_prompt_id` both point to `prompts`), declare the `has_many` on the parent with explicit `foreign_key:` and `inverse_of:`:
+When a model has multiple FKs to the same table, declare the `has_many` on the parent with explicit `foreign_key:` and `inverse_of:`. Generic example (`Message` has `sender_id` and `recipient_id`, both pointing at `users`):
 
 ```ruby
-# app/models/prompt.rb
-has_many :fill_form_applies,   class_name: 'Apply', foreign_key: :fill_form_prompt_id,   dependent: :nullify, inverse_of: :fill_form_prompt
-has_many :generate_cv_applies, class_name: 'Apply', foreign_key: :generate_cv_prompt_id, dependent: :nullify, inverse_of: :generate_cv_prompt
+# app/models/user.rb
+has_many :sent_messages,     class_name: 'Message', foreign_key: :sender_id,    dependent: :nullify, inverse_of: :sender
+has_many :received_messages, class_name: 'Message', foreign_key: :recipient_id, dependent: :nullify, inverse_of: :recipient
 ```
 
-`has_many` defines **instance** methods only — `Prompt.fill_form_applies` is a `NoMethodError`; call `prompt.fill_form_applies`.
+`has_many` defines **instance** methods only — `User.sent_messages` is a `NoMethodError`; call `user.sent_messages`.
 
 ## Uniqueness validations — put errors on `:base`
 
-`validates :user_id, uniqueness: { scope: :prompt_type }` adds the error to `errors[:user_id]`. Since `user_id` has no form field, the error is invisible and the user sees no feedback.
+`validates :user_id, uniqueness: { scope: :kind }` adds the error to `errors[:user_id]`. Since `user_id` has no form field, the error is invisible and the user sees no feedback. (A uniqueness validation on an attribute that **is** a form field, like `SavedFilter#name` scoped to `user_id`, is fine.)
 
-Always use a custom `validate` method that adds to `:base` for cross-field or ownership-based uniqueness:
+For cross-field or ownership-based uniqueness use a custom `validate` method that adds to `:base` (generic `Widget` example):
 
 ```ruby
-validate :unique_type_per_user
+validate :unique_kind_per_user
 
-def unique_type_per_user
-  return if user_id.blank? || prompt_type.blank?
-  return unless self.class.where(user_id:, prompt_type:).where.not(id:).exists?
+def unique_kind_per_user
+  return if user_id.blank? || kind.blank?
+  return unless self.class.where(user_id:, kind:).where.not(id:).exists?
 
-  errors.add(:base, I18n.t('prompt.errors.type_taken'))
+  errors.add(:base, I18n.t('widget.errors.kind_taken'))
 end
 ```
 
@@ -55,92 +54,49 @@ end
 
 ## jsonb_accessor — setup and key naming rules
 
-Use `jsonb_accessor` to declare typed accessors for jsonb columns. It resolves types via `ActiveRecord::Type`, not `ActiveModel::Type`.
+Use `jsonb_accessor` to declare typed accessors for jsonb columns (see `SavedFilter`, whose `vacancy_search` column exposes `include_tags`, `include_ops`, `exclude_tags`). It resolves types via `ActiveRecord::Type`, not `ActiveModel::Type`:
 
-**Registering a passthrough type for arrays/hashes** — jsonb_accessor 1.4.2 only knows primitive types (`:string`, `:integer`, etc.). For unstructured values (arrays of hashes) register `:value` in an initializer:
+```ruby
+jsonb_accessor :vacancy_search,
+               include_tags: [ :string, array: true, default: [] ],
+               exclude_tags: [ :string, array: true, default: [] ]
+```
+
+For unstructured values (arrays of hashes) jsonb_accessor 1.4.2 only knows primitive types, so register a passthrough type first (no such initializer exists in the repo today — add it when you need it):
 
 ```ruby
 # config/initializers/jsonb_accessor_types.rb
 ActiveRecord::Type.register(:value, ActiveModel::Type::Value)
 ```
 
-Then use it in the model:
-
-```ruby
-jsonb_accessor :form_data,
-  action:           :string,
-  http_method:      :string,   # see naming rules below
-  submit_selector:  :string,
-  external_url:     :string,
-  trigger_selector: :string,
-  cookies:          :string,
-  inputs:           :value     # Array of hashes — passthrough type
-
-jsonb_accessor :filled_form_data,
-  filled_inputs: :value        # different name avoids clash with form_data.inputs
-```
-
 **Naming rules:**
-- Avoid `method` — it shadows `Object#method` which Rails uses internally. Use `http_method` and rename the JSON key in a migration.
-- When two jsonb columns share the same logical key (e.g. both store `inputs`), give the second column a distinct accessor name (`filled_inputs`). The accessor name IS the JSON key, so a migration is required to rename the existing data.
+- Avoid `method` — it shadows `Object#method` which Rails uses internally. Use `http_method` and similar.
+- When two jsonb columns share the same logical key, give the second column a distinct accessor name. The accessor name IS the JSON key, so renaming it later requires a data migration.
 
-**Migration to rename a JSON key inside a jsonb column:**
+**Migration to rename a JSON key inside a jsonb column** (generic `widgets.settings` example):
 
 ```ruby
-# Rename form_data['method'] → form_data['http_method']
+# Rename settings['method'] → settings['http_method']
 execute <<~SQL
-  UPDATE applies
-  SET form_data = jsonb_set(form_data - 'method', '{http_method}', form_data->'method')
-  WHERE form_data ? 'method';
+  UPDATE widgets
+  SET settings = jsonb_set(settings - 'method', '{http_method}', settings->'method')
+  WHERE settings ? 'method';
 SQL
 ```
-
-## Per-resource default (one default per parent per user)
-
-When a user can have multiple records of type X but only one default per source/context, use a boolean column with a partial unique index — **not** a FK column on the user.
-
-```ruby
-# migration
-add_column :source_profiles, :is_default, :boolean, default: false, null: false
-add_index  :source_profiles, [:user_id, :source_id],
-           unique: true,
-           where:  '"is_default" = true',
-           name:   'index_source_profiles_on_user_source_default'
-```
-
-```ruby
-# model
-def self.default_for(user, source)
-  find_by(user: user, source: source, is_default: true)
-end
-
-def set_as_default!
-  SourceProfile.transaction do
-    SourceProfile.where(user: user, source: source, is_default: true)
-                 .where.not(id: id)
-                 .update_all(is_default: false)
-    update!(is_default: true)
-  end
-end
-```
-
-The partial unique index enforces the constraint at the DB level — only one row per `(user_id, source_id)` can have `is_default = true`. Rows with `is_default = false` are unconstrained.
 
 ## upsert_all — deduplicate before calling
 
 `upsert_all` with `ON CONFLICT DO UPDATE` raises `PG::CardinalityViolation` if the array contains two rows that conflict on the same unique key — PostgreSQL forbids updating the same row twice in one statement.
 
-Always `.uniq` by the same columns as `unique_by:` before calling:
+Always `.uniq` by the same columns as `unique_by:` before calling. `Vacancy.upsert_all` in `Vacancy::Operation::SyncVacancies` uses `unique_by: [:source_id, :external_id]`:
 
 ```ruby
-# ❌ raises PG::CardinalityViolation when records contain e.g. both
-#    {protocol: 'http', host: '1.2.3.4', port: 8080} and
-#    {protocol: 'socks5', host: '1.2.3.4', port: 8080}
-Proxy.upsert_all(records, unique_by: %i[host port], update_only: %i[active])
+# ❌ raises PG::CardinalityViolation when `rows` holds the same (source_id, external_id) twice
+Vacancy.upsert_all(rows, unique_by: %i[source_id external_id], update_only: %i[title url])
 
 # ✅ deduplicate by the same key first
-records = raw.uniq { |r| [r[:host], r[:port]] }
-Proxy.upsert_all(records, unique_by: %i[host port], update_only: %i[active])
+rows = rows.uniq { |r| [r[:source_id], r[:external_id]] }
+Vacancy.upsert_all(rows, unique_by: %i[source_id external_id], update_only: %i[title url])
 ```
 
-Root cause is usually upstream dedup using a superset of columns (e.g. `protocol:host:port`) while the DB constraint covers a subset (`host:port`).
+Root cause is usually upstream dedup using a different column set than the DB constraint. Note the unique index on `proxies` is `(host, port, protocol)` (`Proxy::Operation::PersistProxies` uses `insert_all`, which skips conflicts instead of raising this error).

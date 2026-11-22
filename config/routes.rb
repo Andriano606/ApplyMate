@@ -32,16 +32,8 @@ Rails.application.routes.draw do
   end
 
   resources :vacancies, only: [ :index, :show ] do
-    resources :vacancy_cvs, only: [ :index, :new, :create ]
-    resources :vacancy_questions, only: [ :index, :new, :create ]
-    resources :applies, only: [ :index ], controller: 'vacancy_applies'
     resource :hidden_vacancy, only: [ :create, :destroy ]
   end
-  resources :user_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
-  resources :ai_integrations, only: [ :index, :new, :create, :edit, :update, :destroy ]
-  resources :applies, only: [ :index, :show, :new, :create, :destroy ]
-  resources :source_profiles, only: [ :index, :new, :create, :edit, :update, :destroy ]
-  resources :prompts, only: [ :index, :new, :create, :edit, :update, :destroy ]
   resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]
 
   # Defines the root path route ("/")
