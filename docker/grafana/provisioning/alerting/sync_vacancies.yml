@@ -1,0 +1,113 @@
+apiVersion: 1
+
+# The old proxy-validation rules watched events of the removed
+# Proxy::Operation::ValidateCandidates; drop them from Grafana's database
+# (removing a provisioned rule from this file alone does not delete it).
+deleteRules:
+  - orgId: 1
+    uid: applymate-proxy-no-results
+  - orgId: 1
+    uid: applymate-proxy-low-rate
+
+# Built on the vacancy_sync_* events (.ai/docs/observability.md). The sync runs
+# once a day, so both rules look back 26h: one run plus slack for a slow one.
+groups:
+  - name: SyncVacancies
+    folder: ApplyMate
+    interval: 5m
+    orgId: 1
+    rules:
+
+      # The latest run did not finish cleanly (a source failed or was skipped, or the
+      # run itself raised) — some vacancies are stale. Keyed on the latest run's
+      # `result` (not on `sources_failed`, which stays 0 when e.g. the final proxy-stat
+      # flush raises); `keep failed` drops the per-deploy `container` label so
+      # last_over_time sees one series and resolves as soon as a clean run lands.
+      # The reason is in the "Помилки та попередження" panel of the sync dashboard.
+      - uid: applymate-sync-failed
+        title: Синхронізація вакансій зі збоями
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Останній запуск синхронізації вакансій завершився зі збоєм"
+          description: "vacancy_sync_finished.result != ok. Причина — у панелі «Помилки та попередження» дашборду «Синхронізація вакансій»."
+        labels:
+          severity: critical
+          team: backend
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 93600
+              to: 0
+            model:
+              expr: 'max(last_over_time({job="rails"} |= "vacancy_sync_finished" | json | __error__="" | event="vacancy_sync_finished" | label_format failed=`{{ if eq .result "ok" }}0{{ else }}1{{ end }}` | keep failed | unwrap failed [26h]))'
+              queryType: instant
+              refId: A
+          - refId: B
+            datasourceUid: "__expr__"
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              type: threshold
+              refId: C
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+
+      # No run FINISHED in 26h: the recurring job is not firing (worker down, Solid
+      # Queue stuck), or runs start but die/hang before the end (OOM, deploy restart,
+      # livelock) — vacancy_sync_finished is logged from an ensure, so only a killed
+      # or hung process skips it.
+      - uid: applymate-sync-missing
+        title: Синхронізація вакансій не завершувалась понад добу
+        condition: C
+        for: 0s
+        noDataState: Alerting
+        execErrState: Error
+        annotations:
+          summary: "За 26 год не було жодного vacancy_sync_finished"
+          description: "Vacancy::Job::SyncVacancies має стартувати щодня о 03:00 і завершуватись за хвилини. Якщо в журналі є «Старт», але немає результату — процес вбили або він завис; інакше перевірте worker і Solid Queue (recurring tasks)."
+        labels:
+          severity: warning
+          team: backend
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 93600
+              to: 0
+            model:
+              expr: 'sum(count_over_time({job="rails"} |= "vacancy_sync_finished" | json | __error__="" | event="vacancy_sync_finished" [26h]))'
+              queryType: instant
+              refId: A
+          - refId: B
+            datasourceUid: "__expr__"
+            model:
+              type: reduce
+              refId: B
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              type: threshold
+              refId: C
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]

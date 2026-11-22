@@ -102,6 +102,33 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       operation.call
     end
 
+    # These events feed the Grafana dashboard (.ai/docs/observability.md); the field
+    # names are its contract.
+    it 'reports the run to Grafana: pool, listing summary with new/stale counts, result' do
+      create(:vacancy, source: source_djinni, external_id: '823988')
+      create(:vacancy, source: source_djinni, external_id: 'stale_id')
+      events = capture_logged_events
+
+      operation.call
+
+      by_name = events.index_by { |e| e['event'] }
+      session = by_name.fetch('vacancy_sync_started')['session_id']
+      expect(by_name.fetch('vacancy_sync_started')).to include('sources' => 'Djinni', 'started_at_ms' => session)
+      expect(by_name.fetch('vacancy_sync_proxy_pool_ready'))
+        .to include('session_id' => session, 'source' => 'Djinni', 'checked' => 1, 'alive' => 1)
+      expect(by_name.fetch('vacancy_sync_listing_finished')).to include(
+        'session_id' => session, 'source' => 'Djinni', 'result' => 'ok', 'level' => 'info',
+        'pages' => 1, 'vacancies' => 15, 'new_vacancies' => 14, 'stale_deleted' => 1, 'vacancies_total' => 15,
+        'dead_proxies' => 0, 'failed_requests' => 0, 'errors' => nil
+      )
+      expect(by_name.fetch('vacancy_sync_listing_finished')['requests']).to be >= 2 # page 1 + the empty last page
+      expect(by_name).not_to have_key('vacancy_sync_descriptions_finished')
+      expect(by_name.fetch('vacancy_sync_finished')).to include(
+        'session_id' => session, 'result' => 'ok', 'sources_ok' => 1, 'sources_failed' => 0,
+        'operation' => described_class.name
+      )
+    end
+
     context 'when a page within the scraped range returns empty on first request (anti-scraping)' do
       # Two proxies so both fibers can run concurrently without hitting the NO PROXY sleep path.
       # Committed outside the per-example transaction so Async fibers see them.
@@ -225,6 +252,17 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       expect(vacancy.description).to include('TL;DR')
     end
 
+    it 'reports the description pass to Grafana' do
+      events = capture_logged_events
+
+      operation.call
+
+      expect(events.find { |e| e['event'] == 'vacancy_sync_descriptions_finished' }).to include(
+        'source' => 'Dou', 'result' => 'ok', 'missing' => 20, 'fetched' => 20, 'gave_up' => 0,
+        'requests' => 20, 'empty_responses' => 0
+      )
+    end
+
     it 'visits each vacancy page to fetch descriptions' do
       fetch_count = 0
       allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
@@ -306,6 +344,56 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     end
   end
 
+  describe 'when a source has no live proxy at the start' do
+    let!(:source_djinni) { create(:source, name: 'Djinni', base_url: 'https://djinni.co', scraper: 'ApplyMate::Scraper::Djinni') }
+    let!(:source_dou)    { create(:source, name: 'Dou', base_url: 'https://jobs.dou.ua', scraper: 'ApplyMate::Scraper::Dou') }
+
+    before do
+      allow_any_instance_of(ApplyMate::Client::AsyncHttp).to receive(:get).with(a_string_including('djinni.co')) do |_instance, url|
+        if url.include?('page=1') || !url.include?('page=')
+          ApplyMate::Client::AsyncHttp::Response.new(file_fixture('djinni/list/vacancies_page.html').read, {}, 200, url)
+        else
+          ApplyMate::Client::AsyncHttp::Response.new('', {}, 200, ApplyMate::Scraper::Djinni::JOB_LIST_URL)
+        end
+      end
+    end
+
+    # Seeds an empty pool for the given sources (as if every probed proxy was dead).
+    def without_live_proxies_for(*sources)
+      ids = sources.map(&:id)
+      allow_any_instance_of(described_class::ProxyPool).to receive(:candidate_proxies).and_wrap_original do |original|
+        ids.include?(original.receiver.instance_variable_get(:@source).id) ? [] : original.call
+      end
+    end
+
+    it 'skips that source, syncs the others and reports the run as partial' do
+      without_live_proxies_for(source_dou)
+      events = capture_logged_events
+
+      described_class.new(sources: [ source_djinni, source_dou ]).call
+
+      expect(source_djinni.vacancies.count).to eq(15)
+      expect(events.select { |e| e['event'] == 'vacancy_sync_proxy_pool_ready' }).to contain_exactly(
+        a_hash_including('source' => 'Djinni', 'level' => 'info'),
+        a_hash_including('source' => 'Dou', 'alive' => 0, 'checked' => 0, 'level' => 'warn')
+      )
+      expect(events.find { |e| e['event'] == 'vacancy_sync_finished' })
+        .to include('result' => 'partial', 'sources_ok' => 1, 'sources_failed' => 1, 'level' => 'error')
+    end
+
+    it 'raises when no source can run, still reporting the failed run' do
+      without_live_proxies_for(source_djinni, source_dou)
+      events = capture_logged_events
+
+      expect { described_class.new(sources: [ source_djinni, source_dou ]).call }
+        .to raise_error(described_class::NoProxiesError)
+      expect(events.find { |e| e['event'] == 'vacancy_sync_finished' }).to include(
+        'result' => 'failed', 'sources_ok' => 0, 'sources_failed' => 2,
+        'error_class' => described_class::NoProxiesError.name
+      )
+    end
+  end
+
   describe 'when the only proxy is dead' do
     let!(:source_djinni) { create(:source, name: 'Djinni', base_url: 'https://djinni.co', scraper: 'ApplyMate::Scraper::Djinni') }
     let(:operation) { described_class.new(sources: [ source_djinni ]) }
@@ -320,6 +408,20 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       # @proxy is committed (shared across examples); clear the per-source stat the
       # run recorded so it doesn't bleed into other examples.
       ProxySourceStat.where(proxy_id: @proxy.id).delete_all
+    end
+
+    it 'reports the failed source and the failed run to Grafana' do
+      events = capture_logged_events
+
+      operation.call
+
+      listing = events.find { |e| e['event'] == 'vacancy_sync_listing_finished' }
+      expect(listing).to include('result' => 'failed', 'level' => 'error', 'source' => 'Djinni',
+                                 'error_class' => described_class::NoProxiesError.name,
+                                 'dead_proxies' => 1, 'failed_requests' => 1, 'pages' => 0)
+      expect(listing).not_to have_key('new_vacancies')
+      expect(events.find { |e| e['event'] == 'vacancy_sync_finished' })
+        .to include('result' => 'failed', 'level' => 'error', 'sources_ok' => 0, 'sources_failed' => 1)
     end
 
     it 'records the failure per-source and drops the proxy from rotation' do

@@ -70,6 +70,59 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     end
   end
 
+  # Request outcome counters for one (source, phase), reported in that phase's summary
+  # event. Shared by the phase's worker fibers; every increment is a plain Ruby op with
+  # no suspension point inside it, so fibers need no lock.
+  class RequestStats
+    ERRORS_IN_SUMMARY = 3
+
+    def initialize
+      @requests = 0
+      @empty    = 0
+      @dead     = 0
+      @errors   = Hash.new(0)
+      @messages = {}
+    end
+
+    def request!
+      @requests += 1
+    end
+
+    def empty!
+      @empty += 1
+    end
+
+    def dead!
+      @dead += 1
+    end
+
+    def error!(error)
+      name = error.class.name
+      @errors[name] += 1
+      @messages[name] ||= error.message.to_s.scrub.truncate(120) # scrub: to_json raises on invalid UTF-8
+    end
+
+    def to_h
+      {
+        requests:        @requests,
+        empty_responses: @empty,
+        dead_proxies:    @dead,
+        failed_requests: @dead + @errors.values.sum,
+        errors:          top_errors
+      }
+    end
+
+    private
+
+    # "Class×count (first message); …" for the most frequent error classes, nil if none.
+    def top_errors
+      @errors.max_by(ERRORS_IN_SUMMARY) { |_, count| count }
+             .map { |name, count| "#{name}×#{count} (#{@messages[name]})" }
+             .join('; ')
+             .presence
+    end
+  end
+
   # In-memory rotating proxy pool shared by every fiber in both phases.
   #
   # Replaces the previous per-request `Proxy.transaction { FOR UPDATE SKIP LOCKED }`
@@ -111,12 +164,18 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       @refilling     = false
       @drained       = false
       @last_refill_at = 0.0
+      @checked        = 0
       seed_initial
-      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if @entries.empty?
     end
 
     def size
       @entries.size
+    end
+
+    # How many candidates the initial seed probed; `size` right after `new` is how
+    # many of them were alive.
+    def checked
+      @checked
     end
 
     def dropped
@@ -204,6 +263,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     # Sync (this runs before the operation's own Async blocks).
     def seed_initial
       candidates = with_db { candidate_proxies }
+      @checked   = candidates.size
       mark_known(candidates)
       live = VALIDATE_PROVEN_ON_START ? Sync { probe_alive(candidates) } : candidates
       add_entries(live, monotonic)
@@ -420,57 +480,121 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     end
   end
 
+  # Every run emits JSON events for Grafana (catalogue: .ai/docs/observability.md):
+  # vacancy_sync_started → vacancy_sync_proxy_pool_ready (per source) →
+  # vacancy_sync_listing_finished / vacancy_sync_descriptions_finished (per source and
+  # phase, also on failure) → vacancy_sync_finished (always, with the run's result).
   def perform!(sources: Source.all, **)
     skip_authorize
 
+    started     = monotonic
     @session_id = (Time.current.to_f * 1000).to_i
     @db         = DbGateway.new
+    @pools      = {}
+    @synced     = []
+    sources     = sources.to_a
 
-    # One proxy pool per source, each seeded with proxies validated against THAT
-    # source's host — the alive sets barely overlap (dou blocks proxies djinni
-    # allows and vice-versa), so a shared pool starves whichever source it wasn't
-    # validated for. A source with zero working proxies (e.g. a transient
-    # Cloudflare block during seed) is skipped and logged, not fatal — the other
-    # sources still sync. Only an empty run overall raises NoProxiesError.
-    @pools  = {}
-    sources = sources.select do |source|
-      @pools[source.id] = ProxyPool.new(@db, source)
-      true
-    rescue NoProxiesError
-      log(event: 'vacancy_sync_source_skipped', session_id: @session_id,
-          source: source.name, reason: 'no_proxies', level: :warn)
-      false
-    end
-    raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if sources.empty?
+    log(event: 'vacancy_sync_started', session_id: @session_id, started_at_ms: @session_id,
+        sources: sources.map(&:name).join(', ')) # a string: Loki's `| json` drops arrays
 
-    log(event: 'vacancy_sync_started', session_id: @session_id,
-        available_proxies: @pools.values.sum(&:size), total_proxies: Proxy.count, started_at_ms: @session_id)
+    begin
+      runnable = sources.select { |source| seed_pool(source) }
+      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if runnable.empty?
 
-    log(event: 'vacancy_sync_completed', session_id: @session_id) do
       # Pipeline per source: each source runs its own listing → description in one
       # fiber, all sources concurrent. So Dou's descriptions start the moment Dou's
       # listing finishes instead of waiting for every source's listing (Djinni's
       # listing is the slow one) — wall time = max over sources of (listing + desc).
       Async do |top_task|
-        sources.map do |source|
-          top_task.async do
-            sync_source(source)
-            # Sources whose listing already carries the description (Djinni) have no
-            # second pass — there is no detail page left to visit.
-            fetch_description_for_source(source) if source.scraper.constantize.fetches_description?
-          end
-        end.each(&:wait)
+        runnable.map { |source| top_task.async { sync_source_pipeline(source) } }.each(&:wait)
       end
+    ensure
+      @pools.each_value(&:flush!)
     end
+  rescue StandardError => e
+    error = e
+    raise
   ensure
-    @pools&.each_value(&:flush!)
+    log_run_finished(sources, started, error)
   end
 
   private
 
+  # One proxy pool per source, seeded with proxies validated against THAT source's
+  # host — the alive sets barely overlap (dou blocks proxies djinni allows and
+  # vice-versa), so a shared pool starves whichever source it wasn't validated for.
+  # A source with zero live proxies (e.g. a transient Cloudflare block during seed) is
+  # skipped, not fatal — the other sources still sync. Returns whether it can run.
+  def seed_pool(source)
+    pool = ProxyPool.new(@db, source)
+    log(event: 'vacancy_sync_proxy_pool_ready', session_id: @session_id, source: source.name,
+        checked: pool.checked, alive: pool.size, level: pool.size.zero? ? :warn : :info)
+    return false if pool.size.zero?
+
+    @pools[source.id] = pool
+    true
+  end
+
+  # A source's listing → description pipeline. A failure is already reported by the
+  # phase's summary event; it is contained here so the other sources keep syncing.
+  def sync_source_pipeline(source)
+    sync_source(source)
+    # Sources whose listing already carries the description (Djinni) have no second
+    # pass — there is no detail page left to visit.
+    fetch_description_for_source(source) if source.scraper.constantize.fetches_description?
+    @synced << source.name
+  rescue StandardError
+    nil
+  end
+
+  # Times one phase of a source and always emits its summary event — also when the
+  # phase raises, so a failed source shows up in Grafana with its error instead of
+  # silently missing from the charts. The block fills `summary` with phase totals and
+  # counts its requests in `stats`.
+  def log_phase(event, source)
+    summary = {}
+    stats   = RequestStats.new
+    started = monotonic
+    yield summary, stats
+  rescue StandardError => e
+    error = e
+    raise
+  ensure
+    log(event: event, session_id: @session_id, source: source.name,
+        result: error ? 'failed' : 'ok', duration_s: (monotonic - started).round(3),
+        **summary, **stats.to_h, **error_fields(error), level: error ? :error : :info)
+  end
+
+  def log_run_finished(sources, started, error)
+    failed = sources.size - @synced.size
+    result = if error || @synced.empty?
+      'failed'
+    elsif failed.positive?
+      'partial'
+    else
+      'ok'
+    end
+
+    log(event: 'vacancy_sync_finished', session_id: @session_id, result: result,
+        duration_s: (monotonic - started).round(3), sources_ok: @synced.size, sources_failed: failed,
+        **error_fields(error), level: result == 'ok' ? :info : :error)
+  end
+
+  def error_fields(error)
+    return {} unless error
+
+    # scrub: to_json raises on invalid UTF-8, and this runs in an ensure — it would mask the real error.
+    { error_class: error.class.name, error: error.message.to_s.scrub.truncate(300), error_at: error.backtrace&.first }
+  end
+
+  def monotonic
+    Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  end
+
   def sync_source(source)
     pool = @pools[source.id]
-    log(event: 'vacancy_sync_source_completed', session_id: @session_id, source: source.name, phase: 'listing') do
+    log_phase('vacancy_sync_listing_finished', source) do |summary, stats|
+      count_before  = with_db { source.vacancies.count }
       external_ids  = Concurrent::Array.new
       pages_queue   = (1..MAX_PAGES).to_a
       last_page     = { counts: Hash.new(0), boundary: nil }
@@ -480,7 +604,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       barrier       = Async::Barrier.new
 
       WORKERS_PER_SOURCE.times do
-        barrier.async { scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool) }
+        barrier.async { scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool, stats) }
       end
 
       barrier.wait
@@ -490,20 +614,25 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       # flushes proxy counters — raising first threw that work away.
       buffer.flush
 
+      # external_ids could have duplicates
+      active_ids = external_ids.uniq
+      summary.merge!(pages: scraped_pages.size, vacancies: active_ids.size)
+
       raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
 
-      # external_ids could have duplicates
-      log(event: 'vacancy_sync_listing_summary', session_id: @session_id, source: source.name,
-          pages: scraped_pages.size, vacancies: external_ids.size, proxies_deleted: pool.dropped)
-
-      clean_old_vacancies(source, external_ids)
+      stale = clean_old_vacancies(source, active_ids)
       Vacancy::Operation::CountBySource.expire!
+
+      # Single writer per source (the job's limits_concurrency), so the row-count delta
+      # is exact: total now = before + new − stale.
+      total = with_db { source.vacancies.count }
+      summary.merge!(new_vacancies: total - count_before + stale, stale_deleted: stale, vacancies_total: total)
     end
   end
 
   def fetch_description_for_source(source)
     pool = @pools[source.id]
-    log(event: 'vacancy_sync_source_completed', session_id: @session_id, source: source.name, phase: 'description') do
+    log_phase('vacancy_sync_descriptions_finished', source) do |summary, stats|
       total        = 0
       done         = [ 0 ]
       skipped      = [ 0 ]
@@ -531,7 +660,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         barrier = Async::Barrier.new
 
         DESCRIPTION_WORKERS.times do
-          barrier.async { fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool) }
+          barrier.async { fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool, stats) }
         end
 
         barrier.wait
@@ -546,15 +675,14 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         end
       end
 
-      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
+      summary.merge!(missing: total, fetched: done[0], gave_up: skipped[0],
+                     max_attempts: retry_counts.values.max || 0)
 
-      log(event: 'vacancy_sync_description_summary', session_id: @session_id, source: source.name,
-          descriptions: done[0], total: total, skipped: skipped[0],
-          max_attempt: retry_counts.values.max || 0, proxies_deleted: pool.dropped)
+      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
     end
   end
 
-  def fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool)
+  def fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool, stats)
     scraper_class = source.scraper.constantize
 
     loop do
@@ -569,7 +697,6 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         unless proxy
           if pool.exhausted?
             stop[0] = true
-            log(event: 'vacancy_sync_no_proxies', source: source.name, phase: 'description', vacancy_external_id: vacancy.external_id, level: :error)
             vacancies_queue.unshift(vacancy)
             break
           end
@@ -578,6 +705,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           next
         end
 
+        stats.request!
         client  = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
         scraper = scraper_class.new(source, client)
         html    = scraper.fetch_description(vacancy.url)
@@ -590,6 +718,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           pool.release(proxy, status: :success)
           proxy = nil
         else
+          stats.empty!
           count = retry_counts[vacancy.id] += 1
           if count >= MAX_VACANCY_RETRIES
             skipped[0] += 1
@@ -598,12 +727,13 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           end
         end
       rescue ApplyMate::Scraper::Base::DeadProxyError
+        stats.dead!
         pool.release(proxy, status: :dead)
         proxy = nil
         vacancies_queue.unshift(vacancy)
         retry
       rescue StandardError => e
-        log(event: 'vacancy_sync_description_error', source: source.name, host: proxy&.host, vacancy_external_id: vacancy&.external_id, error: e.message, error_class: e.class.name, level: :error)
+        stats.error!(e)
         pool.release(proxy, status: :keep)
         proxy = nil
         vacancies_queue.unshift(vacancy)
@@ -629,7 +759,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
                    (scraped_pages.any? && scraped_pages.include?(page))
   end
 
-  def scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool)
+  def scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool, stats)
     loop do
       begin
         proxy = nil
@@ -651,6 +781,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           next
         end
 
+        stats.request!
         client  = source.scraper.constantize.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
         scraper = source.scraper.constantize.new(source, client)
         listing = scraper.fetch_listing(page: page)
@@ -664,6 +795,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           pool.release(proxy, status: :success)
           proxy = nil
         else
+          stats.empty!
           if scraped_pages.empty? || (scraped_pages.any? && page > scraped_pages.max)
             last_page[:counts][page] += 1
             count = last_page[:counts][page]
@@ -679,11 +811,13 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           end
         end
       rescue ApplyMate::Scraper::Base::DeadProxyError
+        stats.dead!
         pool.release(proxy, status: :dead)
         proxy = nil
         pages_queue.unshift(page)
         retry
-      rescue StandardError
+      rescue StandardError => e
+        stats.error!(e)
         pool.release(proxy, status: :keep)
         proxy = nil
         pages_queue.unshift(page)
@@ -699,10 +833,12 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     @db.call(&block)
   end
 
+  # Removes this source's vacancies the listing no longer shows; returns how many.
+  # Skipped when nothing was scraped — an empty listing must not wipe the source.
   def clean_old_vacancies(source, active_ids)
-    return if active_ids.empty?
-    deleted = source.vacancies.where.not(external_id: active_ids.uniq).destroy_all
-    log(event: 'vacancy_sync_stale_vacancies_deleted', source: source.name, count: deleted.size)
+    return 0 if active_ids.empty?
+
+    with_db { source.vacancies.where.not(external_id: active_ids).destroy_all.size }
   end
 
   # Bulk-update descriptions for a cursor-batch in one statement. A pure UPDATE

@@ -248,6 +248,15 @@ Available colors: `:yellow` (default), `:green`, `:red`, `:cyan`.
 The `[Tag]` prefix is the **full class name** (`self.class.name`) — e.g. `[Proxy::Operation::ValidateCandidates]`.  
 **Do not inline `YELLOW`/`GREEN` constants or define a local `log` method** — always `include ApplyMate::Logging`.
 
+For anything a dashboard or alert should see, emit a **JSON event** instead of a colored line:
+
+```ruby
+log(event: 'proxy_fetch_finished', candidates: 1200, inserted: 45, duration_s: 12.3)
+# → {"event":"proxy_fetch_finished","operation":"Proxy::Operation::FetchProxies","level":"info","candidates":1200,…}
+```
+
+`operation` and `level` are added automatically. Event names, fields, the Grafana dashboard and alerts built on them: `.ai/docs/observability.md`.
+
 ## Job as pure orchestrator — split complex jobs into operations
 
 When a job has multiple distinct phases (fetch → validate → persist), each phase becomes its own operation. The job only calls them in sequence.
