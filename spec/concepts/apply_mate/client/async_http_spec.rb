@@ -209,60 +209,6 @@ RSpec.describe ApplyMate::Client::AsyncHttp do
     end
   end
 
-  # ── #post_multipart ──────────────────────────────────────────────────────────
-  describe '#post_multipart' do
-    let(:client) { described_class.new(request_timeout: 5) }
-
-    it 'sets multipart/form-data Content-Type with boundary' do
-      server.queue(status: 200, body: '')
-      client.post_multipart(server.url, payload: { 'field' => 'value' })
-
-      content_type = server.requests.last[:headers]['content-type']
-      expect(content_type).to match(%r{\Amultipart/form-data; boundary=----RubyMultipart[a-f0-9]+\z})
-    end
-
-    it 'includes plain string fields with Content-Disposition' do
-      server.queue(status: 200, body: '')
-      client.post_multipart(server.url, payload: { 'name' => 'Jane', 'email' => 'jane@example.com' })
-
-      body = server.requests.last[:body]
-      expect(body).to include('Content-Disposition: form-data; name="name"')
-      expect(body).to include("\r\n\r\nJane\r\n")
-      expect(body).to include('Content-Disposition: form-data; name="email"')
-      expect(body).to include("\r\n\r\njane@example.com\r\n")
-    end
-
-    it 'includes Faraday::Multipart::FilePart-style file parts' do
-      file_part = Faraday::Multipart::FilePart.new(StringIO.new('PDF-CONTENT'), 'application/pdf', 'cv.pdf')
-      server.queue(status: 200, body: '')
-      client.post_multipart(server.url, payload: { 'cv_file' => file_part })
-
-      body = server.requests.last[:body]
-      expect(body).to include('Content-Disposition: form-data; name="cv_file"; filename="cv.pdf"')
-      expect(body).to include('Content-Type: application/pdf')
-      expect(body).to include('PDF-CONTENT')
-    end
-
-    it 'terminates the body with the closing boundary' do
-      server.queue(status: 200, body: '')
-      client.post_multipart(server.url, payload: { 'a' => '1' })
-
-      content_type = server.requests.last[:headers]['content-type']
-      boundary     = content_type[/boundary=(.+)\z/, 1]
-      expect(server.requests.last[:body]).to end_with("--#{boundary}--\r\n")
-    end
-
-    it 'does NOT follow redirects (returns the 3xx response as-is)' do
-      server.queue(status: 302, headers: { 'Location' => '/thank-you' }, body: '')
-      # Only ONE response queued — if it followed, it would hang on the second connection.
-      response = client.post_multipart(server.url('/apply'), payload: { 'a' => '1' })
-
-      expect(response.status).to eq(302)
-      expect(response.headers['location']).to eq('/thank-you')
-      expect(server.requests.size).to eq(1)
-    end
-  end
-
   # ── Redirects ────────────────────────────────────────────────────────────────
   describe 'redirect handling' do
     let(:client) { described_class.new(request_timeout: 5) }

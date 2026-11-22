@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Read-only locator for this Rails "concepts" codebase. Use when the question is "where does X live / how is X done here" — an operation, component, form object, scraper, apply handler, job, spec, locale key, Stimulus controller — or "which .ai/docs rules apply to this change". Returns paths, symbol names and the few lines that matter, never whole-file dumps. Specify breadth: "medium" (one area) or "very thorough" (several naming conventions / directories). Do NOT use it to review, judge, design or change code.
+description: Read-only locator for this Rails "concepts" codebase. Use when the question is "where does X live / how is X done here" — an operation, component, form object, scraper, job, spec, locale key, Stimulus controller — or "which .ai/docs rules apply to this change". Returns paths, symbol names and the few lines that matter, never whole-file dumps. Specify breadth: "medium" (one area) or "very thorough" (several naming conventions / directories). Do NOT use it to review, judge, design or change code.
 tools: Read, Grep, Glob, Bash, TodoWrite
 model: haiku
 effort: low
