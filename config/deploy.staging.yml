@@ -40,6 +40,9 @@ servers:
     options:
       ulimit:
         - "nofile=65536:65536"
+      # Hard cap so a runaway job gets this container OOM-killed instead of freezing the
+      # whole Pi (no swap; shared with taxmate and the Home Assistant VM).
+      memory: "3g"
     env:
       clear:
         SQ_QUEUES: "*"
@@ -92,6 +95,9 @@ accessories:
         - POSTGRES_PASSWORD
     directories:
       - data:/var/lib/postgresql/data
+    options:
+      # Same reason as the worker's cap. Applied on `bin/kamal accessory reboot db -d staging`.
+      memory: "2g"
 
   minio:
     # minio/minio is gone from Docker Hub — pgsty community build (amd64 + arm64).
@@ -126,26 +132,6 @@ accessories:
         ES_JAVA_OPTS: "-Xms256m -Xmx256m"
     directories:
       - data:/usr/share/elasticsearch/data
-
-  chrome_vnc:
-    image: andriano606/apply_mate_chrome_vnc:latest
-    host: 192.168.50.155
-    options:
-      shm-size: "2gb"
-      security-opt: seccomp:unconfined
-      # network-alias gives the container a valid RFC hostname (no underscores)
-      # so Ruby's URI.join can parse it. Default CHROME_HOST='chrome-vnc' works as-is.
-      network-alias: chrome-vnc
-      publish:
-        - "6081:6080"   # noVNC web UI
-        - "5901:5900"   # VNC (RealVNC / TigerVNC)
-        - "9222:9222"   # Chrome DevTools Protocol
-    env:
-      clear:
-        SCREEN_WIDTH: "1920"
-        SCREEN_HEIGHT: "1080"
-        SCREEN_DEPTH: "24"
-        VNC_PASSWORD: ""
 
   # ---- Observability stack: Loki + Promtail + Grafana ----
   # Other Kamal-managed containers reach Loki via the internal Docker network
