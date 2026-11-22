@@ -61,8 +61,8 @@ class ApplyMate::Scraper::Base
   end
 
   # Plain-text projection of a description's HTML. `description_html` is what the
-  # vacancy page renders; this is what Elasticsearch indexes, what the AI prompts
-  # embed and what the card preview truncates — so it must be derived here, in one
+  # vacancy page renders; this is what Elasticsearch indexes and what the card
+  # preview truncates — so it must be derived here, in one
   # place, instead of each caller re-inventing its own tag stripping.
   def self.to_plain_text(html)
     return '' if html.blank?
@@ -75,22 +75,6 @@ class ApplyMate::Scraper::Base
   end
 
   def fetch_description(url)
-    raise NotImplementedError
-  end
-
-  def fetch_details(url)
-    raise NotImplementedError
-  end
-
-  def fetch_applyble(url, session_id:)
-    raise NotImplementedError
-  end
-
-  def fetch_apply_type(url, session_id:)
-    raise NotImplementedError
-  end
-
-  def form_selector
     raise NotImplementedError
   end
 

@@ -95,27 +95,27 @@ Use `wrapper: false` to render the bare input with no wrapping div (e.g. inside 
 For AR associations, pass a scope directly:
 
 ```slim
-= form.input :user_profile_id,
-    collection: current_user.user_profiles,
+= form.input :user_id,
+    collection: User.all,
     label_method: :name,
     value_method: :id,
-    include_blank: I18n.t('widget.form.select_profile'),
-    label: I18n.t('widget.form.user_profile')
+    include_blank: I18n.t('admin.api_token.form.user_prompt'),
+    label: I18n.t('admin.api_token.form.user')
 ```
 
 ## Radio button helper
 
-The `radio_button` helper (from `ApplyMate::Component::Helper`) renders a styled card-style radio button. It is **not** a simple_form input — use it instead of `f.input :field, as: :radio_buttons` when you need the card UI (used in source_profile, ai_integration, prompt forms).
+The `radio_button` helper (from `ApplyMate::Component::Helper`) renders a styled card-style radio button. It is **not** a simple_form input — use it instead of `f.input :field, as: :radio_buttons` when you need the card UI (generic example below).
 
 **Always provide `icon_name:`** — the helper requires it.
 
 ```slim
 .flex.gap-3.w-full
-  - Prompt.prompt_types.keys.each do |type|
+  - Widget.kinds.keys.each do |kind|
     = radio_button(form: modal.form,
-            attribute: :prompt_type,
-            value: type,
-            label: I18n.t("prompt.types.#{type}"),
+            attribute: :kind,
+            value: kind,
+            label: I18n.t("widget.kinds.#{kind}"),
             icon_name: :external_link,
             input_html: { data: { action: 'change->turbo-form#update' } })
 ```

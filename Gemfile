@@ -29,17 +29,12 @@ gem 'faraday-retry'
 gem 'feedjira'
 gem 'faraday' # MIT-License
 gem 'faraday-cookie_jar'
-gem 'faraday-multipart' # MIT-License
 gem 'faraday-follow_redirects'
 gem 'async'      # Fiber-based concurrency for per-source parallelism
 gem 'async-http' # Fiber-aware HTTP client used by SyncVacancies
 gem 'nokogiri'
 gem 'html2text'
-gem 'gemini-ai'
-gem 'ollama-ai'
 gem 'hashid-rails'
-gem 'redcarpet' # Для Markdown -> HTML
-gem 'grover'    # Для HTML -> PDF
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
@@ -52,7 +47,6 @@ gem 'solid_cache'
 gem 'solid_queue'
 gem 'solid_cable'
 gem 'mission_control-jobs'
-gem 'ferrum'
 
 # Reduces boot times through caching; required in config/boot.rb
 gem 'bootsnap', require: false
