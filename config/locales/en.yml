@@ -47,6 +47,8 @@ en:
         grafana_description: View logs in real time
         jobs: Job queue
         jobs_description: Monitor background vacancy
+        mcp: MCP server
+        mcp_description: Connect Claude to the vacancy bank
         proxies: Проксі
         proxies_description: Список валідних проксі-серверів
         sources: Sources
@@ -59,6 +61,23 @@ en:
         success: You are now logged in as another user
       destroy:
         success: You have returned to your account
+    mcp:
+      show:
+        connect_hint: Copy the command and run it in a terminal. It contains your
+          API token — do not share it.
+        connect_title: Connect Claude Code
+        copy: Copy command
+        create_token: Create token
+        endpoint: 'Server URL:'
+        intro: 'The MCP server gives Claude access to the vacancy bank: keyword search,
+          filtering by source and saved filters, full vacancy details and hiding reviewed
+          vacancies. It acts as the owner of the API token.'
+        no_tokens: You have no API token yet. Create one and come back — the command
+          with your token will appear here. Or replace <API_TOKEN> in the command
+          below.
+        title: MCP server
+        tools_title: Available tools
+        unnamed_token: Token from %{created_at}
     proxy:
       index:
         empty: Проксі не знайдено

@@ -25,6 +25,7 @@ Rails.application.routes.draw do
     resources :proxies, only: [ :index, :show ]
     resources :sources, only: [ :new, :create, :index, :edit, :update, :destroy ]
     resources :api_tokens, only: [ :index, :new, :create, :destroy ]
+    resource :mcp, only: [ :show ], controller: 'mcp'
     mount MissionControl::Jobs::Engine, at: '/jobs'
 
     mount Rswag::Api::Engine => '/api-docs'

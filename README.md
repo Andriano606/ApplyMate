@@ -4,10 +4,10 @@
 
 ## MCP server (Claude)
 
-Застосунок віддає банк вакансій як MCP-сервер на `/mcp`: Claude може шукати вакансії за ключовими словами (з `and`/`or`/`і`/`або` і дужками), фільтрувати за джерелом чи збереженим фільтром, читати все, що зберігається про вакансію, і приховувати переглянуті. Авторизація — API-токен з *Admin → API tokens*.
+Застосунок віддає банк вакансій як MCP-сервер на `/mcp`: Claude може шукати вакансії за ключовими словами (з `and`/`or`/`і`/`або` і дужками), фільтрувати за джерелом чи збереженим фільтром, читати все, що зберігається про вакансію, і приховувати переглянуті. Авторизація — API-токен з *Admin → API tokens*. Готову команду з вашим токеном і кнопкою «скопіювати» показує сторінка *Admin → MCP сервер* (`/admin/mcp`):
 
 ```bash
-claude mcp add --transport http applymate https://staging.beapply.xyz/mcp \
+claude mcp add --transport http --scope user applymate https://staging.beapply.xyz/mcp \
   --header "Authorization: Bearer <api token>"
 ```
 

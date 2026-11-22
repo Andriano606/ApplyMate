@@ -75,10 +75,14 @@ Pagination: `total_entries` is the real match count, but Elasticsearch serves at
 
 ## Connecting Claude
 
-Claude Code:
+The admin page **Admin → MCP server** (`/admin/mcp`, `Admin::Mcp::Operation::Show`, admin-only via
+`McpPolicy#show?`) shows the endpoint URL, the tool list (read from `Mcp::Operation::Handle::TOOLS`)
+and, for each of the current admin's own API tokens, the ready-to-run command with a copy-to-clipboard
+button (`clipboard` Stimulus controller). Without a token it shows the command with an `<API_TOKEN>`
+placeholder and a link to create one. The command it builds:
 
 ```bash
-claude mcp add --transport http applymate https://staging.beapply.xyz/mcp \
+claude mcp add --transport http --scope user applymate https://staging.beapply.xyz/mcp \
   --header "Authorization: Bearer <api token>"
 ```
 

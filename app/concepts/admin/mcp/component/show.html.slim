@@ -1,0 +1,56 @@
+= header(**header_opts)
+
+.space-y-6
+  section.bg-white.dark:bg-gray-800.rounded-lg.shadow.p-4.md:p-6
+    p.text-gray-700.dark:text-gray-300.text-sm = I18n.t('admin.mcp.show.intro')
+    p.mt-3.text-sm.text-gray-500.dark:text-gray-400
+      = I18n.t('admin.mcp.show.endpoint')
+      '
+      code.font-mono.text-gray-800.dark:text-gray-200.break-all[data-test-id="mcp-endpoint"] = endpoint_url
+
+  section.bg-white.dark:bg-gray-800.rounded-lg.shadow.p-4.md:p-6
+    h2.text-lg.font-semibold.text-gray-800.dark:text-gray-200.mb-1 = I18n.t('admin.mcp.show.connect_title')
+    p.text-sm.text-gray-500.dark:text-gray-400.mb-4 = I18n.t('admin.mcp.show.connect_hint')
+
+    - if @api_tokens.any?
+      .space-y-4
+        - @api_tokens.each do |api_token|
+          div[data-controller="clipboard" data-test-id="mcp-command-#{api_token.id}"]
+            p.text-xs.font-medium.text-gray-500.uppercase.tracking-wide.mb-1 = token_label(api_token)
+            .relative.bg-gray-900.rounded-lg.overflow-hidden
+              .p-3.overflow-x-auto.pr-12
+                code.text-green-400.text-xs.select-all.whitespace-pre[data-clipboard-target="source"]
+                  = connect_command(api_token.token)
+              button.absolute.top-2.right-2.p-1.rounded.text-gray-400.hover:text-green-400.transition-colors[
+                  type="button"
+                  data-clipboard-target="button"
+                  data-action="click->clipboard#copy"
+                  title=I18n.t('admin.mcp.show.copy')
+                  aria-label=I18n.t('admin.mcp.show.copy')]
+                = icon(:clipboard_list, size: 4)
+    - else
+      .rounded-lg.border.border-amber-200.bg-amber-50.dark:bg-amber-900/20.dark:border-amber-800.p-4.space-y-3
+        p.text-sm.text-amber-800.dark:text-amber-200 = I18n.t('admin.mcp.show.no_tokens')
+        div[data-controller="clipboard"]
+          .relative.bg-gray-900.rounded-lg.overflow-hidden
+            .p-3.overflow-x-auto.pr-12
+              code.text-green-400.text-xs.select-all.whitespace-pre[data-clipboard-target="source"]
+                = connect_command(TOKEN_PLACEHOLDER)
+            button.absolute.top-2.right-2.p-1.rounded.text-gray-400.hover:text-green-400.transition-colors[
+                type="button"
+                data-clipboard-target="button"
+                data-action="click->clipboard#copy"
+                title=I18n.t('admin.mcp.show.copy')
+                aria-label=I18n.t('admin.mcp.show.copy')]
+              = icon(:clipboard_list, size: 4)
+        = link(label: I18n.t('admin.mcp.show.create_token'), url: helpers.admin_api_tokens_path, variant: :primary)
+
+  section.bg-white.dark:bg-gray-800.rounded-lg.shadow.p-4.md:p-6
+    h2.text-lg.font-semibold.text-gray-800.dark:text-gray-200.mb-3 = I18n.t('admin.mcp.show.tools_title')
+    ul.divide-y.divide-gray-100.dark:divide-gray-700
+      - @tools.each do |tool|
+        li.py-3
+          .flex.flex-col.sm:flex-row.sm:items-baseline.gap-1.sm:gap-3
+            code.font-mono.text-sm.text-indigo-600.dark:text-indigo-400.shrink-0 = tool.tool_name
+            span.text-sm.font-medium.text-gray-800.dark:text-gray-200 = tool.title_value
+          p.mt-1.text-sm.text-gray-500.dark:text-gray-400 = tool_summary(tool)
