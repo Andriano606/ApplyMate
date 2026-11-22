@@ -50,9 +50,11 @@ query, adding `filter: terms source_id` and `must_not: terms vacancy_id` (hidden
 These keyword options of `Vacancy::Operation::Search` (`per_page`, `sort`, `must_tags`,
 `source_ids`, `exclude_hidden`) are never read from request params — only trusted callers set them.
 
-`source_id` is an Elasticsearch field added after the index existed. The ES initializer
-`put_mapping`s new fields onto an existing index on boot (a failure is logged at error level — until
-it succeeds the `sources` filter matches nothing), and every sync run re-imports each listed
+`source_id` is an Elasticsearch field added after the index existed. On boot the ES initializer
+reads the index mapping and `put_mapping`s only when a field is missing, capped at 5s
+(`MAPPING_UPDATE_TIMEOUT`) so a stuck Elasticsearch master can never hold the web container past
+kamal-proxy's 30s health check (a failure is logged at error level — until it succeeds the
+`sources` filter matches nothing), and every sync run re-imports each listed
 vacancy, so the field fills itself by the next daily sync. Until then `sources` returns only
 vacancies indexed since the deploy; to fill it at once, after deploying:
 `bin/kamal app exec -d staging "bin/rails runner 'Vacancy.import'"`.
