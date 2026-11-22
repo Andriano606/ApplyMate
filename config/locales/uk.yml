@@ -117,128 +117,6 @@ uk:
           name: Ім'я
           role: Роль
         title: Користувачі
-  ai_integration:
-    create:
-      success: AI інтеграцію успішно підключено
-    destroy:
-      confirm: Ви впевнені? Це видалить вашу AI інтеграцію.
-      success: AI інтеграцію видалено
-    edit:
-      submit: Зберегти
-      title: Редагувати AI інтеграцію
-    errors:
-      connection_failed: не вдалося підключитися до сервера
-      invalid_api_key: невірний або відкликаний
-    form:
-      api_key: API ключ
-      api_key_hint: 'Отримайте ваш ключ на сторінці:'
-      api_key_link_text: Google AI Studio
-      api_key_required: Щоб отримати доступні моделі, спочатку введіть токен
-      host: Хост
-      host_hint: 'Адреса вашого Ollama сервера, наприклад: http://localhost:11434'
-      host_required: Введіть адресу хоста для отримання доступних моделей
-      model: Модель
-      model_notice: Наразі підтримується лише gemini-2.5-flash.
-      select_model: Оберіть модель...
-    index:
-      new: Додати інтеграцію
-      table:
-        actions: Дії
-        created_at: Підключено
-        model: Модель
-        provider: Провайдер
-      title: AI Інтеграції
-    new:
-      submit: Підключити
-      title: Підключити AI інтеграцію
-    update:
-      success: AI інтеграцію оновлено
-  apply:
-    action_box:
-      apply: Відгукнутися
-      apply_again: Відгукнутися ще раз
-      completed: Відгук надіслано
-      failed_hint: Відгук не вдалося надіслати. Деталі помилки — у розділі «Мої відгуки».
-      in_progress_hint: Відгук обробляється — сторінка оновиться автоматично.
-      ready_hint: AI згенерує резюме під вакансію, заповнить анкету й надішле відгук.
-        Прогрес видно на цій сторінці.
-      ready_title: Готові відгукнутися?
-      retry: Спробувати ще раз
-      view_progress: Переглянути прогрес
-    apply_type:
-      external: Зовнішній
-      internal: Внутрішній
-      unknown: Невідомо
-    card:
-      cv: Резюме
-      cv_attached: Резюме прикріплено
-      cv_not_attached: Резюме не прикріплено
-      delete: Видалити відгук
-      error_title: Помилка
-      fields_tab: Поля
-      filled_form: Заповнена форма
-      generate_answer: Згенерувати відповідь
-      go_to_cv: Перейти до резюме
-      meta:
-        ai_integration: AI інтеграція
-        apply_type: Тип відгуку
-        source_profile: Аккаунт
-        user_profile: Профіль
-      no_data: Дані відсутні
-      no_fields: Немає полів для відображення
-      prompt_tab: Промпт
-      screenshot: Скріншот після відправки
-    create:
-      success: Відгук створено
-    destroy:
-      confirm: Ви впевнені? Це видалить відгук.
-      success: Відгук видалено
-    index:
-      table:
-        actions: Дії
-        ai_integration: AI інтеграція
-        company: Компанія
-        created_at: Дата
-        profile: Профіль
-        status: Статус
-        vacancy: Вакансія
-      title: Мої відгуки
-    new:
-      button: Відгукнутись
-      form:
-        ai_integration: AI інтеграція
-        fill_form_prompt: Промпт для заповнення форми
-        generate_cv_prompt: Промпт для генерації резюме
-        select_fill_form_prompt: Оберіть промпт для форми...
-        select_generate_cv_prompt: Оберіть промпт для резюме...
-        select_integration: Оберіть інтеграцію...
-        select_profile: Оберіть профіль...
-        select_source_profile: Оберіть аккаунт
-        source_profile: Аккаунт %{source_name}
-        user_profile: Профіль
-      submit: Відгукнутись
-      title: Новий відгук
-    status:
-      checking_applyble: Перевірка доступності
-      completed: Завершено
-      failed_checking_applyble: Помилка перевірки доступності
-      failed_fetching_apply_type: Помилка визначення типу відгуку
-      failed_fetching_details: Помилка отримання деталей
-      failed_fetching_form: Помилка отримання форми
-      failed_filling_form: Помилка заповнення форми
-      failed_generating_cv: Помилка генерації резюме
-      failed_sending_cv: Помилка надсилання
-      fetching_apply_type: Визначення типу відгуку
-      fetching_details: Отримання деталей
-      fetching_form: Отримання форми
-      filling_form: Заповнення форми
-      generating_cv: Генерація резюме
-      queued: В черзі
-      sending_cv: Надсилання
-    vacancy_index:
-      empty: Ви ще не відгукувалися на цю вакансію
-      empty_hint: Натисніть «Відгукнутися» — тут з’явиться прогрес, заповнена форма
-        й резюме.
   components:
     debug_button:
       label: Адмін
@@ -316,48 +194,12 @@ uk:
     index:
       no_vacancy: Немає жодної вакансії
   navbar:
-    ai_integrations: AI Інтеграції
-    my_applies: Мої відгуки
-    my_profiles: Мої профілі
-    prompts: Промпти
     sign_in: Увійти
     sign_out: Вийти
-    source_profiles: Зовнішні акаунти
     stop_impersonating: Зупинити імперсонацію
   payments:
     pay_now: Оплатити
     redirecting: Перенаправлення на платіжний шлюз...
-  prompt:
-    create:
-      success: Промпт успішно збережено
-    destroy:
-      confirm: Ви впевнені? Це видалить промпт.
-      success: Промпт видалено
-    edit:
-      submit: Зберегти
-      title: Редагувати промпт
-    errors:
-      missing_placeholders: 'відсутні обов''язкові плейсхолдери: %{placeholders}'
-    form:
-      content: Текст промпту
-      name: Назва
-      required_placeholders_label: 'Обов''язкові плейсхолдери:'
-    index:
-      new: Новий промпт
-      table:
-        actions: Дії
-        content_preview: Попередній перегляд
-        name: Назва
-        prompt_type: Тип
-      title: Мої промпти
-    new:
-      submit: Створити
-      title: Новий промпт
-    types:
-      fill_form: Заповнення форми
-      generate_cv: Генерація резюме
-    update:
-      success: Промпт оновлено
   saved_filter:
     create:
       success: Фільтр збережено
@@ -402,71 +244,11 @@ uk:
       mark: "*"
       text: обов'язково
     'yes': Так
-  source_profile:
-    create:
-      success: Профіль джерела успішно створено
-    destroy:
-      confirm: Ви впевнені? Це видалить профіль джерела.
-      success: Профіль джерела видалено
-    edit:
-      submit: Зберегти
-      title: Редагувати профіль джерела
-    form:
-      name: Назва
-      session_id: Session ID
-      session_id_hint: Увійдіть на платформу в браузері. Відкрийте DevTools (F12)
-        → Application → Cookies, знайдіть cookie сесії та скопіюйте його значення.
-    index:
-      new: Підключити зовнішній аккаунт
-      source_profile:
-        explanation: Ця таблиця потрібна для того, щоб наша система могла «представитися»
-          вами на сайтах пошуку роботи. Ми зберігаємо ваші ключі доступу (сесії або
-          логіни), щоб автоматично відправляти відгуки від вашого імені, позбавляючи
-          вас рутинної роботи. Усі дані надійно зашифровані за сучасними стандартами
-          безпеки, використовуються виключно для автоматизації, і ви можете видалити
-          їх у будь-який момент.
-      table:
-        actions: Дії
-        auth_method: Метод
-        name: Назва
-        source: Джерело
-      title: Мої аккаунти
-    new:
-      submit: Підключити
-      title: Підключені зовнішній аккаунти
-    new_link: Підключити зовнішній аккаунт
-    update:
-      success: Профіль джерела оновлено
   time:
     formats:
       default: "%d.%m.%Y, %H:%M"
       long: "%d %B %Y, %H:%M"
       short: "%d %b, %H:%M"
-  user_profile:
-    create:
-      success: Профіль створено
-    destroy:
-      confirm: Ви впевнені?
-      success: Профіль видалено
-    edit:
-      back: До профілів
-      cancel: Скасувати
-      submit: Зберегти
-      title: Редагувати профіль
-    form:
-      cv: Резюме
-      name: Назва
-    index:
-      empty: Профілі ще не додані
-      new: Новий профіль
-      title: Мої профілі
-    new:
-      back: До профілів
-      cancel: Скасувати
-      submit: Створити
-      title: Новий профіль
-    update:
-      success: Профіль оновлено
   vacancy:
     card:
       details: Деталі
@@ -491,65 +273,16 @@ uk:
     show:
       actions: Дії з вакансією
       added_on: Додано %{date}
-      ai_tools:
-        answer_question: Відповісти на питання
-        title: AI-інструменти
-      all_applies: Усі відгуки
       back: До вакансій
-      generate_answer: Згенерувати відповідь на питання
-      generate_cv: Згенерувати резюме
-      guest:
-        hint: Відгуки, резюме та відповіді на питання доступні після входу.
-        sign_in: Увійти
-        title: Увійдіть, щоб відгукнутися
-      loading: Завантаження…
-      nav:
-        applies: Мої відгуки
-        cvs: Резюме
-        description: Опис
-        questions: Питання
-        title: На цій сторінці
       new_tab: "(відкриється в новій вкладці)"
       no_description: Опис вакансії відсутній
       open_original: Відкрити оригінал
       sections:
-        applies: Мої відгуки
-        cvs: Резюме
         description: Опис вакансії
-        questions: Відповіді на питання
       source: Джерело
     sync:
       no_proxies: Немає доступних проксі — синхронізацію зупинено
     total_vacancies: вакансій
-    update:
-      generate_answer_started: Генерацію відповіді розпочато
-      generate_cv_started: Генерацію резюме розпочато
-  vacancy_cv:
-    download: Завантажити резюме
-    empty: Резюме ще немає
-    empty_hint: Згенеруйте резюме під цю вакансію — резюме, створені під час відгуку,
-      теж з’являться тут.
-    from_apply: Під час відгуку
-    generating: Генерація резюме...
-    go_to_apply: До відгуку
-    tab_preview: Превью
-    tab_prompt: Промпт
-  vacancy_question:
-    ask: Поставити питання
-    copy: Копіювати
-    empty: Питань ще немає
-    empty_hint: Вставте питання з анкети або від рекрутера — AI відповість з урахуванням
-      вашого профілю та вакансії.
-    generating: Генерація відповіді...
-    new:
-      form:
-        question: Питання
-        question_placeholder: Введіть питання з форми подачі заявки...
-    suggestions:
-      hint: Можна також вставити питання від рекрутера — натисніть «Поставити питання».
-      title: Питання з анкети
-    tab_answer: Відповідь
-    tab_prompt: Промпт
   will_paginate:
     next_label: Наступна &raquo;
     page_gap: "&hellip;"

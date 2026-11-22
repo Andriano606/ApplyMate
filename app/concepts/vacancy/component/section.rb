@@ -1,15 +1,11 @@
 # frozen_string_literal: true
 
-# A titled card of the vacancy page (description, applies, CVs, questions). id is the anchor the sidebar
-# section nav links to; data: lets a section attach a Stimulus controller (anchor-scroll on lazy frames).
+# A titled card of the vacancy page (the description). id is the section's in-page anchor.
 class Vacancy::Component::Section < ApplyMate::Component::Base
-  renders_one :header_action
-
-  def initialize(id:, title:, icon:, data: {})
+  def initialize(id:, title:, icon:)
     @id        = id
     @title     = title
     @icon_name = icon
-    @data      = data
   end
 
   private
