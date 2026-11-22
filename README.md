@@ -2,6 +2,17 @@
 
 Банк вакансій: застосунок через проксі швидко та ефективно підтримує актуальний список вакансій з різних платформ (DOU, Djinni, …) і дає шукати по ньому через Elasticsearch.
 
+## MCP server (Claude)
+
+Застосунок віддає банк вакансій як MCP-сервер на `/mcp`: Claude може шукати вакансії за ключовими словами (з `and`/`or`/`і`/`або` і дужками), фільтрувати за джерелом чи збереженим фільтром, читати все, що зберігається про вакансію, і приховувати переглянуті. Авторизація — API-токен з *Admin → API tokens*.
+
+```bash
+claude mcp add --transport http applymate https://staging.beapply.xyz/mcp \
+  --header "Authorization: Bearer <api token>"
+```
+
+Деталі: `.ai/docs/mcp.md`.
+
 ## Local Development
 
 | Service        | URL                        | Notes                        |

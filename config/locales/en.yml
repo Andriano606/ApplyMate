@@ -193,6 +193,13 @@ en:
   home:
     index:
       no_vacancy: No vacancies fetched
+  mcp:
+    errors:
+      unknown_saved_filter: Saved filter "%{id}" not found. list_saved_filters returns
+        the available ones.
+      unknown_sources: 'Unknown sources: %{sources}. Available: %{known}.'
+      unknown_vacancy: Vacancy "%{id}" not found — it may have been closed and removed
+        by a sync.
   navbar:
     sign_in: Sign in
     sign_out: Sign out

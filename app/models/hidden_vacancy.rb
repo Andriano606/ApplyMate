@@ -1,5 +1,6 @@
 # A vacancy the user looked at and dismissed. It stays in the list (rendered blurred,
-# with a restore button) and does not touch search results or preset counters.
+# with a restore button) and does not touch web search results or preset counters.
+# The MCP search_vacancies tool leaves hidden ones out unless include_hidden is set.
 # Rows are removed together with their user or vacancy (dependent: :delete_all on both sides).
 class HiddenVacancy < ApplicationRecord
   belongs_to :user

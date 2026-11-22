@@ -245,4 +245,60 @@ RSpec.describe Vacancy::Operation::Search, type: :operation do
       expect(model.map(&:id)).to contain_exactly(vacancy_rails.id, vacancy_react.id)
     end
   end
+
+  # Options only trusted callers (the MCP search tool) pass — never read from request params.
+  describe "keyword options" do
+    def search(params: {}, current_user: nil, **options)
+      described_class.call(params:, current_user:, **options)
+    end
+
+    it "narrows the results to the given sources" do
+      other = create(:source, name: "Other board")
+      other_vacancy = create(:vacancy, source: other, title: "Rails Developer at Other")
+      other_vacancy.__elasticsearch__.index_document
+      Vacancy.__elasticsearch__.refresh_index!
+
+      expect(search(source_ids: [ other.id ]).model.map(&:id)).to contain_exactly(other_vacancy.id)
+    end
+
+    it "ANDs must_tags with the include tags, without splitting them on commas" do
+      result = search(params: { include_tags: [ 'rails' ] }, must_tags: [ 'frontend or python' ])
+
+      expect(result.model.map(&:id)).to contain_exactly(vacancy_frontend.id)
+    end
+
+    it "drops the vacancies the user hid when exclude_hidden is set" do
+      user = create(:user)
+      user.hidden_vacancies.create!(vacancy: vacancy_python)
+
+      expect(search(current_user: user, exclude_hidden: true).model.map(&:id))
+        .to contain_exactly(vacancy_rails.id, vacancy_frontend.id)
+      expect(search(current_user: user).model.map(&:id)).to include(vacancy_python.id)
+    end
+
+    it "clamps per_page to MAX_PER_PAGE" do
+      expect(search(per_page: 10_000).model.per_page).to eq(described_class::MAX_PER_PAGE)
+    end
+
+    it "clamps the page so from + size stays inside the index max_result_window" do
+      result = search(params: { page: 10_000 }, per_page: 100)
+
+      expect(result).to be_success
+      expect(result.model.current_page).to eq(described_class.last_reachable_page(100))
+    end
+
+    it "orders by relevance when asked instead of newest first" do
+      strong = create(:vacancy, source:, title: "Python Python Python", description: "Python python python")
+      weak   = create(:vacancy, source:, title: "Backend Engineer", company_name: "Hooli",
+                                description: "Some python scripting is a plus, mostly Go and a long list of other duties")
+      [ strong, weak ].each { |v| v.__elasticsearch__.index_document }
+      Vacancy.__elasticsearch__.refresh_index!
+
+      newest    = search(params: { include_tags: [ 'python' ] }).model.map(&:id)
+      relevance = search(params: { include_tags: [ 'python' ] }, sort: 'relevance').model.map(&:id)
+
+      expect(newest.first).to eq(weak.id)
+      expect(relevance.first).to eq(strong.id)
+    end
+  end
 end

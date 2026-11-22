@@ -17,20 +17,34 @@
 #
 # min_vacancy_id limits the query to vacancies that appeared after a snapshot
 # (the saved-filter "appeared since last view" counter).
+#
+# Optional narrowing used by the MCP search tool (all ANDed with the above):
+#   must_tags           — expressions every result must also match, e.g. a free-text
+#                         query on top of a saved filter (not split on commas)
+#   source_ids          — only vacancies of these sources
+#   exclude_vacancy_ids — drop these vacancies (the user's hidden ones)
 class Vacancy::Operation::BuildSearchQuery < ApplyMate::Operation::Base
   SEARCH_FIELDS = %w[title company_name description].freeze
   OPS = %w[and or g_or].freeze
 
-  def perform!(include_tags:, include_ops:, exclude_tags:, min_vacancy_id: nil, **)
+  def perform!(include_tags:, include_ops:, exclude_tags:, min_vacancy_id: nil,
+               must_tags: nil, source_ids: nil, exclude_vacancy_ids: nil, **)
     skip_authorize
 
     tags = normalize_tags(include_tags)
     ops  = parse_ops(include_ops, tags.size)
 
     must = [ build_include(tags, ops) ]
+    must.concat(Array.wrap(must_tags).map { |tag| tag.to_s.strip }.reject(&:blank?).map { |tag| include_clause(tag) })
     must << { range: { vacancy_id: { gt: min_vacancy_id } } } if min_vacancy_id
 
-    self.model = { bool: { must:, must_not: build_excludes(normalize_tags(exclude_tags)) } }
+    must_not = build_excludes(normalize_tags(exclude_tags))
+    must_not << { terms: { vacancy_id: exclude_vacancy_ids } } if exclude_vacancy_ids.present?
+
+    bool = { must:, must_not: }
+    bool[:filter] = [ { terms: { source_id: source_ids } } ] if source_ids.present?
+
+    self.model = { bool: }
   end
 
   private

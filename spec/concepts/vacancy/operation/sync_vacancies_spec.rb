@@ -64,7 +64,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     # keeps showing the previous run's numbers after a sync (test cache is a null_store,
     # so the call itself is the observable).
     it 'expires the cached per-source totals once the source is synced' do
-      expect(Vacancy::Component::TotalVacancies).to receive(:expire_counts!).at_least(:once)
+      expect(Vacancy::Operation::CountBySource).to receive(:expire!).at_least(:once)
 
       operation.call
     end

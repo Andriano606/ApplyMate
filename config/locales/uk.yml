@@ -193,6 +193,13 @@ uk:
   home:
     index:
       no_vacancy: Немає жодної вакансії
+  mcp:
+    errors:
+      unknown_saved_filter: Збережений фільтр «%{id}» не знайдено. Доступні фільтри
+        поверне list_saved_filters.
+      unknown_sources: 'Невідомі джерела: %{sources}. Доступні: %{known}.'
+      unknown_vacancy: Вакансію «%{id}» не знайдено — можливо, її вже закрито й видалено
+        синхронізацією.
   navbar:
     sign_in: Увійти
     sign_out: Вийти
