@@ -1,15 +1,17 @@
 # Спостережуваність: події, дашборд Grafana, алерти
 
 Rails пише в STDOUT, Promtail забирає логи контейнерів web/worker і шле їх у Loki з
-лейблом `job="rails"`, Grafana (staging: http://192.168.50.155:3001) будує на них дашборд
-**«Синхронізація вакансій»** (`uid: applymate-sync-vacancies`) і алерти. Метрик-сервера
+лейблом `job="rails"`, Grafana (staging: http://192.168.50.155:3001) будує на них дашборди
+**«Синхронізація вакансій»** (`uid: applymate-sync-vacancies`) з алертами і **«Використання MCP»**
+(`uid: applymate-mcp-usage`). Метрик-сервера
 (Prometheus) немає: усі графіки — це LogQL поверх JSON-подій з `ApplyMate::Logging`.
 
 | Файл | Що в ньому |
 |------|-----------|
 | `app/concepts/apply_mate/logging.rb` | `log(event: ...)` — один JSON-рядок на подію |
 | `docker/promtail/promtail-config.staging.yml` | збір логів, лейбли, зрізання `[ActiveJob] …` префіксів |
-| `docker/grafana/provisioning/dashboards/sync_vacancies.json` | дашборд |
+| `docker/grafana/provisioning/dashboards/sync_vacancies.json` | дашборд синхронізації |
+| `docker/grafana/provisioning/dashboards/mcp_usage.json` | дашборд використання MCP |
 | `docker/grafana/provisioning/alerting/sync_vacancies.yml` | алерти |
 
 ## Формат події
@@ -52,7 +54,35 @@ Rails пише в STDOUT, Promtail забирає логи контейнері�
 | `proxy_validation_finished` | `Proxy::Operation::Validate`, кожні 5 хв, одна на джерело (і коли перевіряти нічого — нулі) | `source`, `scope` (`untested`/`working`), `checked`, `alive`, `duration_s` |
 | `proxy_fetch_finished` | `Proxy::Operation::FetchProxies`, раз на добу | `candidates`, `inserted`, `duration_s` |
 
-## Дашборд
+## Подія MCP (`Mcp::Operation::Handle`)
+
+`mcp_request` — одна на кожне JSON-RPC повідомлення до `/mcp` (пише `around_request` гема `mcp`;
+запити без токена до нього не доходять і не логуються).
+
+| Поле | Що в ньому |
+|------|-----------|
+| `rpc` | JSON-RPC метод: `initialize`, `tools/list`, `tools/call`, `ping`, … (не `method` — це лейбл Promtail) |
+| `tool` | назва інструмента для `tools/call`, інакше `null` |
+| `user`, `user_name` | hashid і ім'я власника токена |
+| `client` | лише в `initialize`: як клієнт себе назвав (`clientInfo.name`: `claude-ai`, `claude-code`, …) |
+| `result` | `ok` / `failed` (`level: warn`) |
+| `error_type` | на `failed`: причина від гема (`invalid_params` — немає такого інструмента, `invalid_schema`, `missing_required_arguments`, `internal_error` — виняток) або `tool_error` — операція відмовила (`isError: true`) |
+| `duration_s` | скільки обробляли повідомлення |
+
+## Дашборд «Використання MCP»
+
+Ряди: **За вибраний період** (stat-плитки: різних користувачів, активних за добу, викликів, підключень
+= `initialize`, невдалих, p95 часу відповіді) → **Динаміка** (користувачі по днях, виклики по днях
+за користувачами та за інструментами, p95 за інструментами) → **Хто і чим користується** (таблиця
+користувачів, частки інструментів і клієнтів) → **Журнал** (кожне підключення і виклик).
+
+- «Користувачів» — `count(sum by (user) (count_over_time(… [$__range])))`: instant-запит за весь період.
+- Графіки по днях і кругові діаграми — `interval: 1d`: вікна не перетинаються, тож сума точок =
+  підсумок за період (кругові діаграми — `calcs: sum`). Доба — за UTC.
+- Таблиця — два instant-запити (виклики, підключення) по `user_name, user`, злиті трансформацією `merge`.
+- Loki за замовчуванням не дає запит довший за 30 днів (`max_query_length` 721h) — період не більше `now-30d`.
+
+## Дашборд «Синхронізація вакансій»
 
 Ряди: **Останній запуск** (stat-плитки: коли, результат, тривалість, у банку / нових / видалено
 по джерелах) → **Вакансії** → **Швидкість і проксі під час синхронізації** → **Пул проксі
@@ -91,7 +121,7 @@ Rails пише в STDOUT, Promtail забирає логи контейнері�
 
 ## Розгортання змін на staging
 
-Дашборд і алерти — файли аксесуара `grafana` (`config/deploy.staging.yml`), тож після зміни:
+Дашборди і алерти — файли аксесуара `grafana` (`config/deploy.staging.yml`), тож після зміни:
 `bin/kamal accessory reboot grafana -d staging`. Нові поля подій з'являються після деплою
 застосунку і наступного запуску відповідної джоби.
 

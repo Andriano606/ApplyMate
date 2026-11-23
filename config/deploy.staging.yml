@@ -181,6 +181,7 @@ accessories:
     files:
       - docker/grafana/provisioning/dashboards/applymate.yml:/etc/grafana/provisioning/dashboards/applymate.yml
       - docker/grafana/provisioning/dashboards/sync_vacancies.json:/etc/grafana/provisioning/dashboards/sync_vacancies.json
+      - docker/grafana/provisioning/dashboards/mcp_usage.json:/etc/grafana/provisioning/dashboards/mcp_usage.json
       - docker/grafana/provisioning/datasources/loki.staging.yml:/etc/grafana/provisioning/datasources/loki.yml
       - docker/grafana/provisioning/alerting/sync_vacancies.yml:/etc/grafana/provisioning/alerting/sync_vacancies.yml
     directories:
