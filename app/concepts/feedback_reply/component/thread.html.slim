@@ -1,0 +1,21 @@
+.mt-4.border-t.border-gray-100.pt-4.dark:border-gray-700[data-test-id="feedback-thread"]
+  - if replies.any?
+    ul.space-y-3
+      - replies.each do |reply|
+        li.flex.gap-3[id=helpers.dom_id(reply) data-test-id="feedback-reply"]
+          = render ApplyMate::Component::Avatar.new(user: reply.user, size: :sm)
+          div[class=bubble_classes(reply)]
+            .flex.flex-wrap.items-center.gap-x-2.gap-y-1
+              span.text-sm.font-medium.text-gray-900.dark:text-gray-100 = reply.user.name
+              - label, classes = role_badge(reply)
+              - if label
+                span[class="rounded px-1.5 py-0.5 text-[11px] font-medium #{classes}"] = label
+              span.text-xs.text-gray-500.dark:text-gray-400 = time(reply)
+              - if new?(reply)
+                span[class=NEW_BADGE_CLASSES data-test-id="feedback-reply-new"]
+                  = I18n.t('feedback_reply.thread.new')
+            .mt-1.space-y-2.break-words.text-sm.text-gray-700.dark:text-gray-300
+              = helpers.simple_format(ERB::Util.html_escape(reply.body))
+  - if show_form?
+    div[class=(replies.any? ? 'mt-3' : '')]
+      = render FeedbackReply::Component::Form.new(reply: new_reply)

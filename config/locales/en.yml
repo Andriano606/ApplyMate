@@ -1,6 +1,12 @@
 ---
 en:
   activerecord:
+    attributes:
+      feedback:
+        body: Feedback
+        rating: Rating
+      feedback_reply:
+        body: Reply
     errors:
       messages:
         blank: can't be blank
@@ -203,26 +209,150 @@ en:
     messages:
       blank: can't be blank
       greater_than: must be greater than %{count}
+      inclusion: is not included in the list
       invalid: is invalid
       less_than: must be less than %{count}
       not_a_number: is not a number
       taken: has already been taken
       too_long: is too long (maximum is %{count} characters)
       too_short: is too short (minimum is %{count} characters)
+  feedback:
+    card:
+      edited: edited
+      via_mcp: posted via Claude (MCP)
+    create:
+      success: Thank you! Your feedback is published
+    destroy:
+      confirm: Delete the feedback with its whole thread? This cannot be undone.
+      label: Delete feedback
+      success: Feedback deleted
+    edit:
+      header: Edit feedback
+      submit: Save
+    errors:
+      already_exists: You already left feedback — edit it instead of adding a new
+        one
+    form:
+      body: Your feedback
+      body_placeholder: What do you like, what is missing, what is broken?
+      hint: One feedback per person — you can always change it later. Everyone visiting
+        the page can read it.
+      rating: Your rating
+      rating_high: 10 — excellent
+      rating_low: 1 — very bad
+    index:
+      average: Average rating
+      cta_guest: Only signed-in users can leave feedback.
+      cta_hint: 'Write it here or ask Claude: "leave feedback about ApplyMate" — it
+        will publish it via MCP. Admins answer in the thread under your feedback.'
+      cta_title: Tell us what you think about ApplyMate
+      edit: Edit
+      empty: No feedback yet
+      empty_filtered: No feedback of this kind
+      empty_hint: Be the first to share your impressions.
+      empty_others: No one else has left feedback yet
+      empty_unread: No new replies — all caught up
+      filter_label: Feedback filter
+      filters:
+        all: All
+        negative: Negative
+        neutral: Neutral
+        positive: Positive
+        unread: New replies
+      list_title: What others say
+      new: Leave feedback
+      own_title: Your feedback
+      title: Feedback
+      total:
+        one: "%{count} review"
+        other: "%{count} reviews"
+    new:
+      header: New feedback
+      submit: Publish
+    sentiments:
+      negative: negative
+      neutral: neutral
+      positive: positive
+    update:
+      success: Feedback updated
+  feedback_reply:
+    create:
+      success: Reply posted
+    errors:
+      thread_full: The thread already has %{count} messages — no more can be added.
+    form:
+      placeholder: Your reply…
+      submit: Send
+      toggle: Reply
+    thread:
+      admin: Admin
+      author: Author
+      new: new
   home:
+    guest_banner:
+      cta: Sign in with Google
+      cta_hint: No separate sign-up needed. After signing in, the "Connect Claude
+        (MCP)" button gives you the command in one click.
+      lead: ApplyMate collects fresh vacancies from %{sources} every day, so you do
+        not have to open every site.
+      points:
+        claude: Connect Claude and it will search and read vacancies for you
+        hide: Hide the ones you have seen and keep only what is new
+        search: Search every site at once — with "and", "or" and words to exclude
+      sources_fallback: popular job boards
+      title: All IT vacancies in one place
     index:
       no_vacancy: No vacancies fetched
   mcp:
     errors:
+      delete_forbidden: Only admins can delete someone else's feedback — without feedback_id
+        your own is deleted.
+      no_feedback: You have no feedback yet — publish it with submit_feedback first.
+      reply_forbidden: Only admins can reply under someone else's feedback — without
+        feedback_id the reply goes to your own thread.
+      unknown_feedback: Feedback "%{id}" not found — list_feedback returns the current
+        ids.
       unknown_saved_filter: Saved filter "%{id}" not found. list_saved_filters returns
         the available ones.
       unknown_sources: 'Unknown sources: %{sources}. Available: %{known}.'
       unknown_vacancy: Vacancy "%{id}" not found — it may have been closed and removed
         by a sync.
+  mcp_connection:
+    modal:
+      copied: Copied
+      copy: Copy command
+      copy_failed: Could not copy — select the command by hand
+      intro: Connect ApplyMate to Claude and it can search vacancies, read descriptions,
+        hide the ones you have seen and leave feedback on your behalf.
+      never_used: not used yet
+      no_token: No token yet — it is created when you copy the command.
+      regenerate: Regenerate token
+      regenerate_confirm: Create a new token? The old one stops working and Claude
+        has to be connected again.
+      regenerate_hint: 'If the token leaked, regenerate it: the old one stops working
+        at once.'
+      secret_hint: The command contains your personal token — do not share it.
+      step_ask: 'Restart Claude Code and ask, for example: "find remote Ruby vacancies".'
+      step_copy: Copy the command with the button below.
+      step_run: Run it in a terminal where Claude Code is installed.
+      title: Connect Claude (MCP)
+      token_status: Token created %{created} · %{used}.
+      used: last used %{time}
+    update:
+      success: New token created — copy the command again and reconnect Claude
   navbar:
+    connect_mcp: Connect Claude (MCP)
+    feedbacks: Feedback
+    feedbacks_unread:
+      one: "%{count} new reply in your threads"
+      other: "%{count} new replies in your threads"
     sign_in: Sign in
     sign_out: Sign out
     stop_impersonating: Stop impersonating
+  number:
+    format:
+      delimiter: ","
+      separator: "."
   payments:
     pay_now: Pay Now
     redirecting: Redirecting to payment gateway...

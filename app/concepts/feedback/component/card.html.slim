@@ -1,0 +1,29 @@
+article[class=wrapper_classes id=helpers.dom_id(feedback) data-test-id="feedback-card"]
+  .flex.items-start.justify-between.gap-3
+    .flex.min-w-0.items-center.gap-3
+      = render ApplyMate::Component::Avatar.new(user: feedback.user, size: :md)
+      .min-w-0
+        p.truncate.text-sm.font-semibold.text-gray-900.dark:text-gray-100 = feedback.user.name
+        p.text-xs.text-gray-500.dark:text-gray-400
+          = date
+          - if feedback.edited?
+            = " · #{I18n.t('feedback.card.edited')}"
+    .flex.shrink-0.items-center.gap-2
+      - actions.each do |action|
+        = action
+      - if can_destroy?
+        = helpers.button_to helpers.feedback_path(feedback), method: :delete, \
+            form: { data: { turbo_confirm: I18n.t('feedback.destroy.confirm') } }, \
+            class: DELETE_BUTTON_CLASSES, title: I18n.t('feedback.destroy.label'), \
+            'aria-label': I18n.t('feedback.destroy.label'), data: { test_id: 'feedback-delete' } do
+          = icon(:trash, size: 4)
+      span[class=rating_classes title=sentiment_label data-test-id="feedback-rating"]
+        span.text-base.font-bold = feedback.rating
+        span.text-xs.font-medium = '/10'
+  .mt-3.space-y-2.break-words.text-sm.leading-relaxed.text-gray-700.dark:text-gray-300
+    = helpers.simple_format(ERB::Util.html_escape(feedback.body))
+  - if feedback.via_mcp?
+    p[class=VIA_MCP_CLASSES]
+      = icon(:sparkles, size: 4)
+      = I18n.t('feedback.card.via_mcp')
+  = render FeedbackReply::Component::Thread.new(feedback:, viewer: @viewer, new_reply_ids: @new_reply_ids)

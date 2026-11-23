@@ -1,0 +1,25 @@
+= turbo_form_modal( \
+    model: @feedback, \
+    endpoint: @feedback, \
+    header_text: I18n.t("feedback.#{scope}.header"), \
+    submit_text: I18n.t("feedback.#{scope}.submit"), \
+    size: :lg) do |modal|
+  p.mb-5.text-sm.text-gray-500.dark:text-gray-400 = I18n.t('feedback.form.hint')
+
+  fieldset.mb-5[data-test-id="feedback-rating-picker"]
+    legend.mb-2.block.text-sm.font-medium.text-gray-700.dark:text-gray-300 = I18n.t('feedback.form.rating')
+    .grid.grid-cols-5.gap-2.sm:grid-cols-10
+      = modal.form.collection_radio_buttons :rating, Feedback::RATINGS.to_a, :itself, :itself do |b|
+        div
+          = b.radio_button(class: 'peer sr-only')
+          = b.label(class: chip_classes(b.value)) { b.text.to_s }
+    .mt-2.flex.justify-between.text-xs.text-gray-400
+      span = I18n.t('feedback.form.rating_low')
+      span = I18n.t('feedback.form.rating_high')
+    - if rating_error
+      p.mt-1.text-sm.text-red-600 = rating_error
+
+  = modal.form.input :body, \
+      as: :text, \
+      label: I18n.t('feedback.form.body'), \
+      input_html: body_input_html

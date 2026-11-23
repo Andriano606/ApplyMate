@@ -14,7 +14,9 @@ class Home::Operation::Index < ApplyMate::Operation::Base
       include_tags: params[:include_tags],
       include_ops: params[:include_ops],
       exclude_tags: params[:exclude_tags],
-      saved_filter:
+      saved_filter:,
+      # Guests get a short "what is this" banner naming the job boards (tiny table).
+      guest_source_names: (Source.order(:name).pluck(:name) if current_user.nil?)
     )
   end
 

@@ -13,6 +13,25 @@ RSpec.describe Home::Operation::Index, type: :operation do
     expect(result[:pundit]).to be true
   end
 
+  describe "guest banner" do
+    before do
+      create(:source, name: "Dou")
+      create(:source, name: "Djinni")
+    end
+
+    it "names the job boards for a guest" do
+      expect(result.model.guest_source_names).to eq(%w[Djinni Dou])
+    end
+
+    context "when signed in" do
+      let(:current_user) { create(:user) }
+
+      it "shows no banner" do
+        expect(result.model.guest_source_names).to be_nil
+      end
+    end
+  end
+
   context "when the user has a default saved filter" do
     let(:current_user) { create(:user) }
     let(:saved_filter) do

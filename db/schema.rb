@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_23_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_23_100003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -49,8 +49,42 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_000001) do
     t.string "token", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.boolean "personal", default: false, null: false
     t.index ["token"], name: "index_api_tokens_on_token", unique: true
     t.index ["user_id"], name: "index_api_tokens_on_user_id"
+    t.index ["user_id"], name: "index_api_tokens_on_user_id_personal", unique: true, where: "personal"
+  end
+
+  create_table "feedback_replies", force: :cascade do |t|
+    t.bigint "feedback_id", null: false
+    t.bigint "user_id", null: false
+    t.text "body", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["feedback_id", "created_at"], name: "index_feedback_replies_on_feedback_id_and_created_at"
+    t.index ["user_id"], name: "index_feedback_replies_on_user_id"
+  end
+
+  create_table "feedback_thread_reads", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "feedback_id", null: false
+    t.datetime "seen_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["feedback_id"], name: "index_feedback_thread_reads_on_feedback_id"
+    t.index ["user_id", "feedback_id"], name: "index_feedback_thread_reads_on_user_id_and_feedback_id", unique: true
+  end
+
+  create_table "feedbacks", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "rating", null: false
+    t.text "body", null: false
+    t.string "posted_via", default: "web", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["updated_at"], name: "index_feedbacks_on_updated_at"
+    t.index ["user_id"], name: "index_feedbacks_on_user_id", unique: true
+    t.check_constraint "rating >= 1 AND rating <= 10", name: "feedbacks_rating_range"
   end
 
   create_table "hidden_vacancies", force: :cascade do |t|
@@ -289,6 +323,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_000001) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "api_tokens", "users"
+  add_foreign_key "feedback_replies", "feedbacks"
+  add_foreign_key "feedback_replies", "users"
+  add_foreign_key "feedback_thread_reads", "feedbacks"
+  add_foreign_key "feedback_thread_reads", "users"
+  add_foreign_key "feedbacks", "users"
   add_foreign_key "hidden_vacancies", "users"
   add_foreign_key "hidden_vacancies", "vacancies"
   add_foreign_key "proxy_source_stats", "proxies"

@@ -13,6 +13,9 @@ application.register('chat-input', ChatInputController);
 import ChatPanelController from './chat_panel_controller';
 application.register('chat-panel', ChatPanelController);
 
+import DetailsController from './details_controller';
+application.register('details', DetailsController);
+
 import DropdownController from './dropdown_controller';
 application.register('dropdown', DropdownController);
 
@@ -30,6 +33,9 @@ application.register('hello', HelloController);
 
 import ImageSliderController from './image_slider_controller';
 application.register('image-slider', ImageSliderController);
+
+import McpConnectController from './mcp_connect_controller';
+application.register('mcp-connect', McpConnectController);
 
 import MobileMenuController from './mobile_menu_controller';
 application.register('mobile-menu', MobileMenuController);

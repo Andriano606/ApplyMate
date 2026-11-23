@@ -1,6 +1,6 @@
-# frozen_string_literal: true
-
 class ApiToken < ApplicationRecord
+  PERSONAL_NAME = 'Claude (MCP)'
+
   belongs_to :user
 
   has_secure_token :token

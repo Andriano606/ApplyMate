@@ -30,7 +30,9 @@ Feature: Hiding vacancies
       | Backend | ["ruby"]     | []          | []           |
     When I visit the Vacancy index page
     And I click on "Backend"
-    And I click "Приховати" on the vacancy card "Ruby Developer"
+    # wait for the preset to be applied, or its frame update can land after the hide
+    Then I do not see text "Python Developer"
+    When I click "Приховати" on the vacancy card "Ruby Developer"
     Then the vacancy card "Ruby Developer" is hidden
     When I visit the Vacancy index page
     Then the preset "Backend" shows "1"

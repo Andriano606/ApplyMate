@@ -3,8 +3,12 @@ div data-controller="mobile-menu"
   .flex.md:hidden.items-center.justify-between.h-14
     / Burger button
     = button(variant: :icon, data: { action: 'click->mobile-menu#toggle' }) do
-      span data-mobile-menu-target="burgerIcon"
+      span.relative data-mobile-menu-target="burgerIcon"
         = icon(:burger, size: 6)
+        - if unread_badge
+          span.absolute.-right-0.5.-top-0.5.h-2.5.w-2.5.rounded-full.bg-red-500.ring-2.ring-white.dark:ring-gray-800[
+              data-test-id="navbar-unread-badge-mobile"]
+          span.sr-only = unread_badge
       span.hidden data-mobile-menu-target="closeIcon"
         = icon(:close, size: 6)
 
@@ -17,11 +21,12 @@ div data-controller="mobile-menu"
     - if signed_in?
       = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
     - else
-      - sign_in = guest_items.find(&:form_item?)
+      / The sign-in item is a turbo-stream link (opens the sign-in modal).
+      - sign_in = guest_items.first
       - if sign_in
-        = button_to sign_in.label, sign_in.path, \
-          method: sign_in.method, data: { turbo: sign_in.turbo }, \
-          class: 'text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors'
+        = link_to sign_in.label, sign_in.path, data: sign_in.link_data, \
+          class: 'inline-flex min-h-11 items-center text-sm font-medium text-indigo-600 ' \
+                 'hover:text-indigo-700 transition-colors'
 
   / Expandable menu
   .hidden.md:hidden.border-t.border-gray-200.dark:border-gray-600.bg-white.dark:bg-gray-800(
@@ -40,10 +45,16 @@ div data-controller="mobile-menu"
                    'hover:bg-gray-50 dark:hover:bg-gray-700 ' \
                    'rounded-lg transition-colors'
         - elsif item.section == :actions
-          = link_to item.label, item.path, \
-            data: ({ turbo_stream: true } if item.turbo_stream?), \
-            class: 'block px-3 py-2 text-base font-medium text-indigo-600 dark:text-indigo-400 ' \
-                   'hover:bg-indigo-50 dark:hover:bg-gray-700 rounded-lg transition-colors'
+          = link_to item.path, \
+            data: item.link_data, \
+            class: 'flex items-center gap-2 px-3 py-2 text-base font-medium text-indigo-600 dark:text-indigo-400 ' \
+                   'hover:bg-indigo-50 dark:hover:bg-gray-700 rounded-lg transition-colors' do
+            = item.label
+            - if item.badge
+              span.relative.inline-flex
+                = icon(:chat_bubble, size: 5)
+                span[class=ApplyMate::Component::Navbar::Desktop::COUNT_BADGE_CLASSES] = item.badge_count
+              span.sr-only = item.badge
         - else
           = link_to item.path, \
             data: ({ turbo_stream: true } if item.turbo_stream?), \

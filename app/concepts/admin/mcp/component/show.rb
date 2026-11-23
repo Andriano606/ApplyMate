@@ -3,9 +3,6 @@
 class Admin::Mcp::Component::Show < ApplyMate::Component::Base
   available_for :admin
 
-  SERVER_NAME = 'applymate'
-  TOKEN_PLACEHOLDER = '<API_TOKEN>'
-
   def initialize(api_tokens:, tools:, **)
     @api_tokens = api_tokens
     @tools = tools
@@ -24,11 +21,6 @@ class Admin::Mcp::Component::Show < ApplyMate::Component::Base
   end
 
   # One line, so the clipboard controller's textContent is exactly the command.
-  def connect_command(token)
-    "claude mcp add --transport http --scope user #{SERVER_NAME} #{endpoint_url} " \
-      "--header \"Authorization: Bearer #{token}\""
-  end
-
   def token_label(api_token)
     api_token.name.presence || I18n.t('admin.mcp.show.unnamed_token', created_at: helpers.l(api_token.created_at, format: :short))
   end

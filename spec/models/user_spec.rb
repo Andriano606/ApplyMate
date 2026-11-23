@@ -40,4 +40,32 @@ RSpec.describe User, type: :model do
       expect(other_provider).to be_valid
     end
   end
+
+  describe '#unread_feedback_reply_count' do
+    let(:user)  { create(:user) }
+    let(:admin) { create(:user, :admin) }
+
+    it 'is 0 without a feedback or replies' do
+      expect(user.unread_feedback_reply_count).to eq(0)
+      create(:feedback, user:)
+      expect(user.unread_feedback_reply_count).to eq(0)
+    end
+
+    it 'ignores the user\'s own replies' do
+      create(:feedback_reply, feedback: create(:feedback, user:), user:)
+
+      expect(user.unread_feedback_reply_count).to eq(0)
+    end
+
+    it 'counts replies by others under the own feedback until they are read' do
+      feedback = create(:feedback, user:)
+      2.times { create(:feedback_reply, feedback:, user: admin) }
+
+      expect(user.unread_feedback_reply_count).to eq(2)
+
+      FeedbackReply.read_unread!(user, [ feedback.id ])
+
+      expect(user.unread_feedback_reply_count).to eq(0)
+    end
+  end
 end

@@ -73,6 +73,48 @@ refresh, and the default interval (1s) is too slow to rely on mid-scenario:
 Given the vacancy search index is refreshed
 ```
 
+### Feedback and MCP modal
+
+```gherkin
+Given "Olena" has left a 9/10 feedback "Saves me hours"        # review by another user (factory)
+When I filter the feedback by positive                          # positive | neutral | negative | all
+Then I see 3 feedback cards                                     # other people's reviews; the viewer's own pinned review is not counted
+When I pick the rating 8                                        # clicks the visible chip <label> of the radio picker (inputs are sr-only)
+Given an admin "Support" has replied "Text" under the review by "Olena"
+When I start a reply under the review by "Olena"                # clicks the <summary> of the collapsed reply <details>
+When I fill in the reply with "Text"                            # textarea of the open reply form
+When I send the reply                                           # submits the OPEN form (an admin sees one form per review)
+Then the thread under the review by "Olena" shows "Text"        # scoped to that review's [data-test-id="feedback-thread"]
+Then there is no reply form on the page
+When I delete my feedback and confirm                           # trash button on the own card + native confirm
+Then I see the call to write a feedback                         # own panel back to the CTA
+Then the feedback "Remove me" no longer exists
+Then the navbar unread badge shows "1"                          # count inside [data-test-id="navbar-unread-badge"]
+Then the unread replies filter is shown                         # pill [data-test-id="feedback-filter-unread"]
+When I sign in as "Petro" with email "petro@example.com"        # own uid per email, so several users can alternate in one scenario
+When I sign out                                                 # navbar sign-out + waits for the flash
+Then the navbar shows the unread feedback reply badge           # [data-test-id="navbar-unread-badge"] (desktop)
+Then the navbar shows no unread feedback reply badge
+Then the reply "Text" is marked as new                          # [data-test-id="feedback-reply-new"] inside that reply
+Then the reply "Text" is not marked as new
+Then my own feedback shows "Handy vacancy bank"                 # [data-test-id="own-feedback"]
+When I press the Connect Claude button in the navbar                     # JS click on the navbar button (opens the modal)
+When I remember the MCP token                                   # stores the current personal token of the last User
+When I regenerate the MCP token and confirm                     # accepts the data-turbo-confirm dialog
+Then the MCP command has a placeholder instead of a token
+Then the MCP token status says no token was created             # [data-test-id="mcp-token-status"]
+Then the MCP command contains the personal token of the last User   # [data-test-id="mcp-command"], waits for the async create
+Then the MCP token status says a token exists
+Then the MCP command no longer contains the earlier token
+Then no personal MCP token exists
+Then the last User has 1 personal MCP token
+```
+
+The copy button writes to the clipboard, which headless Chrome denies unless the
+origin is granted `clipboardReadWrite` (CDP `Browser.grantPermissions`); the driver in
+`features/support/env.rb` does not grant it. Assert on the rendered DOM, not the clipboard.
+Do not name a step "I open the ..." - it collides with the generic page-visit regex.
+
 ## When Steps
 
 ### Navigate to a page
