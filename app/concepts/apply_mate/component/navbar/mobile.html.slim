@@ -21,11 +21,12 @@ div data-controller="mobile-menu"
     - if signed_in?
       = render ApplyMate::Component::Avatar.new(user: current_user, size: :sm)
     - else
-      - sign_in = guest_items.find(&:form_item?)
+      / The sign-in item is a turbo-stream link (opens the sign-in modal).
+      - sign_in = guest_items.first
       - if sign_in
-        = button_to sign_in.label, sign_in.path, \
-          method: sign_in.method, data: { turbo: sign_in.turbo }, \
-          class: 'text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors'
+        = link_to sign_in.label, sign_in.path, data: sign_in.link_data, \
+          class: 'inline-flex min-h-11 items-center text-sm font-medium text-indigo-600 ' \
+                 'hover:text-indigo-700 transition-colors'
 
   / Expandable menu
   .hidden.md:hidden.border-t.border-gray-200.dark:border-gray-600.bg-white.dark:bg-gray-800(

@@ -289,6 +289,18 @@ en:
       author: Author
       new: new
   home:
+    guest_banner:
+      cta: Sign in with Google
+      cta_hint: No separate sign-up needed. After signing in, the "Connect Claude
+        (MCP)" button gives you the command in one click.
+      lead: ApplyMate collects fresh vacancies from %{sources} every day, so you do
+        not have to open every site.
+      points:
+        claude: Connect Claude and it will search and read vacancies for you
+        hide: Hide the ones you have seen and keep only what is new
+        search: Search every site at once — with "and", "or" and words to exclude
+      sources_fallback: popular job boards
+      title: All IT vacancies in one place
     index:
       no_vacancy: No vacancies fetched
   mcp:
