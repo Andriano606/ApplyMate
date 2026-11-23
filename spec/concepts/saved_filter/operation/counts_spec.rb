@@ -15,8 +15,9 @@ RSpec.describe SavedFilter::Operation::Counts, type: :operation do
 
   let(:user)   { create(:user) }
   let(:source) { create(:source) }
-  let(:saved_filter) do
-    create(:saved_filter, user:, include_tags: %w[embedded], include_ops: [], exclude_tags: [])
+
+  def preset(tag, exclude_tags: [])
+    create(:saved_filter, user:, include_tags: [ tag ], include_ops: [], exclude_tags:)
   end
 
   def index_vacancy(title)
@@ -25,45 +26,26 @@ RSpec.describe SavedFilter::Operation::Counts, type: :operation do
     end
   end
 
-  def stats_for(filter)
-    Rails.cache.clear
-    described_class.call(saved_filters: [ filter.reload ]).model[filter.id]
-  end
-
-  it "counts matching vacancies and hides deltas before the first view" do
+  it "counts the vacancies each preset matches, in one go" do
+    embedded = preset("embedded")
+    python   = preset("python", exclude_tags: %w[junior])
+    empty    = preset("cobol")
     index_vacancy("Embedded Developer")
+    index_vacancy("Embedded Engineer")
     index_vacancy("Python Developer")
+    index_vacancy("Junior Python Developer")
     Vacancy.__elasticsearch__.refresh_index!
+    Rails.cache.clear
 
-    stat = stats_for(saved_filter)
-    expect(stat.count).to eq(1)
-    expect(stat.appeared).to be_nil
-    expect(stat.disappeared).to be_nil
-  end
+    counts = described_class.call(saved_filters: [ embedded, python, empty ]).model
 
-  it "reports appeared and disappeared relative to the last view snapshot" do
-    seen    = index_vacancy("Embedded Developer")
-    gone    = index_vacancy("Embedded Engineer")
-    Vacancy.__elasticsearch__.refresh_index!
-
-    saved_filter.record_view!(count: 2, max_vacancy_id: gone.id)
-
-    gone.__elasticsearch__.delete_document
-    index_vacancy("Embedded C Developer")
-    index_vacancy("Embedded Rust Developer")
-    Vacancy.__elasticsearch__.refresh_index!
-
-    stat = stats_for(saved_filter)
-    expect(stat.count).to eq(3)       # seen + 2 new
-    expect(stat.appeared).to eq(2)
-    expect(stat.disappeared).to eq(1) # 2 (seen) + 2 (appeared) - 3 (current)
-    expect(seen.id).to be < gone.id
+    expect(counts).to eq(embedded.id => 2, python.id => 1, empty.id => 0)
   end
 
   it "returns an empty hash when Elasticsearch fails" do
     allow(Elasticsearch::Model.client).to receive(:msearch).and_raise(StandardError, "down")
     Rails.cache.clear
 
-    expect(described_class.call(saved_filters: [ saved_filter ]).model).to eq({})
+    expect(described_class.call(saved_filters: [ preset("embedded") ]).model).to eq({})
   end
 end

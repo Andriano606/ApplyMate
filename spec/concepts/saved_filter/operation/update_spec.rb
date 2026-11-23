@@ -31,14 +31,6 @@ RSpec.describe SavedFilter::Operation::Update, type: :operation do
     expect(current_user.reload.default_saved_filter).to eq(saved_filter)
   end
 
-  it "resets the view snapshot because it described the old state" do
-    saved_filter.record_view!(count: 5, max_vacancy_id: 100)
-
-    expect(result).to be_success
-    expect(saved_filter.reload.last_seen_count).to be_nil
-    expect(saved_filter.last_seen_max_vacancy_id).to be_nil
-  end
-
   context "when only the name changes" do
     let(:params) do
       ActionController::Parameters.new(
@@ -50,12 +42,12 @@ RSpec.describe SavedFilter::Operation::Update, type: :operation do
       )
     end
 
-    it "keeps the view snapshot" do
-      saved_filter.record_view!(count: 5, max_vacancy_id: 100)
+    it "renames the preset and keeps its search" do
+      tags = saved_filter.include_tags
 
       expect(result).to be_success
       expect(saved_filter.reload.name).to eq('Renamed')
-      expect(saved_filter.last_seen_count).to eq(5)
+      expect(saved_filter.include_tags).to eq(tags)
     end
   end
 

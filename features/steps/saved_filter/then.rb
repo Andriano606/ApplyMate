@@ -5,12 +5,7 @@ def within_preset(name, &block)
   end
 end
 
-# The preset pill carries a plain vacancy count plus optional "+appeared" and
-# "−disappeared" badges.
-Then('the preset {string} shows {string}') do |name, badge|
-  within_preset(name) { expect(page).to have_text(badge) }
-end
-
-Then('the preset {string} shows no deltas') do |name|
-  within_preset(name) { expect(page).to have_no_text(/[+−]\d+/) }
+# The preset pill carries its name and how many vacancies it matches now.
+Then('the preset {string} shows {string}') do |name, text|
+  within_preset(name) { expect(page).to have_text(text) }
 end

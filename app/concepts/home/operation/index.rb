@@ -8,11 +8,6 @@ class Home::Operation::Index < ApplyMate::Operation::Base
 
     result = run_operation Vacancy::Operation::Search, { params:, current_user: }
     vacancies = result.model
-    run_operation(SavedFilter::Operation::RecordView,
-                  { saved_filter:, vacancies:,
-                    include_tags: params[:include_tags],
-                    include_ops:  params[:include_ops],
-                    exclude_tags: params[:exclude_tags] })
     self.model = ApplyMate::Operation::Struct.new(
       vacancies:,
       hidden_vacancy_ids: HiddenVacancy.vacancy_ids_for(user: current_user, vacancies:),
