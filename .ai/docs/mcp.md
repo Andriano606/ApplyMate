@@ -10,7 +10,8 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
   one JSON answer; there are no sessions and no SSE streams (`GET /mcp` answers 405). That is why
   `Mcp::Operation::Handle` builds a fresh `MCP::Server` + `StreamableHTTPTransport` per request —
   nothing is shared between Puma threads.
-- **API token.** `Authorization: Bearer <token>` with a token from *Admin → API tokens*
+- **API token.** `Authorization: Bearer <token>` — the user's own token from the
+  *Connect Claude (MCP)* modal (see below) or one an admin issued in *Admin → API tokens*
   (`ApiToken`, looked up by `UserHandling#user_from_token`, which also stamps `last_used_at`).
   No token / unknown token → `401` with `WWW-Authenticate: Bearer` (`McpPolicy#access?`).
   Every tool runs as the token's user, so saved filters and hidden vacancies are that user's.
@@ -37,6 +38,8 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | `list_sources` | `Mcp::Operation::ListSources` | counts come from `Vacancy::Operation::CountBySource` (cached 5 min, expired by the sync) |
 | `list_saved_filters` | `Mcp::Operation::ListSavedFilters` | only the token user's filters |
 | `set_vacancy_hidden` | `Mcp::Operation::SetVacancyHidden` | wraps `HiddenVacancy::Operation::{Create,Destroy}`; idempotent |
+| `get_my_feedback` | `Mcp::Operation::GetMyFeedback` | the token user's feedback or `null` |
+| `submit_feedback` | `Mcp::Operation::SubmitFeedback` | `rating` (1–10) + `comment`; creates the user's single feedback, later calls replace it (`created: false`); wraps `Feedback::Operation::{Create,Update}` with `posted_via: 'mcp'`. See `.ai/docs/feedback.md` |
 
 Ids are hashids everywhere (`to_param`), never bare integers.
 
@@ -77,11 +80,31 @@ Pagination: `total_entries` is the real match count, but Elasticsearch serves at
 
 ## Connecting Claude
 
+**Users** connect from the user menu → *Підключити Claude (MCP)* (`McpConnectionsController`,
+`resource :mcp_connection`). The modal (`McpConnection::Component::Modal`, fixed id
+`mcp_connection_modal`) is re-rendered by every action as a Turbo Stream:
+
+| Action | Operation | What it does |
+|--------|-----------|--------------|
+| `GET /mcp_connection` | `McpConnection::Operation::Show` | shows the modal; **never** creates a token (prefetch-safe) |
+| `POST /mcp_connection` | `McpConnection::Operation::Create` | get-or-create the user's personal token |
+| `PATCH /mcp_connection` | `McpConnection::Operation::Update` | regenerate it (old value stops working, `last_used_at` reset) |
+
+The personal token is the `ApiToken` with `personal: true` (at most one per user — unique partial
+index `index_api_tokens_on_user_id_personal`; `create_or_find_by!` makes double clicks safe).
+Admin-issued tokens are `personal: false` and are never touched by the modal.
+
+*Copy command* is one click even without a token: `mcp_connect_controller.ts` POSTs to
+`/mcp_connection`, reads the command out of the returned stream and hands it to the clipboard as a
+promise (`ClipboardItem`, so Safari/Firefox still treat it as part of the click), then renders the
+stream. With a token it just copies `data-mcp-connect-command-value`.
+
 The admin page **Admin → MCP server** (`/admin/mcp`, `Admin::Mcp::Operation::Show`, admin-only via
 `McpPolicy#show?`) shows the endpoint URL, the tool list (read from `Mcp::Operation::Handle::TOOLS`)
 and, for each of the current admin's own API tokens, the ready-to-run command with a copy-to-clipboard
 button (`clipboard` Stimulus controller). Without a token it shows the command with an `<API_TOKEN>`
-placeholder and a link to create one. The command it builds:
+placeholder and a link to create one. Both places build the command with
+`Mcp::Component::ConnectCommand` (`.text(url:, token:)` / renders the `<code>`):
 
 ```bash
 claude mcp add --transport http --scope user applymate https://staging.beapply.xyz/mcp \

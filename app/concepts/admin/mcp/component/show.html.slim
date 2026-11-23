@@ -19,8 +19,8 @@
             p.text-xs.font-medium.text-gray-500.uppercase.tracking-wide.mb-1 = token_label(api_token)
             .relative.bg-gray-900.rounded-lg.overflow-hidden
               .p-3.overflow-x-auto.pr-12
-                code.text-green-400.text-xs.select-all.whitespace-pre[data-clipboard-target="source"]
-                  = connect_command(api_token.token)
+                = render Mcp::Component::ConnectCommand.new(token: api_token.token, \
+                                                            data: { clipboard_target: 'source' })
               button.absolute.top-2.right-2.p-1.rounded.text-gray-400.hover:text-green-400.transition-colors[
                   type="button"
                   data-clipboard-target="button"
@@ -34,8 +34,7 @@
         div[data-controller="clipboard"]
           .relative.bg-gray-900.rounded-lg.overflow-hidden
             .p-3.overflow-x-auto.pr-12
-              code.text-green-400.text-xs.select-all.whitespace-pre[data-clipboard-target="source"]
-                = connect_command(TOKEN_PLACEHOLDER)
+              = render Mcp::Component::ConnectCommand.new(data: { clipboard_target: 'source' })
             button.absolute.top-2.right-2.p-1.rounded.text-gray-400.hover:text-green-400.transition-colors[
                 type="button"
                 data-clipboard-target="button"

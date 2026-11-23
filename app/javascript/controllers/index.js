@@ -31,6 +31,9 @@ application.register('hello', HelloController);
 import ImageSliderController from './image_slider_controller';
 application.register('image-slider', ImageSliderController);
 
+import McpConnectController from './mcp_connect_controller';
+application.register('mcp-connect', McpConnectController);
+
 import MobileMenuController from './mobile_menu_controller';
 application.register('mobile-menu', MobileMenuController);
 

@@ -2,6 +2,8 @@
 
 class User < ApplicationRecord
   has_many :api_tokens, dependent: :destroy
+  has_one :personal_api_token, -> { where(personal: true) }, class_name: 'ApiToken', inverse_of: :user
+  has_one :feedback, dependent: :destroy
   has_many :saved_filters, dependent: :destroy
   has_many :hidden_vacancies, dependent: :delete_all
 

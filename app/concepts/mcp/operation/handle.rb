@@ -16,7 +16,9 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     Mcp::Tool::GetVacancies,
     Mcp::Tool::ListSources,
     Mcp::Tool::ListSavedFilters,
-    Mcp::Tool::SetVacancyHidden
+    Mcp::Tool::SetVacancyHidden,
+    Mcp::Tool::GetMyFeedback,
+    Mcp::Tool::SubmitFeedback
   ].freeze
 
   INSTRUCTIONS = <<~TEXT
@@ -26,6 +28,9 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     board or via one of the user's saved filters (list_saved_filters), then get_vacancies to read
     the full descriptions. Closed vacancies disappear after the next sync, so ids can go stale.
     set_vacancy_hidden marks a vacancy as dismissed for the user; hidden ones are skipped by search.
+    When the user wants to review ApplyMate itself, submit_feedback publishes their rating (1–10)
+    and comment on the public feedback page — one per user, later calls replace it
+    (get_my_feedback shows the current one).
   TEXT
 
   def perform!(request:, current_user:, **)

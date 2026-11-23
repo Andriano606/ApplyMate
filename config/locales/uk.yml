@@ -1,6 +1,10 @@
 ---
 uk:
   activerecord:
+    attributes:
+      feedback:
+        body: Відгук
+        rating: Оцінка
     errors:
       messages:
         blank: не може бути порожнім
@@ -202,12 +206,59 @@ uk:
     messages:
       blank: не може бути порожнім
       greater_than: має бути більше %{count}
+      inclusion: має бути одним із допустимих значень
       invalid: недійсне
       less_than: має бути менше %{count}
       not_a_number: не є числом
       taken: вже використовується
       too_long: задовге (максимум %{count} символів)
       too_short: закоротке (мінімум %{count} символів)
+  feedback:
+    card:
+      edited: змінено
+      via_mcp: опубліковано через Claude (MCP)
+    create:
+      success: Дякуємо! Ваш відгук опубліковано
+    edit:
+      header: Редагувати відгук
+      submit: Зберегти
+    errors:
+      already_exists: У вас уже є відгук — відредагуйте його замість нового
+    form:
+      body: Ваш відгук
+      body_placeholder: Що подобається, чого бракує, що не працює?
+      hint: Один відгук на людину — пізніше його завжди можна змінити. Його бачать
+        усі відвідувачі сторінки.
+      rating: Оцінка від 1 до 10
+      rating_placeholder: Оберіть оцінку
+    index:
+      average: Середня оцінка
+      cta_guest: Відгуки можуть залишати лише користувачі, що увійшли.
+      cta_hint: 'Напишіть тут або попросіть Claude: «залиш відгук про ApplyMate» —
+        він опублікує його через MCP.'
+      cta_title: Поділіться враженнями про ApplyMate
+      edit: Редагувати
+      empty: Відгуків ще немає
+      empty_filtered: Таких відгуків немає
+      empty_hint: Станьте першим, хто поділиться враженнями.
+      filter_label: Фільтр відгуків
+      filters:
+        all: Усі
+        negative: Негативні
+        neutral: Нейтральні
+        positive: Позитивні
+      new: Залишити відгук
+      own_title: Ваш відгук
+      title: Відгуки
+    new:
+      header: Новий відгук
+      submit: Опублікувати
+    sentiments:
+      negative: негативно
+      neutral: нейтрально
+      positive: позитивно
+    update:
+      success: Відгук оновлено
   home:
     index:
       no_vacancy: Немає жодної вакансії
@@ -218,7 +269,33 @@ uk:
       unknown_sources: 'Невідомі джерела: %{sources}. Доступні: %{known}.'
       unknown_vacancy: Вакансію «%{id}» не знайдено — можливо, її вже закрито й видалено
         синхронізацією.
+  mcp_connection:
+    modal:
+      copied: Скопійовано
+      copy: Скопіювати команду
+      copy_failed: Не вдалося скопіювати — виділіть команду вручну
+      intro: Підключіть ApplyMate до Claude, і він зможе шукати вакансії, читати описи,
+        приховувати переглянуті та залишати відгук від вашого імені.
+      never_used: ще не використовувався
+      no_token: Токен ще не створено — його буде створено, коли ви скопіюєте команду.
+      regenerate: Перегенерувати токен
+      regenerate_confirm: Створити новий токен? Старий перестане працювати, і Claude
+        доведеться підключити заново.
+      regenerate_hint: 'Якщо токен потрапив до чужих рук, перегенеруйте його: старий
+        одразу перестане працювати.'
+      secret_hint: Команда містить ваш особистий токен — не діліться нею.
+      step_ask: 'Перезапустіть Claude Code і попросіть, наприклад: «знайди віддалені
+        вакансії Ruby».'
+      step_copy: Скопіюйте команду кнопкою нижче.
+      step_run: Виконайте її в терміналі, де встановлено Claude Code.
+      title: Підключити Claude (MCP)
+      token_status: 'Токен створено %{created}, востаннє використано: %{used}.'
+    update:
+      success: Новий токен створено — скопіюйте команду ще раз і підключіть Claude
+        заново
   navbar:
+    connect_mcp: Підключити Claude (MCP)
+    feedbacks: Відгуки
     sign_in: Увійти
     sign_out: Вийти
     stop_impersonating: Зупинити імперсонацію

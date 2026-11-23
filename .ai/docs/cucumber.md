@@ -73,6 +73,30 @@ refresh, and the default interval (1s) is too slow to rely on mid-scenario:
 Given the vacancy search index is refreshed
 ```
 
+### Feedback and MCP modal
+
+```gherkin
+Given "Olena" has left a 9/10 feedback "Saves me hours"        # review by another user (factory)
+When I filter the feedback by positive                          # positive | neutral | negative | all
+Then I see 3 feedback cards                                     # everyone's list; the pinned own review is not counted
+Then my own feedback shows "Handy vacancy bank"                 # [data-test-id="own-feedback"]
+When I pick Connect Claude in the user menu                     # JS click on the user-menu item (opens the modal)
+When I remember the MCP token                                   # stores the current personal token of the last User
+When I regenerate the MCP token and confirm                     # accepts the data-turbo-confirm dialog
+Then the MCP command has a placeholder instead of a token
+Then the MCP token status says no token was created             # [data-test-id="mcp-token-status"]
+Then the MCP command contains the personal token of the last User   # [data-test-id="mcp-command"], waits for the async create
+Then the MCP token status says a token exists
+Then the MCP command no longer contains the earlier token
+Then no personal MCP token exists
+Then the last User has 1 personal MCP token
+```
+
+The copy button writes to the clipboard, which headless Chrome denies unless the
+origin is granted `clipboardReadWrite` (CDP `Browser.grantPermissions`); the driver in
+`features/support/env.rb` does not grant it. Assert on the rendered DOM, not the clipboard.
+Do not name a step "I open the ..." - it collides with the generic page-visit regex.
+
 ## When Steps
 
 ### Navigate to a page

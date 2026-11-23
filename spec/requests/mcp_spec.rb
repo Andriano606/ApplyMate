@@ -67,6 +67,23 @@ RSpec.describe 'MCP endpoint', type: :request do
       expect { mcp_post({ jsonrpc: '2.0', id: 1, method: 'ping' }, auth: "Bearer #{api_token.token}") }
         .to change { api_token.reload.last_used_at }.from(nil)
     end
+
+    it 'stops accepting a personal token once it has been regenerated' do
+      personal = create(:api_token, user:, personal: true)
+      old_value = personal.token
+      ping = { jsonrpc: '2.0', id: 1, method: 'ping' }
+
+      mcp_post(ping, auth: "Bearer #{old_value}")
+      expect(response).to have_http_status(:ok)
+
+      McpConnection::Operation::Update.call(params: {}, current_user: user)
+
+      mcp_post(ping, auth: "Bearer #{old_value}")
+      expect(response).to have_http_status(:unauthorized)
+
+      mcp_post(ping, auth: "Bearer #{personal.reload.token}")
+      expect(response).to have_http_status(:ok)
+    end
   end
 
   it 'answers initialize with the server info, instructions and only the tools capability' do
@@ -84,7 +101,8 @@ RSpec.describe 'MCP endpoint', type: :request do
 
     names = JSON.parse(response.body).dig('result', 'tools').map { |tool| tool['name'] }
     expect(names).to contain_exactly('search_vacancies', 'get_vacancies', 'list_sources',
-                                     'list_saved_filters', 'set_vacancy_hidden')
+                                     'list_saved_filters', 'set_vacancy_hidden',
+                                     'get_my_feedback', 'submit_feedback')
   end
 
   describe 'search_vacancies' do
@@ -226,6 +244,83 @@ RSpec.describe 'MCP endpoint', type: :request do
 
       expect(result['isError']).to be(true)
       expect(user.hidden_vacancies).to be_empty
+    end
+  end
+
+  describe 'get_my_feedback' do
+    it 'returns null before the user left any feedback' do
+      create(:feedback) # somebody else's
+
+      expect(tool_data('get_my_feedback')).to eq('feedback' => nil)
+    end
+
+    it "returns the user's own feedback only" do
+      mine = create(:feedback, user:, rating: 8, body: 'Solid', posted_via: 'web')
+      create(:feedback)
+
+      data = tool_data('get_my_feedback')
+
+      expect(data['feedback']).to include('id' => mine.to_param, 'rating' => 8, 'sentiment' => 'positive',
+                                          'comment' => 'Solid', 'posted_via' => 'web')
+    end
+  end
+
+  describe 'submit_feedback' do
+    it 'creates the feedback, signed as an MCP post' do
+      data = nil
+      expect { data = tool_data('submit_feedback', { rating: 9, comment: 'Great bank' }) }
+        .to change { Feedback.where(user:).count }.from(0).to(1)
+
+      expect(data['created']).to be(true)
+      expect(data['feedback']).to include('rating' => 9, 'comment' => 'Great bank',
+                                          'sentiment' => 'positive', 'posted_via' => 'mcp')
+      expect(user.reload.feedback).to have_attributes(rating: 9, body: 'Great bank', posted_via: 'mcp')
+    end
+
+    it 'replaces the single feedback on the next call' do
+      create(:feedback, user:, rating: 3, body: 'Old text', posted_via: 'web')
+
+      data = tool_data('submit_feedback', { rating: 6, comment: 'New text' })
+
+      expect(data['created']).to be(false)
+      expect(data['feedback']).to include('rating' => 6, 'sentiment' => 'neutral', 'posted_via' => 'mcp')
+      expect(Feedback.where(user:).count).to eq(1)
+      expect(user.reload.feedback).to have_attributes(rating: 6, body: 'New text', posted_via: 'mcp')
+    end
+
+    it 'creates first and replaces second across two calls' do
+      first  = tool_data('submit_feedback', { rating: 5, comment: 'One' })
+      second = tool_data('submit_feedback', { rating: 7, comment: 'Two' })
+
+      expect([ first['created'], second['created'] ]).to eq([ true, false ])
+      expect(first['feedback']['id']).to eq(second['feedback']['id'])
+    end
+
+    it 'does not touch other users feedback' do
+      other = create(:feedback, body: 'Not mine')
+
+      tool_data('submit_feedback', { rating: 8, comment: 'Mine' })
+
+      expect(other.reload.body).to eq('Not mine')
+    end
+
+    it 'reports a model validation failure as a readable tool error' do
+      too_long = 'a' * (Feedback::BODY_MAX_LENGTH + 1)
+      result = Mcp::Operation::SubmitFeedback.call(params: { rating: 5, comment: too_long }, current_user: user)
+
+      expect(result).to be_failure
+      expect(result.error_message).to be_present
+      expect(Feedback.where(user:)).to be_empty
+    end
+
+    it 'rejects out-of-range input at the schema level' do
+      [ { rating: 11, comment: 'x' }, { rating: 0, comment: 'x' }, { rating: 5, comment: '' },
+        { rating: 5, comment: 'a' * (Feedback::BODY_MAX_LENGTH + 1) } ].each do |arguments|
+        result = call_tool('submit_feedback', arguments)
+
+        expect(result['isError']).to be(true)
+      end
+      expect(Feedback.where(user:)).to be_empty
     end
   end
 end

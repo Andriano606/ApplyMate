@@ -1,0 +1,39 @@
+= render ApplyMate::Component::TurboModal.new(modal_id: MODAL_ID, title:, size: :xl) do |modal|
+  - modal.with_body do
+    div[data-controller="mcp-connect"
+        data-mcp-connect-command-value=command
+        data-mcp-connect-create-url-value=helpers.mcp_connection_path
+        data-mcp-connect-copied-label-value=I18n.t('mcp_connection.modal.copied')
+        data-mcp-connect-failed-label-value=I18n.t('mcp_connection.modal.copy_failed')
+        data-test-id="mcp-connection"]
+      .space-y-4.text-sm
+        p = I18n.t('mcp_connection.modal.intro')
+        ol.list-decimal.space-y-1.pl-5
+          li = I18n.t('mcp_connection.modal.step_copy')
+          li = I18n.t('mcp_connection.modal.step_run')
+          li = I18n.t('mcp_connection.modal.step_ask')
+
+        .rounded-lg.bg-gray-900.p-3.overflow-x-auto
+          = render Mcp::Component::ConnectCommand.new(token: api_token&.token, data: { test_id: 'mcp-command' })
+
+        button.w-full.justify-center.gap-2[
+            type="button"
+            class=ApplyMate::Component::Button::VARIANTS[:primary]
+            data-action="click->mcp-connect#copy"
+            data-mcp-connect-target="button"
+            data-test-id="mcp-copy-command"]
+          = icon(:clipboard_list, size: 4)
+          span[data-mcp-connect-target="label"] = I18n.t('mcp_connection.modal.copy')
+
+        p.text-xs.text-gray-500.dark:text-gray-400[data-test-id="mcp-token-status"] = token_status
+
+        - if api_token
+          .rounded-lg.border.border-amber-200.bg-amber-50.p-3.dark:border-amber-800.dark:bg-amber-900/20
+            p.text-xs.text-amber-800.dark:text-amber-200 = I18n.t('mcp_connection.modal.regenerate_hint')
+            = helpers.button_to I18n.t('mcp_connection.modal.regenerate'), helpers.mcp_connection_path, \
+                method: :patch, \
+                form: { data: { turbo_confirm: I18n.t('mcp_connection.modal.regenerate_confirm') } }, \
+                class: regenerate_button_classes, \
+                data: { test_id: 'mcp-regenerate-token' }
+
+        p.text-xs.text-gray-500.dark:text-gray-400 = I18n.t('mcp_connection.modal.secret_hint')

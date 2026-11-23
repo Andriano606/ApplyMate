@@ -4,6 +4,7 @@ base_locale: uk
 ignore_unused:
   - 'activemodel.errors.*'
   - 'activerecord.errors.*'
+  - 'activerecord.attributes.*'
   - 'errors.messages.*'
   - 'simple_form.*'
   - 'will_paginate.*'

@@ -1,0 +1,50 @@
+= header(title: I18n.t('feedback.index.title'))
+
+.space-y-6
+  / Summary
+  section.grid.grid-cols-2.gap-3.md:grid-cols-4[data-test-id="feedback-stats"]
+    .rounded-lg.bg-white.p-4.shadow.dark:bg-gray-800
+      p.text-xs.font-medium.uppercase.tracking-wide.text-gray-500.dark:text-gray-400 = I18n.t('feedback.index.average')
+      p.mt-1.text-2xl.font-semibold.text-gray-900.dark:text-gray-100
+        = average
+        span.text-sm.font-normal.text-gray-400 = ' / 10'
+    - Feedback::SENTIMENTS.each_key do |sentiment|
+      .rounded-lg.bg-white.p-4.shadow.dark:bg-gray-800
+        p.text-xs.font-medium.uppercase.tracking-wide.text-gray-500.dark:text-gray-400 = filter_label(sentiment)
+        p.mt-1.text-2xl.font-semibold.text-gray-900.dark:text-gray-100 = @stats[:by_sentiment][sentiment]
+
+  / The viewer's own review
+  section.rounded-lg.bg-white.p-4.shadow.md:p-6.dark:bg-gray-800[data-test-id="own-feedback"]
+    - if @own_feedback
+      .flex.flex-col.gap-3.sm:flex-row.sm:items-center.sm:justify-between.mb-4
+        h2.text-lg.font-semibold.text-gray-800.dark:text-gray-200 = I18n.t('feedback.index.own_title')
+        = link(**edit_link_options)
+      = render Feedback::Component::Card.new(feedback: @own_feedback, framed: false)
+    - else
+      .flex.flex-col.gap-4.md:flex-row.md:items-center.md:justify-between
+        div
+          h2.text-lg.font-semibold.text-gray-800.dark:text-gray-200 = I18n.t('feedback.index.cta_title')
+          p.mt-1.text-sm.text-gray-500.dark:text-gray-400
+            - if @signed_in
+              = I18n.t('feedback.index.cta_hint')
+            - else
+              = I18n.t('feedback.index.cta_guest')
+        = link(**cta_link_options)
+
+  / Everyone's reviews
+  section.space-y-4
+    nav.flex.flex-wrap.gap-2[aria-label=I18n.t('feedback.index.filter_label')]
+      - filters.each do |sentiment, count|
+        = helpers.link_to filter_url(sentiment), **filter_link_options(sentiment) do
+          = filter_label(sentiment)
+          span.opacity-70 = count
+
+    - if @feedbacks.any?
+      .grid.grid-cols-1.gap-4.lg:grid-cols-2
+        - @feedbacks.each do |feedback|
+          = render Feedback::Component::Card.new(feedback:)
+      - if paginate?
+        = helpers.will_paginate @feedbacks, renderer: ApplyMate::Component::Table::PaginationRenderer
+    - else
+      .rounded-lg.bg-white.shadow.dark:bg-gray-800
+        = render empty_state

@@ -1,0 +1,17 @@
+article[class=wrapper_classes id=helpers.dom_id(feedback) data-test-id="feedback-card"]
+  .flex.items-start.justify-between.gap-3
+    .flex.min-w-0.items-center.gap-3
+      = render ApplyMate::Component::Avatar.new(user: feedback.user, size: :md)
+      .min-w-0
+        p.truncate.text-sm.font-medium.text-gray-900.dark:text-gray-100 = feedback.user.name
+        p.text-xs.text-gray-500.dark:text-gray-400
+          = date
+          - if feedback.edited?
+            = " · #{I18n.t('feedback.card.edited')}"
+    span[class=rating_classes title=sentiment_label data-test-id="feedback-rating"] = "#{feedback.rating}/10"
+  .mt-3.space-y-2.text-sm.text-gray-700.dark:text-gray-300.break-words
+    = helpers.simple_format(ERB::Util.html_escape(feedback.body))
+  - if feedback.via_mcp?
+    p.mt-3.inline-flex.items-center.gap-1.text-xs.text-gray-400.dark:text-gray-500
+      = icon(:sparkles, size: 4)
+      = I18n.t('feedback.card.via_mcp')

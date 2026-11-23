@@ -1,0 +1,16 @@
+= turbo_form_modal( \
+    model: @feedback, \
+    endpoint: @feedback, \
+    header_text: I18n.t("feedback.#{scope}.header"), \
+    submit_text: I18n.t("feedback.#{scope}.submit"), \
+    size: :lg) do |modal|
+  p.mb-4.text-sm.text-gray-500.dark:text-gray-400 = I18n.t('feedback.form.hint')
+  = modal.form.input :rating, \
+      as: :select, \
+      collection: rating_collection, \
+      include_blank: I18n.t('feedback.form.rating_placeholder'), \
+      label: I18n.t('feedback.form.rating')
+  = modal.form.input :body, \
+      as: :text, \
+      label: I18n.t('feedback.form.body'), \
+      input_html: body_input_html

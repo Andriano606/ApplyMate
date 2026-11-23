@@ -36,6 +36,10 @@ Rails.application.routes.draw do
     resource :hidden_vacancy, only: [ :create, :destroy ]
   end
   resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]
+  resources :feedbacks, only: [ :index, :new, :create, :edit, :update ]
+
+  # The user's own MCP token: "Connect Claude (MCP)" modal in the user menu
+  resource :mcp_connection, only: [ :show, :create, :update ]
 
   # Model Context Protocol server for Claude & co. (API token auth, see .ai/docs/mcp.md)
   match 'mcp', to: 'mcp#handle', via: %i[get post delete], as: :mcp
