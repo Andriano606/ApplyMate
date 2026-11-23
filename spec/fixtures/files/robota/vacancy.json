@@ -1,0 +1,189 @@
+{
+  "id": 10877579,
+  "name": "Пекар",
+  "logo": "defaultlogo.gif",
+  "designBannerUrl": null,
+  "designBannerFullUrl": null,
+  "notebookId": 15999881,
+  "companyName": "Пекарня Lu",
+  "verifiedCompany": false,
+  "contactPerson": null,
+  "contactPhoto": null,
+  "contactPhone": null,
+  "contactUrl": "",
+  "contactURL": "",
+  "socials": [],
+  "date": "2026-11-23T12:43:44.913",
+  "dateTxt": "22 минуты назад",
+  "isActive": true,
+  "isLiked": false,
+  "isAgency": false,
+  "noCvApply": false,
+  "isApply": false,
+  "applyDate": null,
+  "isApplyViewed": false,
+  "isEnableImage": true,
+  "isShowMiniProf": false,
+  "salary": 0,
+  "salaryFrom": 40000,
+  "salaryTo": 46000,
+  "salaryComment": "",
+  "hot": true,
+  "formApplyCustomUrl": "",
+  "description": "<html><head></head><body><p><span style=\"font-weight: bold; font-style: normal\">Пекар у пекарню (м. Голосіївська)</span></p><p><br></p><p><span style=\"font-weight: normal; font-style: normal\">Пекарня-магазин запрошує до своєї команди </span><span style=\"font-weight: bold; font-style: normal\">пекаря</span><span style=\"font-weight: normal; font-style: normal\">.</span></p><p>надаємо житло </p><p><span style=\"font-weight: bold; font-style: normal\">Основна інформація:</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Графік роботи:2/2 4/3 або 5/2, з 6:00 до 17:00</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Заробітна плата: від 2000 грн/зміна + щоденні премії</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Виплати — щотижня, своєчасно</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Офіційне працевлаштування</span></p><p><br></p><p><span style=\"font-weight: bold; font-style: normal\">Вимоги:</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Досвід роботи пекарем </span></p><p><span style=\"font-weight: normal; font-style: normal\">• Відповідальність, охайність, бажання розвиватися</span></p><p><br></p><p><span style=\"font-weight: bold; font-style: normal\">Ми пропонуємо:</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Стабільну роботу в сучасній пекарні</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Дружній колектив та підтримку у навчанні</span></p><p><span style=\"font-weight: normal; font-style: normal\">• Можливість професійного росту</span></p><p><br></p><p><span style=\"font-weight: normal; font-style: normal\"> Телефонуйте або надсилайте резюме — будемо раді знайомству!</span><span style=\"font-weight: normal; font-style: normal\"> <span data-vacancyphone>063 109 09 44 </span>Ірина </span></p></body></html>",
+  "branchId": 1,
+  "branchName": "FMCG",
+  "cityId": 1,
+  "cityName": "Киев",
+  "vacancyAddress": "",
+  "districtId": 1,
+  "districtName": "Голосеевский",
+  "metroId": 32,
+  "metroName": "Голосеевская",
+  "metroBranchId": 2,
+  "isShowMap": true,
+  "latitude": 50.3973294,
+  "longitude": 30.5081616,
+  "publicationType": 5,
+  "customDesign": null,
+  "profLevelId": 3,
+  "scheduleId": 1,
+  "dataSource": "Database",
+  "languages": [],
+  "images": [],
+  "mediaItems": [],
+  "searchTags": [
+    {
+      "id": 7471,
+      "name": "Пекар",
+      "synonymGroupId": 330,
+      "rate": 1,
+      "vacancySearchCount": 5704
+    },
+    {
+      "id": 2080,
+      "name": "Пекарь",
+      "synonymGroupId": 330,
+      "rate": 2,
+      "vacancySearchCount": 40091
+    }
+  ],
+  "clusters": [
+    {
+      "id": 210,
+      "name": "Дополнительные условия работы",
+      "groups": [
+        {
+          "id": 3295,
+          "name": "Проживание обеспечивает работодатель "
+        }
+      ]
+    },
+    {
+      "id": 179,
+      "name": "Товарная группа",
+      "groups": [
+        {
+          "id": 3377,
+          "name": "Продукты питания"
+        }
+      ]
+    },
+    {
+      "id": 211,
+      "name": "График работы",
+      "groups": [
+        {
+          "id": 12641,
+          "name": "Пятидневная рабочая неделя"
+        },
+        {
+          "id": 22193,
+          "name": "2 через 2"
+        },
+        {
+          "id": 22475,
+          "name": "3 через 3"
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "name": "Тип занятости",
+      "groups": [
+        {
+          "id": 7140,
+          "name": "Полная занятость"
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "name": "Район/массив",
+      "groups": [
+        {
+          "id": 2959,
+          "name": "Голосеевский район"
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "name": "Метро",
+      "groups": [
+        {
+          "id": 3339,
+          "name": "Голосеевская"
+        }
+      ]
+    },
+    {
+      "id": 79,
+      "name": "Дополнительные сведения",
+      "groups": [
+        {
+          "id": 3295,
+          "name": "Проживание обеспечивает работодатель "
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "name": "Специализация повара",
+      "groups": [
+        {
+          "id": 330,
+          "name": "Пекарь"
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "name": "Вид промышленности",
+      "groups": [
+        {
+          "id": 1213,
+          "name": "Пищевая промышленность"
+        }
+      ]
+    }
+  ],
+  "badges": [
+    {
+      "id": 5239873,
+      "name": "Проживание"
+    },
+    {
+      "id": 5239874,
+      "name": "Бонусы / премии"
+    },
+    {
+      "id": 5239875,
+      "name": "Скидки сотрудникам"
+    }
+  ],
+  "candidatesScreeningOptions": {
+    "questionnaireId": "",
+    "isEnabled": false
+  }
+}

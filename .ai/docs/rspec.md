@@ -149,6 +149,7 @@ Spec files must be named after the **class under test**; the path mirrors the cl
 |-------|-----------|
 | `Vacancy::Operation::SyncVacancies` | `spec/concepts/vacancy/operation/sync_vacancies_spec.rb` |
 | `ApplyMate::Scraper::Dou` | `spec/concepts/apply_mate/scraper/dou_spec.rb` |
+| `ApplyMate::Scraper::Robota` | `spec/concepts/apply_mate/scraper/robota_spec.rb` |
 | `ApplyMate::Client::AsyncHttp` | `spec/concepts/apply_mate/client/async_http_spec.rb` |
 
 When several fixtures exercise the **same class**, wrap each in a `context` block inside one file — do not create one spec file per fixture or per company.

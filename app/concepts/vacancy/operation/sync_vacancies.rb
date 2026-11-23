@@ -594,20 +594,23 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   def sync_source(source)
     pool = @pools[source.id]
     log_phase('vacancy_sync_listing_finished', source) do |summary, stats|
-      count_before  = with_db { source.vacancies.count }
-      external_ids  = Concurrent::Array.new
-      pages_queue   = (1..MAX_PAGES).to_a
-      last_page     = { counts: Hash.new(0), boundary: nil }
-      scraped_pages = Set.new
-      stop          = [ false ]
-      buffer        = VacancyBuffer.new(@db, source)
-      barrier       = Async::Barrier.new
+      count_before   = with_db { source.vacancies.count }
+      external_ids   = Concurrent::Array.new
+      stop           = [ false ] # the proxy pool ran dry
+      fatal          = [ nil ]   # an IncompleteListingError — this run's listing can't be trusted
+      buffer         = VacancyBuffer.new(@db, source)
+      pages          = 0
+      empty_segments = 0
 
-      WORKERS_PER_SOURCE.times do
-        barrier.async { scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool, stats) }
+      # One pass per listing segment (a single unnamed one for most sources), in turn:
+      # each has its own page range and end-of-listing detection, so the end of one
+      # segment never cuts another short. All of them feed the same buffer and id list.
+      source.scraper.constantize.listing_segments.each do |segment|
+        segment_pages   = scrape_segment(source, segment, external_ids, stop, fatal, buffer, pool, stats)
+        pages          += segment_pages
+        empty_segments += 1 if segment_pages.zero?
+        break if stop[0] || fatal[0]
       end
-
-      barrier.wait
 
       # Drain the buffer BEFORE deciding the source failed. It holds up to
       # VACANCY_BUFFER_LIMIT already-scraped vacancies, and `perform!`'s ensure only
@@ -616,11 +619,16 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
       # external_ids could have duplicates
       active_ids = external_ids.uniq
-      summary.merge!(pages: scraped_pages.size, vacancies: active_ids.size)
+      summary.merge!(pages:, vacancies: active_ids.size, empty_segments:)
 
+      raise fatal[0] if fatal[0]
       raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if stop[0]
 
-      stale = clean_old_vacancies(source, active_ids)
+      # A segment that listed nothing is an anomaly (a renamed filter, a blocked answer
+      # that looked like an end), not proof that its vacancies closed — and deleting
+      # whatever no segment listed would wipe that whole slice. Same rule as a
+      # single-listing source that came back empty: keep everything, delete nothing.
+      stale = empty_segments.zero? ? clean_old_vacancies(source, active_ids) : 0
       Vacancy::Operation::CountBySource.expire!
 
       # Single writer per source (the job's limits_concurrency), so the row-count delta
@@ -745,6 +753,26 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     end
   end
 
+  # Paginates one listing segment with WORKERS_PER_SOURCE fibers until its end is
+  # confirmed (or the proxy pool runs dry); returns how many pages carried vacancies.
+  def scrape_segment(source, segment, external_ids, stop, fatal, buffer, pool, stats)
+    # A scraper that reads the end of the listing from the source itself (Robota's
+    # `total`) ends the segment on the first nil; the others need LAST_PAGE_CONFIRMATIONS
+    # empty answers, since one empty page may be an anti-scraping blip.
+    confirmations = source.scraper.constantize.listing_end_reported? ? 1 : LAST_PAGE_CONFIRMATIONS
+    pages_queue   = (1..MAX_PAGES).to_a
+    last_page     = { counts: Hash.new(0), boundary: nil, confirmations: }
+    scraped_pages = Set.new
+    barrier       = Async::Barrier.new
+
+    WORKERS_PER_SOURCE.times do
+      barrier.async { scrape_pages(source, segment, pages_queue, external_ids, last_page, scraped_pages, stop, fatal, buffer, pool, stats) }
+    end
+
+    barrier.wait
+    scraped_pages.size
+  end
+
   def break_fiber_condition(scraped_pages, last_page, stop, page)
     return true if page.nil?
     return true if stop[0]
@@ -759,10 +787,11 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
                    (scraped_pages.any? && scraped_pages.include?(page))
   end
 
-  def scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool, stats)
+  def scrape_pages(source, segment, pages_queue, external_ids, last_page, scraped_pages, stop, fatal, buffer, pool, stats)
     loop do
       begin
         proxy = nil
+        break if fatal[0]
 
         page = pages_queue.shift
 
@@ -784,7 +813,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         stats.request!
         client  = source.scraper.constantize.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
         scraper = source.scraper.constantize.new(source, client)
-        listing = scraper.fetch_listing(page: page)
+        listing = scraper.fetch_listing(page:, segment:)
 
         if listing&.any?
           scraped_pages << page
@@ -800,16 +829,21 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
             last_page[:counts][page] += 1
             count = last_page[:counts][page]
 
-            if count >= LAST_PAGE_CONFIRMATIONS
+            if count >= last_page[:confirmations]
               last_page[:boundary] = [ last_page[:boundary], page ].compact.min
               pages_queue.delete_if { |a| a >= last_page[:boundary] || scraped_pages.include?(a) }
             elsif count == 1
-              LAST_PAGE_CONFIRMATIONS.times { pages_queue.unshift(page) }
+              last_page[:confirmations].times { pages_queue.unshift(page) }
             end
           else
             pages_queue.unshift(page)
           end
         end
+      rescue ApplyMate::Scraper::Base::IncompleteListingError => e
+        # Not retried: the source told us this run can't see the whole listing. Stop every
+        # worker; sync_source raises it after the flush, so nothing is deleted as stale.
+        fatal[0] ||= e
+        break
       rescue ApplyMate::Scraper::Base::DeadProxyError
         stats.dead!
         pool.release(proxy, status: :dead)

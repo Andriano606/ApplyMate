@@ -14,6 +14,13 @@ SOURCES = [
     scraper: 'ApplyMate::Scraper::Dou',
     logo_filename: 'dou-logo.png',
     logo_content_type: 'image/png'
+  },
+  {
+    name: 'Robota',
+    base_url: 'https://robota.ua/',
+    scraper: 'ApplyMate::Scraper::Robota',
+    logo_filename: 'robota-logo.png',
+    logo_content_type: 'image/png'
   }
 ].freeze
 

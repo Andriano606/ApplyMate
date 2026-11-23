@@ -59,7 +59,7 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
     [ info.presence && "<p>#{ERB::Util.html_escape(info)}</p>", content_html(node) ].compact.join
   end
 
-  def fetch_listing(page:)
+  def fetch_listing(page:, **)
     initialize_session
 
     count    = (page - 1) * (@items_per_page || 40)

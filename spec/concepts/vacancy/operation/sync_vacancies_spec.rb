@@ -27,6 +27,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     # reused immediately instead of resting for 5s between requests.
     allow(ApplyMate::Scraper::Dou).to receive(:burst_cooldown).and_return(0)
     allow(ApplyMate::Scraper::Djinni).to receive(:burst_cooldown).and_return(0)
+    allow(ApplyMate::Scraper::Robota).to receive(:burst_cooldown).and_return(0)
     # Stub Elasticsearch import on Vacancy relation
     without_partial_double_verification do
       allow_any_instance_of(ActiveRecord::Relation).to receive(:import)
@@ -283,6 +284,115 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
       stub_const('Vacancy::Operation::SyncVacancies::VACANCY_FETCH_BATCH', 5)
       operation.call
       expect(source_dou.vacancies.pluck(:description).compact.size).to eq(20)
+    end
+  end
+
+  describe 'Robota source (listing split into segments)' do
+    let!(:source_robota) { create(:source, name: 'Robota', base_url: 'https://robota.ua/', scraper: 'ApplyMate::Scraper::Robota') }
+    let(:operation) { described_class.new(sources: [ source_robota ]) }
+    let(:documents) { JSON.parse(file_fixture('robota/search.json').read)['documents'] }
+    # Career level → its vacancies: every level lists something (an empty one keeps the
+    # run from deleting stale rows), level 1 lists two.
+    let(:segments) do
+      (0..6).to_h { |level| [ level, [ documents.first.merge('id' => 20_000_000 + level) ] ] }
+            .merge(1 => documents.first(2))
+    end
+    let(:totals)   { {} } # level → `total` override
+    let(:requests) { [] }
+
+    before do
+      allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:post)
+        .with(ApplyMate::Scraper::Robota::SEARCH_URL, any_args) do |_instance, url, body:, **|
+          request   = JSON.parse(body)
+          level     = request['profLevelIds'].first
+          vacancies = segments.fetch(level, [])
+          requests << [ level, request['page'] ]
+          page_docs = request['page'].zero? ? vacancies : []
+          ApplyMate::Client::ImpersonateHttp::Response.new({ total: totals.fetch(level, vacancies.size), documents: page_docs }.to_json, {}, 200, url)
+        end
+      allow_any_instance_of(ApplyMate::Client::ImpersonateHttp).to receive(:get)
+        .with(a_string_starting_with(ApplyMate::Scraper::Robota::VACANCY_URL), any_args)
+        .and_return(ApplyMate::Client::ImpersonateHttp::Response.new(file_fixture('robota/vacancy.json').read, {}, 200))
+    end
+
+    it 'collects the vacancies of every segment' do
+      operation.call
+
+      expect(source_robota.vacancies.pluck(:external_id)).to contain_exactly('10877579', '11386442', *[ 0, 2, 3, 4, 5, 6 ].map { |level| (20_000_000 + level).to_s })
+    end
+
+    it 'keeps a vacancy listed in an earlier segment when a later one ends' do
+      kept = create(:vacancy, source: source_robota, external_id: '10877579', title: 'Old Title')
+
+      operation.call
+
+      expect(kept.reload.title).to eq('Пекар')
+    end
+
+    it 'removes vacancies that no segment lists' do
+      stale = create(:vacancy, source: source_robota, external_id: 'stale_id')
+
+      operation.call
+
+      expect(Vacancy.find_by(id: stale.id)).to be_nil
+    end
+
+    it 'fetches each description from the vacancy endpoint' do
+      operation.call
+
+      expect(source_robota.vacancies.pluck(:description_html)).to all(start_with('<p>Зарплата: 40 000 – 46 000 ₴</p>'))
+    end
+
+    it 'reports the pages of all segments together' do
+      events = capture_logged_events
+
+      operation.call
+
+      expect(events.find { |e| e['event'] == 'vacancy_sync_listing_finished' })
+        .to include('source' => 'Robota', 'pages' => 7, 'vacancies' => 8, 'empty_segments' => 0)
+    end
+
+    # Robota reports where each segment ends, so the first empty page is believed — no
+    # LAST_PAGE_CONFIRMATIONS re-asks per segment against a Cloudflare-throttled API.
+    it 'ends each segment on its first page past the total' do
+      stub_const('Vacancy::Operation::SyncVacancies::LAST_PAGE_CONFIRMATIONS', 5)
+
+      operation.call
+
+      expect(requests.tally.values).to all(eq(1))
+      expect(requests.group_by(&:first).transform_values(&:size)).to eq((0..6).to_h { |level| [ level, 2 ] })
+    end
+
+    context 'when one segment comes back empty' do
+      let(:segments) { super().merge(4 => []) }
+
+      it 'deletes nothing — the slice may only look empty' do
+        stale = create(:vacancy, source: source_robota, external_id: 'stale_id')
+        events = capture_logged_events
+
+        operation.call
+
+        expect(Vacancy.find_by(id: stale.id)).to be_present
+        expect(events.find { |e| e['event'] == 'vacancy_sync_listing_finished' })
+          .to include('result' => 'ok', 'empty_segments' => 1, 'stale_deleted' => 0)
+      end
+    end
+
+    context 'when a segment holds more than the search can page to' do
+      let(:totals) { { 2 => 90_000 } }
+
+      it 'fails the listing, keeps the scraped vacancies and deletes nothing' do
+        stale = create(:vacancy, source: source_robota, external_id: 'stale_id')
+        events = capture_logged_events
+
+        operation.call
+
+        expect(Vacancy.find_by(id: stale.id)).to be_present
+        expect(source_robota.vacancies.pluck(:external_id)).to include('10877579')
+        expect(requests.map(&:first).uniq).to eq([ 0, 1, 2 ])
+        expect(events.find { |e| e['event'] == 'vacancy_sync_listing_finished' })
+          .to include('result' => 'failed', 'error_class' => ApplyMate::Scraper::Base::IncompleteListingError.name)
+      end
     end
   end
 

@@ -7,6 +7,12 @@ class ApplyMate::Scraper::Base
   # rescues this to drop the proxy and retry the same work on another IP.
   class DeadProxyError < StandardError; end
 
+  # Raised when the source shows this run cannot see its whole listing (Robota: a
+  # segment holds more than the search API pages to). Not retried: SyncVacancies stops
+  # the source's listing phase and fails it, keeping what was scraped and deleting
+  # nothing as stale — otherwise the unreachable vacancies would be wiped.
+  class IncompleteListingError < StandardError; end
+
   # Upstream/proxy statuses that mean "this IP can't be used right now".
   PROXY_DEAD_STATUSES = [ 502, 503, 504 ].freeze
 
@@ -53,6 +59,25 @@ class ApplyMate::Scraper::Base
     false
   end
 
+  # Slices of the source's listing that SyncVacancies paginates one after another, each
+  # from page 1 with its own end-of-listing detection; `fetch_listing` receives the slice
+  # as `segment:`. A listing that is one continuous page range (Dou, Djinni) is a single
+  # unnamed slice. A source whose search caps how deep it pages (Robota stops answering
+  # past 80 000 results) splits its listing into filters that each stay under the cap.
+  # Slices may overlap (persist dedups by external_id) but together must cover the
+  # whole listing: whatever no slice lists is deleted as stale after the run.
+  def self.listing_segments
+    [ nil ]
+  end
+
+  # Does `fetch_listing` return nil only when the source itself said the listing ended
+  # (Robota: the page's offset is past the `total` the API reports with every page)?
+  # Then one nil ends a segment. Otherwise (default) an empty page may be an anti-scraping
+  # blip, and SyncVacancies wants LAST_PAGE_CONFIRMATIONS of them before believing it.
+  def self.listing_end_reported?
+    false
+  end
+
   # Seconds a proxy rests after a burst of requests to this source (sync ProxyPool).
   # Override per source: Cloudflare-protected sites are rate-sensitive (a short cooldown
   # triggers more blocks → proxy churn → slower), CF-free sites just want throughput.
@@ -70,7 +95,7 @@ class ApplyMate::Scraper::Base
     Html2Text.convert(html)
   end
 
-  def fetch_listing(page:)
+  def fetch_listing(page:, segment: nil)
     raise NotImplementedError
   end
 

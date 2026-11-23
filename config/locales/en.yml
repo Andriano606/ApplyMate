@@ -433,6 +433,9 @@ en:
       source: Source
     sync:
       no_proxies: No proxies available — sync stopped
+      salary:
+        exact: 'Salary: %{amount} ₴'
+        range: 'Salary: %{from} – %{to} ₴'
     total_vacancies: vacancies
   will_paginate:
     next_label: Next &raquo;

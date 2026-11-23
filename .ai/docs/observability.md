@@ -35,7 +35,7 @@ Rails пише в STDOUT, Promtail забирає логи контейнері�
 |-------|------|------|
 | `vacancy_sync_started` | старт | `started_at_ms`, `sources` |
 | `vacancy_sync_proxy_pool_ready` | пул джерела засіяно (`level: warn`, якщо `alive` = 0 — джерело пропущено) | `source`, `checked` (скільки кандидатів перевірено), `alive` |
-| `vacancy_sync_listing_finished` | фаза списку джерела завершилась **або впала** | `source`, `result` (`ok`/`failed`), `duration_s`, `pages`, `vacancies` (унікальні на сайті), `new_vacancies`, `stale_deleted`, `vacancies_total` (у базі після фази) + поля запитів |
+| `vacancy_sync_listing_finished` | фаза списку джерела завершилась **або впала** | `source`, `result` (`ok`/`failed`), `duration_s`, `pages` (сума по всіх сегментах лістингу), `vacancies` (унікальні на сайті), `empty_segments` (сегменти без жодної вакансії; > 0 → чистку застарілих пропущено, `stale_deleted: 0`), `new_vacancies`, `stale_deleted`, `vacancies_total` (у базі після фази) + поля запитів |
 | `vacancy_sync_descriptions_finished` | фаза описів (лише `fetches_description?`) | `source`, `result`, `duration_s`, `missing`, `fetched`, `gave_up` (після `MAX_VACANCY_RETRIES`), `max_attempts` + поля запитів |
 | `vacancy_sync_finished` | завжди, навіть коли `perform!` кинув | `result` (`ok`/`partial`/`failed`), `duration_s`, `sources_ok`, `sources_failed` |
 
@@ -98,7 +98,7 @@ Rails пише в STDOUT, Promtail забирає логи контейнері�
 - Завжди агрегуйте (`max by (source)`, `sum by (source)`): `| json` робить лейблом кожне поле,
   а `container` міняється з кожним деплоєм — без агрегації будуть десятки дубльованих серій.
 - Stat-плитки беруть `lastNotNull` з того ж ряду.
-- Кольори серій прив'язані до назв через overrides (`/.*Djinni.*/` синій, `/.*Dou.*/` помаранчевий).
+- Кольори серій прив'язані до назв через overrides (`/.*Djinni.*/` синій, `/.*Dou.*/` помаранчевий, `/.*Robota.*/` зелений).
   Нове джерело отримає колір з палітри; додайте йому override.
 
 Змінюєте поле події — оновіть панелі, що його читають (`grep` по назві поля в JSON), і цей файл.

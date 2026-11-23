@@ -1,0 +1,152 @@
+{
+  "took": 78,
+  "start": 0,
+  "count": 100,
+  "total": 3,
+  "hasGeoCount": 3,
+  "errorMessage": null,
+  "documents": [
+    {
+      "id": 10877579,
+      "name": "Пекар",
+      "logo": "defaultlogo.gif",
+      "designBannerUrl": "",
+      "designBannerFullUrl": "",
+      "publicationType": 5,
+      "date": "2026-11-23T12:48:45.707",
+      "dateTxt": "",
+      "hot": true,
+      "salary": 0,
+      "salaryFrom": 40000,
+      "salaryTo": 46000,
+      "salaryComment": "",
+      "cityName": "Киев",
+      "cityId": 1,
+      "metroName": "Голосеевская",
+      "metroId": 32,
+      "districtName": "Голосеевский",
+      "districtId": 1,
+      "notebookId": 15999881,
+      "companyName": "Пекарня Lu",
+      "formApplyCustomUrl": "",
+      "isLiked": false,
+      "isApply": false,
+      "applyDate": null,
+      "lastViewDate": null,
+      "distanceText": "",
+      "latitude": 50.3973312,
+      "longitude": 30.5081615,
+      "shortDescription": "Пекар у пекарню (м. Голосіївська)Пекарня-магазин запрошує до своєї команди пекаря.надаємо житло Основна інформація:• Графік роботи:2/2 4/3 або 5/2, з 6:00 до 17:00• Заробітна плата: від 2000 грн/зміна + щоденні премії• Виплати — щотижня, своєчасно• О…",
+      "badges": [
+        {
+          "id": 5239873,
+          "name": "Проживание"
+        },
+        {
+          "id": 5239874,
+          "name": "Бонусы / премии"
+        },
+        {
+          "id": 5239875,
+          "name": "Скидки сотрудникам"
+        }
+      ]
+    },
+    {
+      "id": 11386442,
+      "name": "Менеджер з продажу (оператор)",
+      "logo": "defaultlogo.gif",
+      "designBannerUrl": "",
+      "designBannerFullUrl": "",
+      "publicationType": 1,
+      "date": "2026-11-23T12:31:15.61",
+      "dateTxt": "",
+      "hot": true,
+      "salary": 0,
+      "salaryFrom": 25000,
+      "salaryTo": 60000,
+      "salaryComment": "оплата за заявку/ставка",
+      "cityName": "Харьков",
+      "cityId": 21,
+      "metroName": "",
+      "metroId": 0,
+      "districtName": "",
+      "districtId": 0,
+      "notebookId": 16602342,
+      "companyName": "Халатах Д.С., ФОП",
+      "formApplyCustomUrl": "",
+      "isLiked": false,
+      "isApply": false,
+      "applyDate": null,
+      "lastViewDate": null,
+      "distanceText": "",
+      "latitude": 50.0043907,
+      "longitude": 36.2343712,
+      "shortDescription": "\t\t\t\t\t\t\t\t\t\tОпис вакансіїШукаємо менеджера з продажу (оператора) для роботи з клієнтами. Ми займаємося продажем сертифікованих фарм. товарів для здоров'я та краси від офіційних заводів виробників.Що потрібно для старту:¦ Комп'ютер або ноутбук¦ Стабільн…",
+      "badges": [
+        {
+          "id": 5198614,
+          "name": "Бесплатное обучение"
+        },
+        {
+          "id": 5198615,
+          "name": "Віддалено"
+        }
+      ]
+    },
+    {
+      "id": 11418420,
+      "name": "Водій в таксі на автомобіль компанії Bolt, Uklon",
+      "logo": "7973901_20260305174434.png",
+      "designBannerUrl": "",
+      "designBannerFullUrl": "",
+      "publicationType": 2,
+      "date": "2026-11-23T12:37:37.743",
+      "dateTxt": "",
+      "hot": true,
+      "salary": 0,
+      "salaryFrom": 35000,
+      "salaryTo": 45000,
+      "salaryComment": "75% + Знижка - 7 грн/л газ і 14 грн/л бензин",
+      "cityName": "Умань",
+      "cityId": 512,
+      "metroName": "",
+      "metroId": 0,
+      "districtName": "",
+      "districtId": 0,
+      "notebookId": 7973901,
+      "companyName": "G CAR",
+      "formApplyCustomUrl": "",
+      "isLiked": false,
+      "isApply": false,
+      "applyDate": null,
+      "lastViewDate": null,
+      "distanceText": "",
+      "latitude": 48.7637062,
+      "longitude": 30.2132492,
+      "shortDescription": "БЕЗ ЗАСТАВИ. До 75% водію. Фіксовані знижки на пальне: 7 грн на літр газу і 14 грн на літр бензину. ВИКУП АВТО, ЛІЦЕНЗІЯ, ОДИН водій на авто.Автопарк «G CAR» шукає водія для роботи в таксі у Вашому місті.Ми пропонуємо:Надаємо нові, комфортні авто на …",
+      "badges": [
+        {
+          "id": 5239827,
+          "name": "7 грн/л газ і 14 грн/л бензин"
+        },
+        {
+          "id": 5239828,
+          "name": "Фіксована знижка на паливо"
+        },
+        {
+          "id": 5239829,
+          "name": "Один водій на авто"
+        },
+        {
+          "id": 5239830,
+          "name": "Виїзд без застави"
+        },
+        {
+          "id": 5239831,
+          "name": "Авто з ліцензією"
+        }
+      ]
+    }
+  ]
+}

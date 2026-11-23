@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # ApplyMate
 
-Rails 8 + Hotwire (Stimulus + Turbo) **vacancy bank**. Its single job is to keep the list of live vacancies from several job boards (DOU, Djinni, …) up to date — quickly and efficiently, through a pool of free proxies — and let users search and filter them via Elasticsearch.
+Rails 8 + Hotwire (Stimulus + Turbo) **vacancy bank**. Its single job is to keep the list of live vacancies from several job boards (DOU, Djinni, robota.ua, …) up to date — quickly and efficiently, through a pool of free proxies — and let users search and filter them via Elasticsearch.
 
 The core is two background pipelines: `Proxy::Operation::FetchProxies` (collects the proxy pool) and `Vacancy::Operation::SyncVacancies` (scrapes every source through that pool). The bank is also exposed to Claude as an MCP server at `/mcp` (search and read vacancies, publish the user's feedback; API-token auth — each user gets their own token from the *Connect Claude (MCP)* modal). Guests see a short explainer banner with a Google sign-in button on the home page (`Home::Component::GuestBanner`). Users review the service on the public `/feedbacks` page (one editable feedback per user, rating 1–10, with a reply thread between admins and the author). There is no auto-apply, no AI integration, no user/source profiles, no prompts and no CV generation — they were removed on purpose; do not reintroduce them.
 

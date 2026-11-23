@@ -19,7 +19,7 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     @client = client
   end
 
-  def fetch_listing(page:)
+  def fetch_listing(page:, **)
     url      = "#{JOB_LIST_URL}?page=#{page}"
     response = via_proxy { @client.get(url) }
     # Out-of-range pages redirect to /jobs/ — that (and only that) is the real last page.

@@ -134,15 +134,48 @@ Async do |top_task|                          # reactor (1 неявний fiber)
 end
 
 def sync_source(source)
-  WORKERS_PER_SOURCE.times do
-    barrier.async { scrape_pages(...) }      # WORKERS_PER_SOURCE fibers на source
+  scraper_class.listing_segments.each do |segment|          # сегменти — по черзі
+    scrape_segment(source, segment, ...)
   end
+end
+
+def scrape_segment(source, segment, ...)
+  WORKERS_PER_SOURCE.times do
+    barrier.async { scrape_pages(source, segment, ...) }    # WORKERS_PER_SOURCE fibers
+  end
+  barrier.wait
 end
 ```
 
 При N джерелах:
 - **N** файберів-coordin­ators (по одному на джерело)
-- **N × WORKERS_PER_SOURCE** файберів-воркерів (скрейпять сторінки)
+- **N × WORKERS_PER_SOURCE** файберів-воркерів (скрейпять сторінки) — сегменти одного джерела йдуть послідовно, тож одночасно живуть воркери лише одного його сегмента
+
+### Сегменти лістингу
+
+Лістинг джерела — це `Scraper.listing_segments` (за замовчуванням `[nil]`: один суцільний
+список, як у Dou і Djinni). `sync_source` проходить сегменти **по черзі**, і кожен
+(`scrape_segment`) має **власні** `pages_queue` (`1..MAX_PAGES`), `last_page` (лічильники
+порожніх відповідей і `boundary`) та `scraped_pages` — тож кінець одного сегмента не обрізає
+інший. Спільні на всі сегменти: `VacancyBuffer`, `external_ids` (з них `clean_old_vacancies`
+після останнього сегмента), `stop` (вичерпаний пул зупиняє й решту сегментів) і `RequestStats`;
+`pages` у підсумковій події — сума сторінок усіх сегментів.
+
+Скільки порожніх відповідей потрібно, щоб повірити в кінець сегмента, вирішує скрапер:
+`Scraper.listing_end_reported?` → `true` (Robota: кінець відомий з `total`) — достатньо першого
+`nil` (`last_page[:confirmations] = 1`); інакше — `LAST_PAGE_CONFIRMATIONS`.
+
+Захист чистки застарілих: якщо хоч один сегмент не дав жодної вакансії (`empty_segments` > 0),
+`clean_old_vacancies` для цього запуску пропускається — порожній зріз радше аномалія, ніж
+закриті вакансії. `ApplyMate::Scraper::Base::IncompleteListingError` з `fetch_listing` не
+ретраїться: воркер кладе її в `fatal[0]` і виходить, решта воркерів і сегментів зупиняються,
+`sync_source` після `buffer.flush` кидає її — фаза `failed`, нічого не видалено.
+
+Навіщо: пошук robota.ua не віддає нічого глибше за 80 000-й результат, а вакансій там ~98k.
+`Scraper::Robota.listing_segments` — рівні посади (`profLevelIds` 0..6): кожна вакансія має
+рівно один, тож зрізи не перетинаються, разом дають увесь список, і найбільший (~38k) далеко
+під вікном. Сегменти мусять **покривати весь лістинг**: вакансію, якої не показав жоден, фаза
+видалить як застарілу. Деталі — `.ai/docs/scrapers.md` → «Listing segments».
 
 ### Phase 2
 
@@ -161,8 +194,8 @@ end
 | # | Умова | Причина |
 |---|-------|---------|
 | 1 | `stop[0]` є `true` | Глобальний stop-сигнал: воркер отримав `nil` від пулу і `@proxy_pool.exhausted?` |
-| 2 | `pages_queue.shift` повернув `nil` | Черга вичерпана: всі сторінки 1..2000 вже розібрані |
-| 3 | `last_page[:boundary]` встановлений і `page >= last_page[:boundary]` | Підтверджено кінець списку; сторінки після межі не мають сенсу |
+| 2 | `pages_queue.shift` повернув `nil` | Черга сегмента вичерпана: всі сторінки 1..2000 вже розібрані |
+| 3 | `last_page[:boundary]` встановлений і `page >= last_page[:boundary]` | Підтверджено кінець сегмента; сторінки після межі не мають сенсу |
 
 Додатково на кожній ітерації: якщо `@proxy_pool.acquire` повернув `nil` і `@proxy_pool.exhausted?` → `stop[0] = true` + `break`. Якщо пул просто зайнятий (всі проксі на кулдауні / у роботі) → `sleep(0.2)` + `next` (файбер чекає, поки звільниться проксі).
 
@@ -183,22 +216,21 @@ end
 last_page[:counts][page] += 1
 count = last_page[:counts][page]
 
-if count >= LAST_PAGE_CONFIRMATIONS   # 50
-  last_page[:boundary] = [last_page[:boundary], page].compact.min
-  log("confirmed last page (#{count} empty hits)", color: :yellow)
-  next
+if count >= last_page[:confirmations]   # LAST_PAGE_CONFIRMATIONS (50), або 1 при listing_end_reported?
+  last_page[:boundary] = [ last_page[:boundary], page ].compact.min
+  pages_queue.delete_if { |a| a >= last_page[:boundary] || scraped_pages.include?(a) }
 elsif count == 1
-  # Fan-out: push 49 copies so all remaining confirmations run in parallel.
-  (LAST_PAGE_CONFIRMATIONS - 1).times { pages_queue.unshift(page) }
+  # Fan-out: so the remaining confirmations run in parallel.
+  last_page[:confirmations].times { pages_queue.unshift(page) }
 end
 ```
 
 ### Покроково
 
-1. **Перший порожній результат (`count == 1`)** → одразу кладемо в чергу `LAST_PAGE_CONFIRMATIONS - 1` (49) копій сторінки. Всі 49 одразу розбираються різними файберами, які роблять HTTP-запити паралельно.
+1. **Перший порожній результат (`count == 1`)** → одразу кладемо в чергу `confirmations` (50) копій сторінки. Їх розбирають різні файбери, які роблять HTTP-запити паралельно. Для скрапера з `listing_end_reported?` (`confirmations` = 1) межа ставиться одразу, без копій.
 2. **Наступні підтвердження (`1 < count < 50`)** → нічого не додається в чергу (копії вже там або вже в роботі).
-3. **50 підтверджень** → межа встановлюється як `min(поточна_межа, ця_сторінка)`.
-4. **Всі інші воркери** при `pages_queue.shift` перевіряють `page >= last_page[:boundary]` і одразу роблять `break` без HTTP-запиту. Невикористані копії в черзі також одразу викидаються таким `break`.
+3. **50 підтверджень** → межа встановлюється як `min(поточна_межа, ця_сторінка)`, а сторінки від межі й уже зіскрейплені викидаються з черги.
+4. **Всі інші воркери** при `pages_queue.shift` перевіряють `page >= last_page[:boundary]` і пропускають такі сторінки без HTTP-запиту.
 
 ### Навіщо 50 підтверджень, а не одне?
 
@@ -235,13 +267,14 @@ StandardError   → stats.error!(e)   → pool.release(proxy, status: :keep) →
 
 ---
 
-## Phase 1: результат після всіх воркерів
+## Phase 1: результат після всіх сегментів
 
 ```ruby
-barrier.wait
+listing_segments.each { |segment| scrape_segment(...); break if stop[0] || fatal[0] }   # кожен — barrier.wait
 buffer.flush
+raise fatal[0] if fatal[0]                     # IncompleteListingError
 raise NoProxiesError if stop[0]
-stale = clean_old_vacancies(source, external_ids.uniq)
+stale = empty_segments.zero? ? clean_old_vacancies(source, external_ids.uniq) : 0
 Vacancy::Operation::CountBySource.expire!
 total = with_db { source.vacancies.count }   # new_vacancies = total − count_before + stale
 ```

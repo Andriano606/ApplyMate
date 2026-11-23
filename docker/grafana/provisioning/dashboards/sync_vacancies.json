@@ -351,6 +351,21 @@
           {
             "matcher": {
               "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
               "options": "/.*описи.*/"
             },
             "properties": [
@@ -493,6 +508,21 @@
           {
             "matcher": {
               "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
               "options": "/.*описи.*/"
             },
             "properties": [
@@ -628,6 +658,21 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
                 }
               }
             ]
@@ -799,6 +844,21 @@
           {
             "matcher": {
               "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
               "options": "/.*описи.*/"
             },
             "properties": [
@@ -949,6 +1009,21 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
                 }
               }
             ]
@@ -1159,6 +1234,21 @@
           {
             "matcher": {
               "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
               "options": "/.*описи.*/"
             },
             "properties": [
@@ -1299,6 +1389,21 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
                 }
               }
             ]
@@ -1452,6 +1557,21 @@
           {
             "matcher": {
               "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
               "options": "/.*описи.*/"
             },
             "properties": [
@@ -1591,6 +1711,21 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
                 }
               }
             ]
@@ -1748,6 +1883,21 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
                 }
               }
             ]
@@ -1914,6 +2064,21 @@
           {
             "matcher": {
               "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
               "options": "/.*описи.*/"
             },
             "properties": [
@@ -2064,6 +2229,21 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*Robota.*/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
                 }
               }
             ]

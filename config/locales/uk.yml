@@ -434,6 +434,9 @@ uk:
       source: Джерело
     sync:
       no_proxies: Немає доступних проксі — синхронізацію зупинено
+      salary:
+        exact: 'Зарплата: %{amount} ₴'
+        range: 'Зарплата: %{from} – %{to} ₴'
     total_vacancies: вакансій
   will_paginate:
     next_label: Наступна &raquo;

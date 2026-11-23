@@ -6,7 +6,7 @@ Scrapers live in `app/concepts/apply_mate/scraper/`. Each scraper inherits `Appl
 
 | Method | Purpose |
 |--------|---------|
-| `fetch_listing(page:)` | Makes **one** HTTP request for that page/offset. Returns array of vacancy structs, or `nil` when the page is empty. No per-vacancy HTTP calls. |
+| `fetch_listing(page:, segment:)` | Makes **one** HTTP request for that page/offset of one listing segment. Returns array of vacancy structs, or `nil` when the page is empty. No per-vacancy HTTP calls. Sources with a single segment take `**` and ignore it. |
 | `fetch_description(url)` | Fetches a single vacancy's description and returns it as **HTML**. Called in the second async pass by `fetch_description_worker`. Only implemented by scrapers whose `fetches_description?` is `true`. |
 
 ### fetch_listing must stay pure
@@ -29,13 +29,51 @@ def initialize(source, client)
 end
 ```
 
+## Listing segments (`listing_segments`)
+
+`SyncVacancies` paginates a source's listing one **segment** at a time: each segment
+gets its own page range `1..MAX_PAGES` and its own end-of-listing detection (empty page
+confirmations, boundary), so the end of one segment never cuts another short. The
+scraper class lists them; `fetch_listing` receives one as `segment:`.
+
+| Scraper | `listing_segments` | Why |
+|---|---|---|
+| `Base` (Dou, Djinni) | `[ nil ]` | one continuous listing |
+| `Robota` | `PROF_LEVEL_IDS` = `0..6` | the search API answers nothing past offset 80 000, the listing is ~98k |
+
+Segments may overlap (persist dedups by `external_id`), but **together they must cover the
+whole listing** — a vacancy no segment lists is deleted as stale after the run. Robota's
+career-level slices are disjoint and sum exactly to the unfiltered total (measured; see the
+comment on `PROF_LEVEL_IDS` for how to re-measure if robota adds a level — nothing checks it
+at run time).
+
+Two safety rules protect the stale cleanup from a segment that only *looks* complete:
+
+- **A segment that listed nothing skips the cleanup for the run** (`empty_segments` > 0 in
+  `vacancy_sync_listing_finished`, `stale_deleted: 0`). It generalises the old single-listing
+  rule ("an empty listing must not wipe the source"). The price: a legitimately empty segment
+  keeps stale rows until it lists something again — every Robota level is populated.
+- **`ApplyMate::Scraper::Base::IncompleteListingError`** — a scraper raises it when the source
+  shows the run can't see the whole listing (Robota: a segment's `total` is over the search
+  window). `SyncVacancies` doesn't retry it: it stops the source's workers, flushes what was
+  scraped and fails the listing phase, so nothing is deleted.
+
+## End of listing reported by the source (`listing_end_reported?`)
+
+`SyncVacancies` normally believes an empty page only after `LAST_PAGE_CONFIRMATIONS` (50)
+empty answers — an empty page can be an anti-scraping blip. A scraper whose `fetch_listing`
+returns `nil` only when the source itself said the listing ended returns `true` from
+`listing_end_reported?`, and the first `nil` ends the segment. Robota does (`offset >= total`,
+`total` comes with every page): with 50 confirmations each of its 7 segments re-asked the
+throttled API hundreds of times past its end. Dou/Djinni keep the default `false`.
+
 ## fetch_listing pagination contract
 
 `fetch_listing` makes exactly **one** HTTP request and returns an array of vacancy structs (or `nil` when the page is empty) — `SyncVacancies` drives the loop:
 
 ```ruby
 # returns nil to signal the last page
-def fetch_listing(page:)
+def fetch_listing(page:, **)
   # ... fetch one page ...
   nodes = doc.css('.job-list-item')
   return if nodes.empty?
@@ -67,7 +105,7 @@ them (see `.ai/docs/sync_vacancies.md`).
 
 ## Building a scraper
 
-`SyncVacancies` instantiates the configured scraper with the client class the scraper declares (`Scraper.http_client_class`: `AsyncHttp` by default, `ImpersonateHttp` for Dou), one client per proxied request:
+`SyncVacancies` instantiates the configured scraper with the client class the scraper declares (`Scraper.http_client_class`: `AsyncHttp` by default, `ImpersonateHttp` for Dou and Robota), one client per proxied request:
 
 ```ruby
 scraper_class = source.scraper.constantize
@@ -77,7 +115,7 @@ scraper       = scraper_class.new(source, client)
 
 ## Cloudflare-protected sites — ImpersonateHttp (TLS fingerprint, no browser)
 
-Some sources (e.g. **Dou** = `jobs.dou.ua`) sit behind **Cloudflare**. A raw request
+Some sources (**Dou** = `jobs.dou.ua`, **Robota** = `api.robota.ua`) sit behind **Cloudflare**. A raw request
 (`AsyncHttp`) gets a **403 "Just a moment…"** page regardless of HTTP headers —
 masking `Accept`/`Sec-*` does not help (measured: 22 vs 20 of 120 proxies). The discriminator
 is the **TLS/JA3 fingerprint**: Ruby's OpenSSL handshake isn't Chrome's, so Cloudflare blocks it.
@@ -116,19 +154,20 @@ interchangeably.
 
 ## SyncVacancies job dispatch
 
-`Vacancy::Operation::SyncVacancies` calls `fetch_listing(page:)` per worker, treating `nil` as the stop signal:
+`Vacancy::Operation::SyncVacancies` walks `Scraper.listing_segments` in turn (`scrape_segment`); within a segment each worker calls `fetch_listing(page:, segment:)`, treating an empty result (`nil` or `[]`) as a candidate end of **that segment**:
 
 ```ruby
-listing = scraper.fetch_listing(page: page)
+listing = scraper.fetch_listing(page:, segment:)
 
 if listing&.any?
-  sync_vacancies_batch(listing, source)
-  all_external_ids.concat(listing.map(&:external_id))
+  buffer.add(listing)                               # RAM buffer, bulk-upserted on its limit
+  external_ids.concat(listing.map(&:external_id))   # shared by all segments → clean_old_vacancies
 else
-  pages_queue.clear   # signals all other workers to stop
-  break
+  # counted per page; LAST_PAGE_CONFIRMATIONS empty answers set the segment's boundary
 end
 ```
+
+Details (confirmations, boundary, retries): `.ai/docs/sync_vacancies.md`.
 
 `Source::SCRAPERS` lists allowed class name strings. Add the new class there.
 
@@ -137,7 +176,7 @@ end
 1. Create `app/concepts/apply_mate/scraper/my_site.rb` inheriting `ApplyMate::Scraper::Base`
 2. Add `'ApplyMate::Scraper::MySite'` to `Source::SCRAPERS` in `app/models/source.rb` (the admin source form select reads this constant)
 3. Create the `Source` row with `scraper: 'ApplyMate::Scraper::MySite'`
-4. Override class methods as needed: `listing_url`, `http_client_class`, `fetches_description?`, `burst_cooldown`
+4. Override class methods as needed: `listing_url`, `validation_url`, `http_client_class`, `fetches_description?`, `burst_cooldown`, `listing_segments`
 
 See `.ai/docs/architecture.md`.
 
@@ -249,3 +288,39 @@ re-sanitises against a tag allow-list at render time. Views pass **both** column
 (`rich_text(html: v.description_html, text: v.description)`); the component falls back to
 `simple_format(text)` for rows scraped before markup was stored, and guards render on
 `Vacancy#description_present?`. Keep the write faithful; keep the render strict.
+
+## JSON-API sources (Robota)
+
+robota.ua is an Angular SPA — its HTML pages are an empty shell without a browser — so
+`ApplyMate::Scraper::Robota` reads the JSON API the SPA itself calls, through
+`ImpersonateHttp` (plain `AsyncHttp` gets Cloudflare's 403):
+
+| Pass | Request | Returns |
+|---|---|---|
+| listing | `POST https://api.robota.ua/vacancy/search` `{page (0-based), count: PAGE_SIZE (100), profLevelIds: [segment]}` | `total` + `documents` (title, company, logo, `notebookId`, ~250-char teaser) |
+| description | `GET https://api.robota.ua/vacancy?id=<id>` (id taken from the stored page URL) | `description` — the employer's copy as one HTML document |
+
+- **Vacancy URL** is the public page `https://robota.ua/company<notebookId>/vacancy<id>`; the
+  description pass parses the id back out of it.
+- **End of a segment is known, not guessed** (`listing_end_reported?` → `true`): every page
+  carries `total`, so an empty page at `offset >= total` returns `nil`, an empty page short of
+  it raises `DeadProxyError` (throttled answer). A page at `offset >= MAX_RESULT_WINDOW`
+  (80 000) returns `nil` without a request; a page whose `total` exceeds the window raises
+  `IncompleteListingError` (also what happens if robota stops honouring `profLevelIds` — every
+  segment then reports the unfiltered ~98k).
+- **403 / 429 / a 200 that isn't JSON** → `DeadProxyError` (Cloudflare challenge, throttling, a
+  proxy's own page). **Any other non-200, or JSON without integer `total` + array `documents`**
+  → `Robota::UnexpectedResponseError` (robota's side: retried without marking the proxy dead).
+  **404** on the vacancy endpoint → `nil` (closed since the listing; the next listing drops it).
+- **Which part of the page is the description:** the vacancy page shows the header (title,
+  salary, city, tags), the employer's description, contacts, the company card, similar and
+  recommended vacancies and a CV promo. Only the description is the employer's copy, and the
+  API returns it as its own field, so nothing has to be cut out — the scraper takes the
+  `<body>` of that field through `content_html`. The salary exists only in the header, so it is
+  prepended as one paragraph (`vacancy.sync.salary.range` / `.exact` + `salaryComment`). City,
+  badges and clusters are not used: the API returns them in Russian only.
+- **Logo:** `https://logo-frankfurt.cf-rabota.com.ua/<logo>`; robota's `defaultlogo.gif`
+  placeholder becomes `nil`.
+- **Proxy validation** probes `GET https://api.robota.ua/vacancy/search?count=1`
+  (`validation_url`) — the host both passes call — not the SPA shell (`listing_url`, used for
+  the totals widget link).
