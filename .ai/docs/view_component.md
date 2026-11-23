@@ -176,7 +176,7 @@ def initialize(vacancy:, **)
 end
 
 def before_render
-  @hidden = @vacancy.hidden_vacancies.exists?(user: current_user)
+  @saved_filters = current_user ? current_user.saved_filters.order(:name).to_a : []
 end
 ```
 
@@ -198,7 +198,7 @@ def before_render
   # In a normal request, fall back to current_user.
   # In a broadcast (ApplicationController.renderer), user: is passed directly.
   @user   = @user_preset == LAZY ? current_user : @user_preset
-  @hidden = @vacancy.hidden_vacancies.exists?(user: @user)
+  @saved_filters = @user ? @user.saved_filters.order(:name).to_a : []
 end
 ```
 

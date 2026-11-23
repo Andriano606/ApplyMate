@@ -4,7 +4,7 @@ Feature files live in `features/user_stories/`. Steps are in `features/steps/`, 
 same way as `app/concepts/`:
 
 - `generic/{given,when,then}.rb` — steps that work for any model or page (`I click on`,
-  `the following {word} records:`, `I hover over`).
+  `the following {word} records:`).
 - `<resource>/{given,when,then}.rb` — steps that belong to one domain: `source/given.rb`,
   `vacancy/given.rb`, `saved_filter/then.rb`.
 
@@ -152,20 +152,13 @@ When I click the delete button for "Acme Corp" in the table   # confirms dialog
 
 `I click on` fires a JS click, which does **not** move the pointer.
 
-### Vacancy cards
-
-```gherkin
-When I click "Приховати" on the vacancy card "Ruby Developer"   # scoped to that card; JS click, works on hover-only buttons
-When I hover over the vacancy card "Ruby Developer"
-```
-
 ### Hover-only UI
 
 Headless Chrome has no pointing device and reports `(hover: none)`, while Tailwind v4
 wraps every `hover:` / `group-hover:` rule in `@media (hover: hover)`. The driver in
 `features/support/env.rb` therefore declares a mouse via `--blink-settings`, so
-`I hover over ...` really reveals hover-only elements and `I do not see button` holds
-before the hover (Selenium treats `opacity: 0` as not visible).
+hover-only elements behave like on a desktop (Selenium treats `opacity: 0` as not visible,
+so `I do not see button` holds until the element is hovered).
 
 ## Then Steps
 
@@ -176,14 +169,6 @@ Then I see text "Welcome"
 Then I do not see text "Error"
 Then I see notice "Record saved"       # checks [data-flash-target="message"]
 Then I see alert "Invalid input"
-```
-
-### Vacancy cards
-
-```gherkin
-Then the vacancy card "Ruby Developer" is hidden       # [data-hidden="true"] on the card
-Then the vacancy card "Ruby Developer" is not hidden
-Then I do not see button "Повернути"                    # visibility-aware: opacity 0 counts as not visible
 ```
 
 ### Vacancy page

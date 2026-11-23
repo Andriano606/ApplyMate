@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 # MCP `search_vacancies`: a free-text query, optionally on top of one of the
-# user's saved filters, narrowed by source and with the user's hidden vacancies
-# left out unless asked for. The search itself is Vacancy::Operation::Search —
-# the same query builder as the web search bar.
+# user's saved filters, narrowed by source. The search itself is
+# Vacancy::Operation::Search — the same query builder as the web search bar.
+# The result model is its WillPaginate collection.
 class Mcp::Operation::SearchVacancies < ApplyMate::Operation::Base
   DEFAULT_PER_PAGE = 20
 
@@ -19,19 +19,13 @@ class Mcp::Operation::SearchVacancies < ApplyMate::Operation::Base
       exclude_tags: [ *saved_filter&.exclude_tags, *params[:exclude] ],
       page:         params[:page]
     }
-    vacancies = run_operation(Vacancy::Operation::Search,
-                              { params: search_params,
-                                current_user:,
-                                per_page:       params[:per_page] || DEFAULT_PER_PAGE,
-                                sort:           params[:sort] || 'newest',
-                                must_tags:      params[:query],
-                                source_ids:     sources&.map(&:id),
-                                exclude_hidden: !params[:include_hidden] }).model
-
-    self.model = ApplyMate::Operation::Struct.new(
-      vacancies:,
-      hidden_vacancy_ids: HiddenVacancy.vacancy_ids_for(user: current_user, vacancies:)
-    )
+    self.model = run_operation(Vacancy::Operation::Search,
+                               { params: search_params,
+                                 current_user:,
+                                 per_page:   params[:per_page] || DEFAULT_PER_PAGE,
+                                 sort:       params[:sort] || 'newest',
+                                 must_tags:  params[:query],
+                                 source_ids: sources&.map(&:id) }).model
   end
 
   private

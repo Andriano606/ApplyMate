@@ -6,8 +6,6 @@ class Vacancy < ApplicationRecord
 
   belongs_to :source
 
-  has_many :hidden_vacancies, dependent: :delete_all
-
   # Deepest hit (from + size) a search may page to; Vacancy::Operation::Search clamps the page to it.
   MAX_RESULT_WINDOW = 50_000
 

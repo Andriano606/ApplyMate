@@ -16,16 +16,15 @@
 # Vacancy::Operation::ParseSearchExpression: 'embedded і stm32 і (remote або віддалено)'.
 #
 # Optional narrowing used by the MCP search tool (all ANDed with the above):
-#   must_tags           — expressions every result must also match, e.g. a free-text
-#                         query on top of a saved filter (not split on commas)
-#   source_ids          — only vacancies of these sources
-#   exclude_vacancy_ids — drop these vacancies (the user's hidden ones)
+#   must_tags  — expressions every result must also match, e.g. a free-text query
+#                on top of a saved filter (not split on commas)
+#   source_ids — only vacancies of these sources
 class Vacancy::Operation::BuildSearchQuery < ApplyMate::Operation::Base
   SEARCH_FIELDS = %w[title company_name description].freeze
   OPS = %w[and or g_or].freeze
 
   def perform!(include_tags:, include_ops:, exclude_tags:,
-               must_tags: nil, source_ids: nil, exclude_vacancy_ids: nil, **)
+               must_tags: nil, source_ids: nil, **)
     skip_authorize
 
     tags = normalize_tags(include_tags)
@@ -35,7 +34,6 @@ class Vacancy::Operation::BuildSearchQuery < ApplyMate::Operation::Base
     must.concat(Array.wrap(must_tags).map { |tag| tag.to_s.strip }.reject(&:blank?).map { |tag| include_clause(tag) })
 
     must_not = build_excludes(normalize_tags(exclude_tags))
-    must_not << { terms: { vacancy_id: exclude_vacancy_ids } } if exclude_vacancy_ids.present?
 
     bool = { must:, must_not: }
     bool[:filter] = [ { terms: { source_id: source_ids } } ] if source_ids.present?

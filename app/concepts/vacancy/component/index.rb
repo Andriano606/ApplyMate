@@ -1,11 +1,9 @@
 # frozen_string_literal: true
 
 class Vacancy::Component::Index < ApplyMate::Component::Base
-  def initialize(vacancies:, hidden_vacancy_ids: [], include_tags: nil, include_ops: nil,
-                 exclude_tags: nil, saved_filter: nil, **)
+  def initialize(vacancies:, include_tags: nil, include_ops: nil, exclude_tags: nil, saved_filter: nil, **)
     @saved_filter = saved_filter
     @vacancies = vacancies
-    @hidden_vacancy_ids = hidden_vacancy_ids
     @include_tags = include_tags
     @include_ops = include_ops
     @exclude_tags = exclude_tags

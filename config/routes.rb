@@ -32,9 +32,7 @@ Rails.application.routes.draw do
     mount Rswag::Ui::Engine => '/api-docs'
   end
 
-  resources :vacancies, only: [ :index, :show ] do
-    resource :hidden_vacancy, only: [ :create, :destroy ]
-  end
+  resources :vacancies, only: [ :index, :show ]
   resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]
   resources :feedbacks, only: [ :index, :new, :create, :edit, :update, :destroy ] do
     resources :replies, only: [ :create ], controller: 'feedback_replies'

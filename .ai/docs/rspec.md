@@ -15,15 +15,14 @@ All specs with `type: :operation` automatically include the `"with shared operat
 Override with `let(:params) { { ... } }` or `let(:current_user) { create(:user) }`.
 
 ```ruby
-RSpec.describe HiddenVacancy::Operation::Create, type: :operation do
-  let(:current_user) { create(:user) }
-  let(:vacancy)      { create(:vacancy, source: create(:source)) }
-  let(:params)       { { vacancy_id: vacancy.hashid } }
+RSpec.describe Feedback::Operation::Destroy, type: :operation do
+  let!(:feedback)    { create(:feedback) }
+  let(:current_user) { feedback.user }
+  let(:params)       { ActionController::Parameters.new(id: feedback.to_param) }
 
-  it "hides the vacancy for the user" do
+  it "lets the author delete their feedback" do
     expect(result).to be_success
-    expect(model).to be_persisted
-    expect(current_user.hidden_vacancies.pluck(:vacancy_id)).to eq([ vacancy.id ])
+    expect(Feedback.exists?(feedback.id)).to be(false)
   end
 
   context "when nobody is signed in" do

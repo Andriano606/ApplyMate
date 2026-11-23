@@ -14,10 +14,6 @@ class Mcp::Operation::GetVacancies < ApplyMate::Operation::Base
                        .index_by(&:to_param)
     vacancies = ids.filter_map { |id| by_hashid[id] }
 
-    self.model = ApplyMate::Operation::Struct.new(
-      vacancies:,
-      missing_ids: ids - by_hashid.keys,
-      hidden_vacancy_ids: HiddenVacancy.vacancy_ids_for(user: current_user, vacancies:)
-    )
+    self.model = ApplyMate::Operation::Struct.new(vacancies:, missing_ids: ids - by_hashid.keys)
   end
 end

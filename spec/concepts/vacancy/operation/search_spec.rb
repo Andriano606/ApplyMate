@@ -267,15 +267,6 @@ RSpec.describe Vacancy::Operation::Search, type: :operation do
       expect(result.model.map(&:id)).to contain_exactly(vacancy_frontend.id)
     end
 
-    it "drops the vacancies the user hid when exclude_hidden is set" do
-      user = create(:user)
-      user.hidden_vacancies.create!(vacancy: vacancy_python)
-
-      expect(search(current_user: user, exclude_hidden: true).model.map(&:id))
-        .to contain_exactly(vacancy_rails.id, vacancy_frontend.id)
-      expect(search(current_user: user).model.map(&:id)).to include(vacancy_python.id)
-    end
-
     it "clamps per_page to MAX_PER_PAGE" do
       expect(search(per_page: 10_000).model.per_page).to eq(described_class::MAX_PER_PAGE)
     end

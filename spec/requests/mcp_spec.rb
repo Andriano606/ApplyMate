@@ -101,7 +101,7 @@ RSpec.describe 'MCP endpoint', type: :request do
 
     names = JSON.parse(response.body).dig('result', 'tools').map { |tool| tool['name'] }
     expect(names).to contain_exactly('search_vacancies', 'get_vacancies', 'list_sources',
-                                     'list_saved_filters', 'set_vacancy_hidden',
+                                     'list_saved_filters',
                                      'get_my_feedback', 'list_feedback', 'submit_feedback', 'reply_to_feedback', 'delete_feedback')
   end
 
@@ -111,7 +111,7 @@ RSpec.describe 'MCP endpoint', type: :request do
 
       expect(data['vacancies'].map { |v| v['id'] }).to eq([ python_vacancy.to_param, rails_vacancy.to_param ])
       expect(data['vacancies'].last).to include('title' => 'Ruby on Rails Developer', 'source' => 'Djinni',
-                                                'snippet' => 'Rails, remote', 'hidden' => false)
+                                                'snippet' => 'Rails, remote')
       expect(data['pagination']).to include('page' => 1, 'total_entries' => 2, 'next_page' => nil)
     end
 
@@ -157,16 +157,6 @@ RSpec.describe 'MCP endpoint', type: :request do
       expect(result['content'].first['text']).to include('linkedin', 'Djinni')
     end
 
-    it 'skips hidden vacancies unless include_hidden is set' do
-      user.hidden_vacancies.create!(vacancy: rails_vacancy)
-
-      default = tool_data('search_vacancies')
-      with_hidden = tool_data('search_vacancies', { include_hidden: true })
-
-      expect(default['vacancies'].map { |v| v['id'] }).to eq([ python_vacancy.to_param ])
-      expect(with_hidden['vacancies'].find { |v| v['id'] == rails_vacancy.to_param }['hidden']).to be(true)
-    end
-
     it 'stops next_page at the deepest page Elasticsearch can serve' do
       stub_const('Vacancy::MAX_RESULT_WINDOW', 2) # 2 matches, 1 per page => last page is 2
 
@@ -194,7 +184,7 @@ RSpec.describe 'MCP endpoint', type: :request do
       expect(data['vacancies'].map { |v| v['id'] }).to eq([ python_vacancy.to_param, rails_vacancy.to_param ])
       expect(data['vacancies'].last).to include(
         'title' => 'Ruby on Rails Developer', 'company_name' => 'Acme', 'url' => rails_vacancy.url,
-        'external_id' => rails_vacancy.external_id, 'description' => 'Rails, remote', 'hidden' => false,
+        'external_id' => rails_vacancy.external_id, 'description' => 'Rails, remote',
         'source' => { 'id' => djinni.to_param, 'name' => 'Djinni', 'base_url' => djinni.base_url }
       )
       expect(data['vacancies'].last).not_to have_key('description_html')
@@ -228,23 +218,6 @@ RSpec.describe 'MCP endpoint', type: :request do
       { 'id' => mine.to_param, 'name' => 'Embedded', 'include_tags' => mine.include_tags,
         'include_ops' => mine.include_ops, 'exclude_tags' => mine.exclude_tags }
     ])
-  end
-
-  describe 'set_vacancy_hidden' do
-    it 'hides and restores a vacancy idempotently' do
-      2.times { tool_data('set_vacancy_hidden', { id: rails_vacancy.to_param }) }
-      expect(user.hidden_vacancies.pluck(:vacancy_id)).to eq([ rails_vacancy.id ])
-
-      2.times { tool_data('set_vacancy_hidden', { id: rails_vacancy.to_param, hidden: false }) }
-      expect(user.hidden_vacancies).to be_empty
-    end
-
-    it 'reports an unknown vacancy as a tool error' do
-      result = call_tool('set_vacancy_hidden', { id: 'gone' })
-
-      expect(result['isError']).to be(true)
-      expect(user.hidden_vacancies).to be_empty
-    end
   end
 
   describe 'get_my_feedback' do

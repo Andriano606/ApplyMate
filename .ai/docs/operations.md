@@ -129,12 +129,12 @@ Use when the operation model is a composite view (not a single AR record):
 ```ruby
 self.model = ApplyMate::Operation::Struct.new(
   vacancies:,
-  hidden_vacancy_ids:,
+  saved_filter:,
   total_count: Source.count
 )
 ```
 
-The endpoint will spread struct keys as keyword arguments to the component constructor. Component receives `vacancies:`, `hidden_vacancy_ids:`, `total_count:` directly.
+The endpoint will spread struct keys as keyword arguments to the component constructor. Component receives `vacancies:`, `saved_filter:`, `total_count:` directly.
 
 ## Skeleton Templates
 
