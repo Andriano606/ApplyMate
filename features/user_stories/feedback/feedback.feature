@@ -114,3 +114,48 @@ Feature: Feedback page
     When I visit the Feedback index page
     Then the thread under the review by "Petro" shows "What exactly is missing?"
     And the reply "What exactly is missing?" is not marked as new
+
+  Scenario: An author deletes their own review after confirming
+    Given I am logged in as Andrii Kuluev
+    And the last User has the following Feedback records:
+      | rating | body         | posted_via |
+      | 4      | Remove me    | web        |
+    When I visit the Feedback index page
+    Then my own feedback shows "Remove me"
+    When I delete my feedback and confirm
+    Then I see notice "Відгук видалено"
+    And I see the call to write a feedback
+    And I do not see text "Remove me"
+    And the feedback "Remove me" no longer exists
+
+  Scenario: An admin is told when the author answers and finds the thread through the badge
+    When I sign in as "Petro" with email "petro@example.com"
+    And the last User has the following Feedback records:
+      | rating | body            | posted_via |
+      | 6      | Could be better | web        |
+    And I sign out
+    And I sign in as "Support" with email "support@example.com"
+    And the User with email "support@example.com" has:
+      | admin | true |
+    And I visit the Feedback index page
+    And I start a reply under the review by "Petro"
+    And I fill in the reply with "What exactly is missing?"
+    And I send the reply
+    Then I see notice "Відповідь опубліковано"
+    And the navbar shows no unread feedback reply badge
+    When I sign out
+    And I sign in as "Petro" with email "petro@example.com"
+    And I visit the Feedback index page
+    And I start a reply under the review by "Petro"
+    And I fill in the reply with "More job boards please"
+    And I send the reply
+    Then I see notice "Відповідь опубліковано"
+    When I sign out
+    And I sign in as "Support" with email "support@example.com"
+    And I visit the home page
+    Then the navbar unread badge shows "1"
+    When I click on "Відгуки"
+    Then the unread replies filter is shown
+    And the reply "More job boards please" is marked as new
+    When I visit the home page
+    Then the navbar shows no unread feedback reply badge

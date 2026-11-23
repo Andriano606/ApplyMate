@@ -5,6 +5,7 @@ class User < ApplicationRecord
   has_one :personal_api_token, -> { where(personal: true) }, class_name: 'ApiToken', inverse_of: :user
   has_one :feedback, dependent: :destroy
   has_many :feedback_replies, dependent: :destroy
+  has_many :feedback_thread_reads, dependent: :delete_all
   has_many :saved_filters, dependent: :destroy
   has_many :hidden_vacancies, dependent: :delete_all
 
@@ -19,9 +20,9 @@ class User < ApplicationRecord
   validates :provider, presence: true
   validates :uid, presence: true, uniqueness: { scope: :provider }
 
-  # Navbar badge: someone answered in the thread under this user's feedback.
-  def unread_feedback_replies?
-    Feedback.find_by(user_id: id)&.unread_replies&.exists? || false
+  # Navbar badge: replies by others in threads this user takes part in, not seen yet.
+  def unread_feedback_reply_count
+    FeedbackReply.unread_for(self).count
   end
 
   def admin?

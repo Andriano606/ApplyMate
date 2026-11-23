@@ -102,7 +102,7 @@ RSpec.describe 'MCP endpoint', type: :request do
     names = JSON.parse(response.body).dig('result', 'tools').map { |tool| tool['name'] }
     expect(names).to contain_exactly('search_vacancies', 'get_vacancies', 'list_sources',
                                      'list_saved_filters', 'set_vacancy_hidden',
-                                     'get_my_feedback', 'list_feedback', 'submit_feedback', 'reply_to_feedback')
+                                     'get_my_feedback', 'list_feedback', 'submit_feedback', 'reply_to_feedback', 'delete_feedback')
   end
 
   describe 'search_vacancies' do
@@ -293,7 +293,7 @@ RSpec.describe 'MCP endpoint', type: :request do
 
     it 'counts unread replies, flags them new and reads them' do
       seen   = create(:feedback_reply, feedback: mine, user: admin, body: 'Old', created_at: 3.hours.ago)
-      mine.update_column(:replies_seen_at, seen.created_at)
+      FeedbackThreadRead.mark_seen!(user, { mine.id => seen.created_at })
       create(:feedback_reply, feedback: mine, user: admin, body: 'Fresh', created_at: 1.hour.ago)
 
       first  = tool_data('get_my_feedback')
@@ -359,7 +359,7 @@ RSpec.describe 'MCP endpoint', type: :request do
 
       expect(first['own_feedback']['replies'].first).to include('comment' => 'Hello', 'new' => true)
       expect(second['own_feedback']['replies'].first).to include('new' => false)
-      expect(user.reload.unread_feedback_replies?).to be(false)
+      expect(user.unread_feedback_reply_count).to eq(0)
     end
   end
 
@@ -441,6 +441,89 @@ RSpec.describe 'MCP endpoint', type: :request do
 
       expect(result['isError']).to be(true)
       expect(result['content'].first['text']).to eq(I18n.t('feedback_reply.errors.thread_full', count: 1))
+    end
+  end
+
+  describe 'list_feedback unread_only' do
+    let(:admin) { create(:user, :admin) }
+
+    it 'lists only threads with unread replies, flags them new and then reads them' do
+      replied = create(:feedback)
+      create(:feedback_reply, feedback: replied, user: admin, body: 'Question', created_at: 2.days.ago)
+      FeedbackThreadRead.mark_seen!(user, { replied.id => 1.day.ago })
+      create(:feedback_reply, feedback: replied, user: admin, body: 'Follow-up', created_at: 1.minute.ago)
+      create(:feedback, body: 'Quiet thread')
+
+      first  = tool_data('list_feedback', { unread_only: true })
+      second = tool_data('list_feedback', { unread_only: true })
+
+      expect(first['feedbacks'].map { |f| f['id'] }).to eq([ replied.to_param ])
+      expect(first['feedbacks'].first['replies'].map { |r| r['new'] }).to eq([ false, true ])
+      expect(second['feedbacks']).to be_empty
+    end
+  end
+
+  describe 'delete_feedback' do
+    let(:admin_token) { create(:api_token, user: create(:user, :admin)).token }
+
+    def call_as(auth_token, arguments)
+      mcp_post({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delete_feedback', arguments: } },
+               auth: "Bearer #{auth_token}")
+      JSON.parse(response.body).fetch('result')
+    end
+
+    it 'deletes the own feedback with its thread by default' do
+      mine = create(:feedback, user:)
+      create(:feedback_reply, feedback: mine)
+
+      data = tool_data('delete_feedback')
+
+      expect(data).to eq('deleted' => true, 'id' => mine.to_param)
+      expect(Feedback.where(user:)).to be_empty
+      expect(FeedbackReply.count).to eq(0)
+    end
+
+    it 'lets the user publish again afterwards' do
+      create(:feedback, user:)
+      tool_data('delete_feedback')
+
+      expect(tool_data('submit_feedback', { rating: 8, comment: 'Again' })['created']).to be(true)
+    end
+
+    it 'lets an admin delete any feedback by id' do
+      other = create(:feedback)
+
+      result = call_as(admin_token, { feedback_id: other.to_param })
+
+      expect(result['isError']).to be(false)
+      expect(Feedback.exists?(other.id)).to be(false)
+    end
+
+    it 'refuses a non-admin with another user\'s id with a readable tool error' do
+      other = create(:feedback)
+
+      result = call_tool('delete_feedback', { feedback_id: other.to_param })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to eq(I18n.t('mcp.errors.delete_forbidden'))
+      expect(Feedback.exists?(other.id)).to be(true)
+    end
+
+    it 'reports an unknown id' do
+      result = call_tool('delete_feedback', { feedback_id: 'nope' })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to eq(I18n.t('mcp.errors.unknown_feedback', id: 'nope'))
+    end
+
+    it 'reports a missing own feedback' do
+      create(:feedback)
+
+      result = call_tool('delete_feedback')
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to eq(I18n.t('mcp.errors.no_feedback'))
+      expect(Feedback.count).to eq(1)
     end
   end
 

@@ -41,30 +41,31 @@ RSpec.describe User, type: :model do
     end
   end
 
-  describe '#unread_feedback_replies?' do
+  describe '#unread_feedback_reply_count' do
     let(:user)  { create(:user) }
     let(:admin) { create(:user, :admin) }
 
-    it 'is false without a feedback' do
-      expect(user.unread_feedback_replies?).to be(false)
+    it 'is 0 without a feedback or replies' do
+      expect(user.unread_feedback_reply_count).to eq(0)
+      create(:feedback, user:)
+      expect(user.unread_feedback_reply_count).to eq(0)
     end
 
-    it 'is false while nobody replied or only the author did' do
-      feedback = create(:feedback, user:)
-      create(:feedback_reply, feedback:, user:)
+    it 'ignores the user\'s own replies' do
+      create(:feedback_reply, feedback: create(:feedback, user:), user:)
 
-      expect(user.unread_feedback_replies?).to be(false)
+      expect(user.unread_feedback_reply_count).to eq(0)
     end
 
-    it 'is true once somebody else replied, until the thread is read' do
+    it 'counts replies by others under the own feedback until they are read' do
       feedback = create(:feedback, user:)
-      create(:feedback_reply, feedback:, user: admin)
+      2.times { create(:feedback_reply, feedback:, user: admin) }
 
-      expect(user.unread_feedback_replies?).to be(true)
+      expect(user.unread_feedback_reply_count).to eq(2)
 
-      feedback.read_new_replies!
+      FeedbackReply.read_unread!(user, [ feedback.id ])
 
-      expect(user.unread_feedback_replies?).to be(false)
+      expect(user.unread_feedback_reply_count).to eq(0)
     end
   end
 end

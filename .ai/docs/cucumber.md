@@ -86,6 +86,13 @@ When I fill in the reply with "Text"                            # textarea of th
 When I send the reply                                           # submits the OPEN form (an admin sees one form per review)
 Then the thread under the review by "Olena" shows "Text"        # scoped to that review's [data-test-id="feedback-thread"]
 Then there is no reply form on the page
+When I delete my feedback and confirm                           # trash button on the own card + native confirm
+Then I see the call to write a feedback                         # own panel back to the CTA
+Then the feedback "Remove me" no longer exists
+Then the navbar unread badge shows "1"                          # count inside [data-test-id="navbar-unread-badge"]
+Then the unread replies filter is shown                         # pill [data-test-id="feedback-filter-unread"]
+When I sign in as "Petro" with email "petro@example.com"        # own uid per email, so several users can alternate in one scenario
+When I sign out                                                 # navbar sign-out + waits for the flash
 Then the navbar shows the unread feedback reply badge           # [data-test-id="navbar-unread-badge"] (desktop)
 Then the navbar shows no unread feedback reply badge
 Then the reply "Text" is marked as new                          # [data-test-id="feedback-reply-new"] inside that reply

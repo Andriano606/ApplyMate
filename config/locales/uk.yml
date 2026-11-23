@@ -221,6 +221,10 @@ uk:
       via_mcp: опубліковано через Claude (MCP)
     create:
       success: Дякуємо! Ваш відгук опубліковано
+    destroy:
+      confirm: Видалити відгук разом з усім тредом? Цю дію не можна скасувати.
+      label: Видалити відгук
+      success: Відгук видалено
     edit:
       header: Редагувати відгук
       submit: Зберегти
@@ -245,12 +249,14 @@ uk:
       empty_filtered: Таких відгуків немає
       empty_hint: Станьте першим, хто поділиться враженнями.
       empty_others: Інші користувачі ще не залишили відгуків
+      empty_unread: Нових відповідей немає — усе прочитано
       filter_label: Фільтр відгуків
       filters:
         all: Усі
         negative: Негативні
         neutral: Нейтральні
         positive: Позитивні
+        unread: Нові відповіді
       list_title: Що кажуть інші
       new: Залишити відгук
       own_title: Ваш відгук
@@ -287,6 +293,8 @@ uk:
       no_vacancy: Немає жодної вакансії
   mcp:
     errors:
+      delete_forbidden: Видаляти чужі відгуки можуть лише адміни — без feedback_id
+        видаляється ваш власний.
       no_feedback: У вас ще немає відгуку — спершу опублікуйте його через submit_feedback.
       reply_forbidden: Відповідати під чужим відгуком можуть лише адміни — без feedback_id
         відповідь піде у ваш власний тред.
@@ -324,7 +332,11 @@ uk:
   navbar:
     connect_mcp: Підключити Claude (MCP)
     feedbacks: Відгуки
-    feedbacks_unread: Нова відповідь на ваш відгук
+    feedbacks_unread:
+      few: "%{count} нові відповіді у ваших тредах"
+      many: "%{count} нових відповідей у ваших тредах"
+      one: "%{count} нова відповідь у ваших тредах"
+      other: "%{count} нової відповіді у ваших тредах"
     sign_in: Увійти
     sign_out: Вийти
     stop_impersonating: Зупинити імперсонацію

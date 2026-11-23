@@ -85,8 +85,9 @@ RSpec.describe Feedback::Operation::Index, type: :operation do
 
       it 'returns their ids and marks them seen' do
         expect(model.new_reply_ids).to contain_exactly(old_reply.id, new_reply.id)
-        expect(positive.reload.replies_seen_at).to be_within(1.second).of(new_reply.created_at)
-        expect(current_user.unread_feedback_replies?).to be(false)
+        mark = FeedbackThreadRead.find_by!(user: current_user, feedback: positive)
+        expect(mark.seen_at).to be_within(1.second).of(new_reply.created_at)
+        expect(current_user.unread_feedback_reply_count).to eq(0)
       end
 
       it 'reports nothing new on the next visit' do
@@ -132,6 +133,72 @@ RSpec.describe Feedback::Operation::Index, type: :operation do
                                 .tap(&:call).result.model
 
       expect(page_two.feedbacks.to_a.size).to eq(3)
+    end
+  end
+
+  describe 'unread replies' do
+    let(:admin)        { create(:user, :admin) }
+    let(:current_user) { create(:user) }
+    let!(:mine)        { create(:feedback, user: current_user) }
+
+    it 'counts threads with unread replies for the badge and pill' do
+      create(:feedback_reply, feedback: mine, user: admin)
+      create(:feedback_reply, feedback: mine, user: admin)
+
+      expect(model.unread_threads).to eq(1)
+    end
+
+    it 'with unread=1 lists only the threads with unread replies the viewer takes part in' do
+      replied = create(:feedback)
+      FeedbackThreadRead.mark_seen!(current_user, { replied.id => 3.hours.ago })
+      create(:feedback_reply, feedback: replied, user: admin)
+      create(:feedback_reply, feedback: negative, user: admin) # viewer not a participant
+
+      filtered = described_class.new(params: ActionController::Parameters.new(unread: '1'), current_user:)
+                                .tap(&:call).result.model
+
+      expect(filtered.unread).to be(true)
+      expect(filtered.feedbacks.to_a).to eq([ replied ])
+      expect(filtered.feedbacks.total_entries).to eq(1)
+      expect(filtered.unread_threads).to eq(1)
+    end
+
+    it 'ignores unread=1 for a guest' do
+      guest = described_class.new(params: ActionController::Parameters.new(unread: '1'), current_user: nil)
+                             .tap(&:call).result.model
+
+      expect(guest.unread).to be(false)
+      expect(guest.unread_threads).to eq(0)
+      expect(guest.feedbacks.to_a.size).to eq(4)
+    end
+
+    it 'marks the own thread and every listed thread read, but still returns them for the filtered page' do
+      replied = create(:feedback)
+      FeedbackThreadRead.mark_seen!(current_user, { replied.id => 3.hours.ago })
+      own_reply = create(:feedback_reply, feedback: mine, user: admin)
+      other_reply = create(:feedback_reply, feedback: replied, user: admin)
+
+      filtered = described_class.new(params: ActionController::Parameters.new(unread: '1'), current_user:)
+                                .tap(&:call).result.model
+
+      expect(filtered.new_reply_ids).to contain_exactly(own_reply.id, other_reply.id)
+      expect(current_user.unread_feedback_reply_count).to eq(0)
+      again = described_class.new(params: ActionController::Parameters.new(unread: '1'), current_user:)
+                             .tap(&:call).result.model
+      expect(again.feedbacks.to_a).to be_empty
+    end
+
+    it 'does not mark threads that are not on the page' do
+      replied = create(:feedback)
+      FeedbackThreadRead.mark_seen!(current_user, { replied.id => 3.hours.ago })
+      create(:feedback_reply, feedback: replied, user: admin)
+      stub_const('Feedback::Operation::Index::PER_PAGE', 1)
+      newer = create(:feedback, updated_at: 1.minute.from_now)
+
+      result = described_class.new(params:, current_user:).tap(&:call).result.model
+
+      expect(result.feedbacks.to_a).to eq([ newer ])
+      expect(current_user.unread_feedback_reply_count).to eq(1)
     end
   end
 end

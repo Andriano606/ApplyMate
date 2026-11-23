@@ -15,6 +15,10 @@ class Feedback::Component::Card < ApplyMate::Component::Base
   VIA_MCP_CLASSES = 'mt-3 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 ' \
                     'dark:bg-gray-900/40 dark:text-gray-400'
 
+  DELETE_BUTTON_CLASSES = 'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 ' \
+                          'transition-colors hover:bg-red-50 hover:text-red-600 sm:min-h-8 sm:min-w-8 ' \
+                          'dark:hover:bg-red-900/30'
+
   # framed: false drops the card chrome when it sits inside another panel.
   # new_reply_ids: replies to highlight as unread (the viewer's own review only).
   def initialize(feedback:, viewer: nil, framed: true, new_reply_ids: [])
@@ -37,6 +41,10 @@ class Feedback::Component::Card < ApplyMate::Component::Base
   def rating_classes
     'inline-flex shrink-0 items-baseline gap-0.5 rounded-lg px-2.5 py-1 ring-1 ring-inset ' \
       "#{RATING_CLASSES.fetch(feedback.sentiment)}"
+  end
+
+  def can_destroy?
+    @viewer.present? && FeedbackPolicy.new(@viewer, feedback).destroy?
   end
 
   def sentiment_label

@@ -9,6 +9,9 @@ class FeedbackReply::Operation::Create < ApplyMate::Operation::Base
     authorize! model, :create?
 
     model.save!
+    # Replying means having read the thread; it also makes the replier a
+    # participant who is told about answers (FeedbackReply.unread_for).
+    FeedbackThreadRead.mark_seen!(current_user, { feedback.id => model.created_at })
     notice(I18n.t('feedback_reply.create.success'))
   end
 end

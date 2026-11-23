@@ -69,4 +69,35 @@ RSpec.describe FeedbackReply::Operation::Create, type: :operation do
       expect { result }.to raise_error(ActiveRecord::RecordNotFound)
     end
   end
+
+  it 'leaves a read mark for the replier at the reply time' do
+    expect { result }.to change { FeedbackThreadRead.where(user: current_user, feedback:).count }.from(0).to(1)
+
+    expect(FeedbackThreadRead.find_by!(user: current_user, feedback:).seen_at).to be_within(1.second).of(model.created_at)
+  end
+
+  it 'does not make the replier\'s own reply unread for them' do
+    result
+
+    expect(current_user.unread_feedback_reply_count).to eq(0)
+  end
+
+  it 'notifies the admin once the author answers, and not before' do
+    result
+    expect(current_user.unread_feedback_reply_count).to eq(0)
+
+    described_class.call(params: ActionController::Parameters.new(feedback_id: feedback.id, feedback_reply: { body: 'Thanks' }),
+                         current_user: feedback.user)
+
+    expect(current_user.unread_feedback_reply_count).to eq(1)
+    expect(feedback.user.unread_feedback_reply_count).to eq(0) # answering reads the thread for the author
+  end
+
+  it 'leaves no mark when the reply is invalid' do
+    invalid = described_class.call(params: ActionController::Parameters.new(feedback_id: feedback.id, feedback_reply: { body: '' }),
+                                   current_user:)
+
+    expect(invalid).to be_failure
+    expect(FeedbackThreadRead.count).to eq(0)
+  end
 end

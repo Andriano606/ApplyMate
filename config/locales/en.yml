@@ -222,6 +222,10 @@ en:
       via_mcp: posted via Claude (MCP)
     create:
       success: Thank you! Your feedback is published
+    destroy:
+      confirm: Delete the feedback with its whole thread? This cannot be undone.
+      label: Delete feedback
+      success: Feedback deleted
     edit:
       header: Edit feedback
       submit: Save
@@ -247,12 +251,14 @@ en:
       empty_filtered: No feedback of this kind
       empty_hint: Be the first to share your impressions.
       empty_others: No one else has left feedback yet
+      empty_unread: No new replies — all caught up
       filter_label: Feedback filter
       filters:
         all: All
         negative: Negative
         neutral: Neutral
         positive: Positive
+        unread: New replies
       list_title: What others say
       new: Leave feedback
       own_title: Your feedback
@@ -287,6 +293,8 @@ en:
       no_vacancy: No vacancies fetched
   mcp:
     errors:
+      delete_forbidden: Only admins can delete someone else's feedback — without feedback_id
+        your own is deleted.
       no_feedback: You have no feedback yet — publish it with submit_feedback first.
       reply_forbidden: Only admins can reply under someone else's feedback — without
         feedback_id the reply goes to your own thread.
@@ -323,7 +331,9 @@ en:
   navbar:
     connect_mcp: Connect Claude (MCP)
     feedbacks: Feedback
-    feedbacks_unread: New reply to your feedback
+    feedbacks_unread:
+      one: "%{count} new reply in your threads"
+      other: "%{count} new replies in your threads"
     sign_in: Sign in
     sign_out: Sign out
     stop_impersonating: Stop impersonating

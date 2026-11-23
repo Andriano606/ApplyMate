@@ -25,7 +25,7 @@
           span.relative.inline-flex.text-indigo-600.dark:text-indigo-400[title=item.badge
                                                                          data-test-id="navbar-unread-badge"]
             = icon(:chat_bubble, size: 5)
-            span.absolute.-right-0.5.-top-0.5.h-2.5.w-2.5.rounded-full.bg-red-500.ring-2.ring-white.dark:ring-gray-800
+            span[class=COUNT_BADGE_CLASSES] = item.badge_count
           span.sr-only = item.badge
     = debug_button(path: helpers.admin_root_path, text: I18n.t('components.debug_button.label'))
 

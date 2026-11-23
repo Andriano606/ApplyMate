@@ -20,6 +20,9 @@ class ApplyMate::Component::Navbar::Desktop < ApplyMate::Component::Base
     helpers.request.path.start_with?(item.path)
   end
 
+  COUNT_BADGE_CLASSES = 'absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full ' \
+                        'bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white ' \
+                        'dark:ring-gray-800'
   ACTION_BASE = 'inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium leading-none transition-colors'
   ACTION_VARIANTS = {
     primary: 'bg-indigo-600 text-white hover:bg-indigo-700',

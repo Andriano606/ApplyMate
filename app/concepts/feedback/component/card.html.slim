@@ -11,6 +11,12 @@ article[class=wrapper_classes id=helpers.dom_id(feedback) data-test-id="feedback
     .flex.shrink-0.items-center.gap-2
       - actions.each do |action|
         = action
+      - if can_destroy?
+        = helpers.button_to helpers.feedback_path(feedback), method: :delete, \
+            form: { data: { turbo_confirm: I18n.t('feedback.destroy.confirm') } }, \
+            class: DELETE_BUTTON_CLASSES, title: I18n.t('feedback.destroy.label'), \
+            'aria-label': I18n.t('feedback.destroy.label'), data: { test_id: 'feedback-delete' } do
+          = icon(:trash, size: 4)
       span[class=rating_classes title=sentiment_label data-test-id="feedback-rating"]
         span.text-base.font-bold = feedback.rating
         span.text-xs.font-medium = '/10'

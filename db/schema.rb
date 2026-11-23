@@ -65,6 +65,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100003) do
     t.index ["user_id"], name: "index_feedback_replies_on_user_id"
   end
 
+  create_table "feedback_thread_reads", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "feedback_id", null: false
+    t.datetime "seen_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["feedback_id"], name: "index_feedback_thread_reads_on_feedback_id"
+    t.index ["user_id", "feedback_id"], name: "index_feedback_thread_reads_on_user_id_and_feedback_id", unique: true
+  end
+
   create_table "feedbacks", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.integer "rating", null: false
@@ -72,7 +82,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100003) do
     t.string "posted_via", default: "web", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.datetime "replies_seen_at"
     t.index ["updated_at"], name: "index_feedbacks_on_updated_at"
     t.index ["user_id"], name: "index_feedbacks_on_user_id", unique: true
     t.check_constraint "rating >= 1 AND rating <= 10", name: "feedbacks_rating_range"
@@ -316,6 +325,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100003) do
   add_foreign_key "api_tokens", "users"
   add_foreign_key "feedback_replies", "feedbacks"
   add_foreign_key "feedback_replies", "users"
+  add_foreign_key "feedback_thread_reads", "feedbacks"
+  add_foreign_key "feedback_thread_reads", "users"
   add_foreign_key "feedbacks", "users"
   add_foreign_key "hidden_vacancies", "users"
   add_foreign_key "hidden_vacancies", "vacancies"

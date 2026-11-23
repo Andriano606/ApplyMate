@@ -100,63 +100,13 @@ RSpec.describe Feedback do
     end
   end
 
-  describe 'unread replies' do
-    let(:feedback) { create(:feedback) }
-    let(:admin)    { create(:user, :admin) }
+  describe 'deleting' do
+    it 'removes the thread and read marks with it' do
+      feedback = create(:feedback)
+      create(:feedback_reply, feedback:)
+      FeedbackThreadRead.mark_seen!(create(:user), { feedback.id => Time.current })
 
-    it 'counts only replies by others while nothing was seen' do
-      unread = create(:feedback_reply, feedback:, user: admin)
-      create(:feedback_reply, feedback:, user: feedback.user)
-
-      expect(feedback.unread_replies).to contain_exactly(unread)
-    end
-
-    it 'counts only replies newer than replies_seen_at' do
-      create(:feedback_reply, feedback:, user: admin, created_at: 3.hours.ago)
-      newer = create(:feedback_reply, feedback:, user: admin, created_at: 1.hour.ago)
-      feedback.update_column(:replies_seen_at, 2.hours.ago)
-
-      expect(feedback.unread_replies).to contain_exactly(newer)
-    end
-
-    describe '#read_new_replies!' do
-      it 'returns the new reply ids, ignoring the author\'s own replies' do
-        first  = create(:feedback_reply, feedback:, user: admin, created_at: 2.hours.ago)
-        second = create(:feedback_reply, feedback:, user: admin, created_at: 1.hour.ago)
-        create(:feedback_reply, feedback:, user: feedback.user)
-
-        expect(feedback.read_new_replies!).to contain_exactly(first.id, second.id)
-      end
-
-      it 'moves replies_seen_at to the newest read reply, not to now' do
-        newest = create(:feedback_reply, feedback:, user: admin, created_at: 1.hour.ago)
-        create(:feedback_reply, feedback:, user: admin, created_at: 2.hours.ago)
-
-        feedback.read_new_replies!
-
-        expect(feedback.reload.replies_seen_at).to be_within(1.second).of(newest.created_at)
-        expect(feedback.replies_seen_at).to be < 30.minutes.ago
-      end
-
-      it 'returns nothing the second time' do
-        create(:feedback_reply, feedback:, user: admin)
-        feedback.read_new_replies!
-
-        expect(feedback.read_new_replies!).to eq([])
-      end
-
-      it 'leaves a reply that arrives afterwards unread' do
-        create(:feedback_reply, feedback:, user: admin, created_at: 1.hour.ago)
-        feedback.read_new_replies!
-        late = create(:feedback_reply, feedback:, user: admin)
-
-        expect(feedback.read_new_replies!).to eq([ late.id ])
-      end
-
-      it 'keeps replies_seen_at nil and returns [] when there is nothing new' do
-        expect(feedback.read_new_replies!).to eq([])
-        expect(feedback.reload.replies_seen_at).to be_nil
-      end
+      expect { feedback.destroy }.to change(FeedbackReply, :count).by(-1).and change(FeedbackThreadRead, :count).by(-1)
     end
   end
 end

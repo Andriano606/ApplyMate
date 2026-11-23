@@ -13,7 +13,8 @@ same form for doing it by hand.
   **body ≤ 2000 chars** (`Feedback::BODY_MAX_LENGTH`, also the MCP schema `maxLength`).
 - **Sentiment is derived from the rating**, never stored: `Feedback::SENTIMENTS`
   = positive 7–10, neutral 5–6, negative 1–4 (`Feedback.sentiment_for`, scope `with_sentiment`).
-- **Who:** anyone can read (`FeedbackPolicy#index?`), signed-in users post, only the author edits.
+- **Who:** anyone can read (`FeedbackPolicy#index?`), signed-in users post, only the author edits,
+  the author or an admin deletes.
 - **`posted_via`** (`web` | `mcp`) records where the latest version came from; it is a trusted
   keyword argument of `Feedback::Operation::{Create,Update}` (`Mcp::Operation::SubmitFeedback`
   passes `'mcp'`), never a request param. Cards show «опубліковано через Claude (MCP)».
@@ -37,15 +38,31 @@ Replies go with their feedback (`dependent: :destroy`) and with their author (`U
 
 ## Unread replies
 
-`feedbacks.replies_seen_at` is when the author last read their thread. `Feedback#unread_replies` =
-replies by others created after it (all of them while it is `nil`) — the one definition used by the
-navbar badge (`User#unread_feedback_replies?`, one query per page for signed-in users), by
-`Feedback::Operation::Index` (web page and MCP `list_feedback`) and by `Mcp::Operation::GetMyFeedback`.
-Both read through `Feedback#read_new_replies!`, which returns the unread ids (highlighted «нове» /
-`new: true`) and moves `replies_seen_at` to the newest of them (not to "now", so a reply committed
-in between stays unread). Reading happens on a GET, so the navbar link has
-`data-turbo-prefetch="false"` (`Item#link_data`): a hover prefetch must not clear the badge.
-Admins get no badge for authors' answers.
+Every **participant** of a thread is told about new answers: the feedback's author, and anyone who
+replied in it (an admin is told when the author answers). `feedback_thread_reads` (user, feedback,
+`seen_at`; unique `[user_id, feedback_id]`) is how far each participant has read.
+
+- `FeedbackReply.unread_for(user)` — the one definition: replies by others in threads where the user
+  is the author (unread until a read mark exists) or has a read mark, created after `seen_at`.
+- Replying leaves a read mark (`FeedbackReply::Operation::Create` → `FeedbackThreadRead.mark_seen!`),
+  which is also what makes a replier a participant.
+- `FeedbackReply.read_unread!(user, feedback_ids)` reads threads: returns the new reply ids
+  (highlighted «нове» / `new: true`) and moves the marks to the newest of them — not to "now", so a
+  reply committed in between stays unread. `mark_seen!` upserts with `GREATEST`, so racing requests
+  never move a mark backwards. Used by `Feedback::Operation::Index` (the threads it shows: the
+  viewer's own + the current page; web page and MCP `list_feedback`) and `Mcp::Operation::GetMyFeedback`.
+- Navbar: «Відгуки» shows a message icon with the count (`User#unread_feedback_reply_count`, one
+  query per page for signed-in users) and links to `/feedbacks?unread=1` — only the threads with
+  unread replies (pill «Нові відповіді»). Reading happens on a GET, so those links have
+  `data-turbo-prefetch="false"` (`Item#link_data`): a hover prefetch must not mark replies read.
+- `Index` loads the list (rows and total) before marking, so the `unread=1` filter still returns
+  the threads it is about to mark.
+
+## Deleting
+
+The author deletes their own feedback, an admin any (`FeedbackPolicy#destroy?`): trash button on
+the card (`turbo_confirm`), `Feedback::Operation::Destroy`, MCP `delete_feedback`. The thread and
+its read marks go with it (`dependent: :destroy` / `:delete_all`); the author can post again.
 
 ## Page layout
 

@@ -38,10 +38,11 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | `list_sources` | `Mcp::Operation::ListSources` | counts come from `Vacancy::Operation::CountBySource` (cached 5 min, expired by the sync) |
 | `list_saved_filters` | `Mcp::Operation::ListSavedFilters` | only the token user's filters |
 | `set_vacancy_hidden` | `Mcp::Operation::SetVacancyHidden` | wraps `HiddenVacancy::Operation::{Create,Destroy}`; idempotent |
-| `list_feedback` | `Feedback::Operation::Index` (the web page's operation) | `sentiment`, `page`; stats, `own_feedback` (never repeated in `feedbacks`), every review with its thread and `author`; marks the user's unread replies seen, flagging them `new: true` |
+| `list_feedback` | `Feedback::Operation::Index` (the web page's operation) | `sentiment`, `unread_only`, `page`; stats, `own_feedback` (never repeated in `feedbacks`), every review with its thread and `author`; replies the user had not read (own thread or threads they replied in) flagged `new: true`, then marked read |
 | `get_my_feedback` | `Mcp::Operation::GetMyFeedback` | the token user's feedback with its thread, unread replies flagged `new: true` + `unread_replies` count, then marked seen; `null` when none |
 | `submit_feedback` | `Mcp::Operation::SubmitFeedback` | `rating` (1–10) + `comment`; creates the user's single feedback, later calls replace it (`created: false`); wraps `Feedback::Operation::{Create,Update}` with `posted_via: 'mcp'`. See `.ai/docs/feedback.md` |
-| `reply_to_feedback` | `Mcp::Operation::ReplyToFeedback` | `comment`, optional `feedback_id` (default: the user's own feedback; other ids only for admins — `FeedbackReplyPolicy`); wraps `FeedbackReply::Operation::Create` |
+| `reply_to_feedback` | `Mcp::Operation::ReplyToFeedback` | `comment`, optional `feedback_id` (default: the user's own feedback; other ids only for admins — `FeedbackReplyPolicy`); wraps `FeedbackReply::Operation::Create`. Lookup and readable refusals are shared with `delete_feedback` (`Mcp::Operation::FeedbackLookup`) |
+| `delete_feedback` | `Mcp::Operation::DeleteFeedback` | optional `feedback_id` (default: own; others only for admins); wraps `Feedback::Operation::Destroy`; thread goes with it |
 
 Ids are hashids everywhere (`to_param`), never bare integers.
 

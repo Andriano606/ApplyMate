@@ -36,7 +36,7 @@ Rails.application.routes.draw do
     resource :hidden_vacancy, only: [ :create, :destroy ]
   end
   resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]
-  resources :feedbacks, only: [ :index, :new, :create, :edit, :update ] do
+  resources :feedbacks, only: [ :index, :new, :create, :edit, :update, :destroy ] do
     resources :replies, only: [ :create ], controller: 'feedback_replies'
   end
 

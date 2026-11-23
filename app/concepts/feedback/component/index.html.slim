@@ -50,6 +50,10 @@
     .flex.flex-col.gap-3.sm:flex-row.sm:items-center.sm:justify-between
       h2.text-lg.font-semibold.text-gray-900.dark:text-gray-100 = I18n.t('feedback.index.list_title')
       nav.flex.flex-wrap.gap-2[aria-label=I18n.t('feedback.index.filter_label')]
+        - if @unread_threads.positive? || @unread
+          = helpers.link_to helpers.feedbacks_path(unread: 1), **unread_link_options do
+            = I18n.t('feedback.index.filters.unread')
+            span.tabular-nums.opacity-80 = @unread_threads
         - [ nil, *sentiments ].each do |sentiment|
           = helpers.link_to helpers.feedbacks_path(sentiment:), **filter_link_options(sentiment) do
             = filter_label(sentiment)
@@ -58,7 +62,7 @@
     - if @feedbacks.any?
       .space-y-4
         - @feedbacks.each do |feedback|
-          = render Feedback::Component::Card.new(feedback:, viewer: @viewer)
+          = render Feedback::Component::Card.new(feedback:, viewer: @viewer, new_reply_ids: @new_reply_ids)
       - if paginate?
         = helpers.will_paginate @feedbacks, renderer: ApplyMate::Component::Table::PaginationRenderer
     - else

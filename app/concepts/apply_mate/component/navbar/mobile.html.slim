@@ -52,7 +52,7 @@ div data-controller="mobile-menu"
             - if item.badge
               span.relative.inline-flex
                 = icon(:chat_bubble, size: 5)
-                span.absolute.-right-0.5.-top-0.5.h-2.5.w-2.5.rounded-full.bg-red-500.ring-2.ring-white
+                span[class=ApplyMate::Component::Navbar::Desktop::COUNT_BADGE_CLASSES] = item.badge_count
               span.sr-only = item.badge
         - else
           = link_to item.path, \

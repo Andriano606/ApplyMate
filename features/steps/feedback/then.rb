@@ -38,3 +38,19 @@ Then('the reply {string} is not marked as new') do |text|
   expect(page).to have_css('[data-test-id="feedback-reply"]', text:)
   expect(page).to have_no_css('[data-test-id="feedback-reply-new"]')
 end
+
+Then('the navbar unread badge shows {string}') do |count|
+  expect(page).to have_css('[data-test-id="navbar-unread-badge"]', text: count)
+end
+
+Then('the unread replies filter is shown') do
+  expect(page).to have_css('[data-test-id="feedback-filter-unread"]')
+end
+
+Then('I see the call to write a feedback') do
+  expect(page).to have_css('[data-test-id="own-feedback"]', text: I18n.t('feedback.index.cta_title'))
+end
+
+Then('the feedback {string} no longer exists') do |text|
+  wait_for { Feedback.exists?(body: text) }.to be(false)
+end

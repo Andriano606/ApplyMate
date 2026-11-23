@@ -15,10 +15,13 @@ class Feedback::Component::Index < ApplyMate::Component::Base
   CTA_ICON_CLASSES = 'hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-indigo-600 ' \
                      'shadow-sm sm:flex dark:bg-gray-800'
 
-  def initialize(feedbacks:, own_feedback:, stats:, sentiment:, viewer:, new_reply_ids: [], **)
+  def initialize(feedbacks:, own_feedback:, stats:, sentiment:, viewer:, new_reply_ids: [], unread: false,
+                 unread_threads: 0, **)
     @feedbacks = feedbacks
     @own_feedback = own_feedback
     @new_reply_ids = new_reply_ids
+    @unread = unread
+    @unread_threads = unread_threads
     @stats = stats
     @sentiment = sentiment
     @viewer = viewer
@@ -53,8 +56,16 @@ class Feedback::Component::Index < ApplyMate::Component::Base
   end
 
   def filter_link_options(sentiment)
-    { class: filter_classes(sentiment), data: { test_id: "feedback-filter-#{sentiment || :all}" },
-      'aria-current': ('page' if sentiment == @sentiment) }
+    active = !@unread && sentiment == @sentiment
+    { class: filter_classes(active), data: { test_id: "feedback-filter-#{sentiment || :all}" },
+      'aria-current': ('page' if active) }
+  end
+
+  # Threads with replies the viewer has not read (the navbar badge links here).
+  # Prefetch off: showing a thread marks it read.
+  def unread_link_options
+    { class: filter_classes(@unread), 'aria-current': ('page' if @unread),
+      data: { test_id: 'feedback-filter-unread', turbo_prefetch: false } }
   end
 
   # The list leaves out the viewer's own review, so its pills do too
@@ -65,10 +76,10 @@ class Feedback::Component::Index < ApplyMate::Component::Base
     own_counted ? total - 1 : total
   end
 
-  def filter_classes(sentiment)
+  def filter_classes(active)
     base = 'inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 text-sm font-medium transition-colors ' \
            'sm:min-h-0 sm:px-3 sm:py-1.5'
-    if sentiment == @sentiment
+    if active
       "#{base} bg-indigo-600 text-white shadow-sm"
     else
       "#{base} bg-white text-gray-700 ring-1 ring-inset ring-gray-200 hover:bg-gray-50 " \
@@ -101,7 +112,9 @@ class Feedback::Component::Index < ApplyMate::Component::Base
   end
 
   def empty_state
-    title = if @sentiment
+    title = if @unread
+              I18n.t('feedback.index.empty_unread')
+    elsif @sentiment
               I18n.t('feedback.index.empty_filtered')
     elsif @own_feedback
               I18n.t('feedback.index.empty_others')

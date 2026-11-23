@@ -20,7 +20,8 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     Mcp::Tool::GetMyFeedback,
     Mcp::Tool::ListFeedback,
     Mcp::Tool::SubmitFeedback,
-    Mcp::Tool::ReplyToFeedback
+    Mcp::Tool::ReplyToFeedback,
+    Mcp::Tool::DeleteFeedback
   ].freeze
 
   INSTRUCTIONS = <<~TEXT
@@ -33,7 +34,9 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     ApplyMate also has a public feedback page about the service itself: list_feedback reads it,
     submit_feedback publishes the user's rating (1–10) and comment — one per user, later calls
     replace it — get_my_feedback shows their review with the thread of admins' answers (new ones
-    flagged), and reply_to_feedback answers in that thread (admins may reply under any review).
+    flagged), reply_to_feedback answers in a thread (admins may reply under any review) and
+    delete_feedback removes the user's review (admins: any). New replies in threads the user takes
+    part in are flagged `new: true`; list_feedback with unread_only lists just those threads.
   TEXT
 
   def perform!(request:, current_user:, **)

@@ -7,7 +7,7 @@ class Mcp::Operation::GetMyFeedback < ApplyMate::Operation::Base
     authorize! Feedback, :index?
 
     feedback = Feedback.includes(replies: :user).find_by(user: current_user)
-    new_reply_ids = feedback ? feedback.read_new_replies! : []
+    new_reply_ids = FeedbackReply.read_unread!(current_user, [ feedback&.id ].compact)
 
     self.model = ApplyMate::Operation::Struct.new(feedback:, new_reply_ids:)
   end

@@ -31,3 +31,10 @@ When('I send the reply') do
     find(:button, I18n.t('feedback_reply.form.submit'), visible: :all).execute_script('this.click()')
   end
 end
+
+# The trash button on a card asks for a native confirmation (data-turbo-confirm).
+When('I delete my feedback and confirm') do
+  accept_confirm do
+    find('[data-test-id="own-feedback"] [data-test-id="feedback-delete"]').click
+  end
+end

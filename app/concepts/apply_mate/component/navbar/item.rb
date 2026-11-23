@@ -26,6 +26,7 @@ class ApplyMate::Component::Navbar::Item
   def icon?         = icon_name.present?
   def variant       = options.fetch(:variant, :primary)
   def badge         = options[:badge]
+  def badge_count   = options[:badge_count]
 
   # prefetch: false keeps Turbo from loading the page on hover (a GET with side effects).
   def link_data
