@@ -298,7 +298,8 @@ en:
       points:
         claude: Connect Claude and it will search and read vacancies for you
         filters: Save a search as a filter and come back to it in one click
-        search: Search every site at once — with "and", "or" and words to exclude
+        search: Flexible search across every site at once — find exactly what you
+          need
       sources_fallback: popular job boards
       title: All IT vacancies in one place
     index:
