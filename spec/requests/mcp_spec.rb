@@ -96,6 +96,52 @@ RSpec.describe 'MCP endpoint', type: :request do
     expect(result['capabilities'].keys).to eq([ 'tools' ])
   end
 
+  describe 'usage events' do
+    # The `mcp_request` JSON lines the «Використання MCP» Grafana dashboard reads.
+    def mcp_events
+      lines = []
+      %i[info warn].each do |level|
+        allow(Rails.logger).to receive(level).and_wrap_original do |original, message, &block|
+          lines << message if message.is_a?(String) && message.start_with?('{"event":"mcp_request"')
+          original.call(message, &block)
+        end
+      end
+      yield
+      lines.map { |line| JSON.parse(line) }
+    end
+
+    it 'logs a tool call with its user and outcome' do
+      events = mcp_events { call_tool('list_sources') }
+
+      expect(events.sole).to include('rpc' => 'tools/call', 'tool' => 'list_sources', 'user' => user.hashid,
+                                     'user_name' => user.name, 'result' => 'ok', 'error_type' => nil,
+                                     'level' => 'info', 'client' => nil)
+      expect(events.sole['duration_s']).to be_a(Numeric)
+    end
+
+    it 'logs the client name with initialize' do
+      events = mcp_events do
+        mcp_post({ jsonrpc: '2.0', id: 1, method: 'initialize',
+                   params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-ai', version: '1' } } })
+      end
+
+      expect(events.sole).to include('rpc' => 'initialize', 'client' => 'claude-ai', 'tool' => nil, 'result' => 'ok')
+    end
+
+    it 'marks a call the tool refused as failed' do
+      events = mcp_events { call_tool('reply_to_feedback', { comment: 'Hi' }) }
+
+      expect(events.sole).to include('tool' => 'reply_to_feedback', 'result' => 'failed', 'error_type' => 'tool_error',
+                                     'level' => 'warn')
+    end
+
+    it 'marks an unknown tool as failed' do
+      events = mcp_events { mcp_post({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'nope', arguments: {} } }) }
+
+      expect(events.sole).to include('tool' => 'nope', 'result' => 'failed', 'error_type' => 'invalid_params')
+    end
+  end
+
   it 'lists every tool' do
     mcp_post({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
 

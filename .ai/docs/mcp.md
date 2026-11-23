@@ -23,7 +23,7 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | Piece | Role |
 |-------|------|
 | `McpController#handle` | Calls `Mcp::Operation::Handle`, copies the Rack triple into the response |
-| `Mcp::Operation::Handle` | `authorize! :mcp, :access?`, builds server (tools, instructions, `server_context: { current_user: }`) |
+| `Mcp::Operation::Handle` | `authorize! :mcp, :access?`, builds server (tools, instructions, `server_context: { current_user: }`); logs every JSON-RPC message as an `mcp_request` event (user, tool, outcome) for the Grafana dashboard «Використання MCP» — `.ai/docs/observability.md` |
 | `Mcp::Tool::Base` | `run(operation, server_context, params) { |model| payload }` — runs ONE operation as the token user, verifies it authorized, turns a failed result into an MCP tool error (`isError: true`) and a payload into text JSON + `structuredContent` |
 | `Mcp::Tool::*` | Schema + description + serialization only. **No business logic** — that goes in an operation |
 | `Mcp::Operation::*` | The logic behind each tool (resolve saved filter / sources, batch lookups, feedback lookups) |

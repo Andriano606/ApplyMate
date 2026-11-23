@@ -1,0 +1,990 @@
+{
+  "uid": "applymate-mcp-usage",
+  "title": "Використання MCP",
+  "description": "Хто і як часто користується MCP-сервером ApplyMate (/mcp). Подія mcp_request: .ai/docs/observability.md",
+  "tags": [
+    "applymate"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [],
+  "version": 1,
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "За вибраний період",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Користувачів",
+      "description": "Скільки різних людей викликали хоч один інструмент MCP за вибраний період (праворуч угорі).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (user) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3274D9"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Активні за добу",
+      "description": "Скільки різних людей викликали інструменти за останні 24 години (не залежить від вибраного періоду).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (user) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [24h])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3274D9"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Викликів інструментів",
+      "description": "Усі виклики інструментів (search_vacancies, get_vacancies, …) за вибраний період.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "Підключень",
+      "description": "Скільки разів клієнт (Claude) відкривав нову сесію з MCP — запит initialize. Приблизно = кількість розмов, у яких підключено ApplyMate.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"initialize\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
+    },
+    {
+      "type": "stat",
+      "id": 6,
+      "title": "Невдалих викликів",
+      "description": "Виклики, що завершились помилкою: інструмент відмовив (tool_error), неправильні аргументи (invalid_params / invalid_schema) або збій (internal_error). Деталі — у журналі внизу.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" | result=\"failed\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#F2495C"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
+    },
+    {
+      "type": "stat",
+      "id": 7,
+      "title": "Час відповіді (p95)",
+      "description": "95% викликів інструментів за вибраний період відповіли швидше за це.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.95, {job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" | keep duration_s | unwrap duration_s [$__range])",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "horizontal",
+        "showPercentChange": false,
+        "wideLayout": true
+      }
+    },
+    {
+      "type": "row",
+      "id": 8,
+      "title": "Динаміка",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 9,
+      "title": "Користувачі по днях",
+      "description": "Скільки різних людей користувалися MCP кожного дня (доба за UTC).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1d",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (user) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [$__interval])))",
+          "legendFormat": "користувачів",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "pointSize": 6,
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 10,
+      "title": "Виклики по днях за користувачами",
+      "description": "Скільки викликів інструментів зробив кожен користувач за добу (UTC).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1d",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (user_name) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [$__interval]))",
+          "legendFormat": "{{user_name}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "pointSize": 6,
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 11,
+      "title": "Виклики за інструментами",
+      "description": "Які інструменти викликають і коли. Стовпчик — одна доба (UTC).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1d",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (tool) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [$__interval]))",
+          "legendFormat": "{{tool}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "pointSize": 6,
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 12,
+      "title": "Час відповіді (p95) за інструментами",
+      "description": "За скільки відповідають 95% викликів кожного інструмента за добу (UTC).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 9
+      },
+      "interval": "1d",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.95, {job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" | keep tool, duration_s | unwrap duration_s [$__interval]) by (tool)",
+          "legendFormat": "{{tool}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 13,
+      "title": "Хто і чим користується",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "table",
+      "id": 14,
+      "title": "Користувачі",
+      "description": "Кожен, хто користувався MCP за вибраний період: скільки викликів інструментів і підключень. ID — hashid користувача (як у URL).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 10,
+        "h": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (user_name, user) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (user_name, user) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"initialize\" [$__range]))",
+          "legendFormat": "",
+          "refId": "B",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "user_name": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "user": 3
+            },
+            "renameByName": {
+              "user_name": "Користувач",
+              "user": "ID",
+              "Value #A": "Викликів",
+              "Value #B": "Підключень"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Викликів",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "type": "piechart",
+      "id": 15,
+      "title": "Інструменти",
+      "description": "Скільки разів викликали кожен інструмент за вибраний період.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 25,
+        "w": 7,
+        "h": 10
+      },
+      "interval": "1d",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (tool) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"tools/call\" [$__interval]))",
+          "legendFormat": "{{tool}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "displayLabels": [],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "sortBy": "Value",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "type": "piechart",
+      "id": 16,
+      "title": "Клієнти",
+      "description": "Через що підключаються: клієнт називає себе в initialize (claude-ai — claude.ai і застосунки Claude, claude-code — Claude Code, …).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 17,
+        "y": 25,
+        "w": 7,
+        "h": 10
+      },
+      "interval": "1d",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (client) (count_over_time({job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=\"initialize\" [$__interval]))",
+          "legendFormat": "{{client}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "displayLabels": [],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "sortBy": "Value",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 17,
+      "title": "Журнал",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "logs",
+      "id": 18,
+      "title": "Останні виклики",
+      "description": "Підключення і виклики інструментів, найновіші згори.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=\"rails\"} |= \"mcp_request\" | json | __error__=\"\" | event=\"mcp_request\" | rpc=~\"tools/call|initialize\" | line_format \"{{ if eq .rpc \\\"initialize\\\" }}\\ud83d\\udd0c {{ .user_name }} \\u043f\\u0456\\u0434\\u043a\\u043b\\u044e\\u0447\\u0438\\u0432\\u0441\\u044f{{ if .client }} \\u0447\\u0435\\u0440\\u0435\\u0437 {{ .client }}{{ end }}{{ else }}{{ if eq .result \\\"ok\\\" }}\\u2705{{ else }}\\u274c{{ end }} {{ .user_name }} \\u2192 {{ .tool }}{{ if ne .result \\\"ok\\\" }} \\u00b7 {{ .error_type }}{{ end }} \\u00b7 {{ .duration_s }} \\u0441{{ end }}\"",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}
