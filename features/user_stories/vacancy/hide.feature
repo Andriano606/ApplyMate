@@ -2,7 +2,7 @@ Feature: Hiding vacancies
   A vacancy the user has looked at and rejected can be hidden. The card stays in
   place, blurred, and offers a restore button on hover — also after a reload.
   Hiding is a personal marker: it does not change search results or the
-  appeared/disappeared counters of saved filters.
+  vacancy counts of saved filters.
 
   Background:
     Given the OAuth user is "Andrii" with email "andrii@example.com"
@@ -30,13 +30,10 @@ Feature: Hiding vacancies
       | Backend | ["ruby"]     | []          | []           |
     When I visit the Vacancy index page
     And I click on "Backend"
-    And the SavedFilter with name "Backend" record should have:
-      | last_seen_count | 1 |
     And I click "Приховати" on the vacancy card "Ruby Developer"
     Then the vacancy card "Ruby Developer" is hidden
     When I visit the Vacancy index page
     Then the preset "Backend" shows "1"
-    And the preset "Backend" shows no deltas
 
   Scenario: Hovering a hidden card reveals a button that restores the vacancy
     Given I am logged in as Andrii Kuluev

@@ -19,8 +19,7 @@ class Vacancy::Operation::Search < ApplyMate::Operation::Base
 
   # Deepest page Elasticsearch can serve at this page size (from + size must stay
   # inside the index's max_result_window). The collection keeps the real total —
-  # the web shows it and saved-filter counters store it — so paginating callers
-  # must stop here themselves.
+  # the web shows it — so paginating callers must stop here themselves.
   def self.last_reachable_page(per_page)
     Vacancy::MAX_RESULT_WINDOW / per_page
   end

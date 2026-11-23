@@ -106,11 +106,9 @@ When I attach the file "photo.jpg" to "Logo"    # from spec/fixtures/files/
 When I click on "Submit"         # works for both links and buttons, uses JS click
 When I click the edit button for "Acme Corp" in the table
 When I click the delete button for "Acme Corp" in the table   # confirms dialog
-When I hover over "Backend"      # dwells past Turbo's 100ms hover-prefetch delay
 ```
 
-`I click on` fires a JS click, which does **not** move the pointer — use `I hover over`
-when a scenario needs the real hover behaviour (Turbo 8 prefetches links on hover).
+`I click on` fires a JS click, which does **not** move the pointer.
 
 ### Vacancy cards
 
@@ -158,12 +156,8 @@ Then the vacancy description contains no "script" element
 ### Saved filter pills
 
 ```gherkin
-Then the preset "Backend" shows "+1"      # scoped to that pill only
-Then the preset "Backend" shows no deltas # no +appeared / −disappeared badge
+Then the preset "Backend" shows "2"       # scoped to that pill only (name + current count)
 ```
-
-A **positive** assertion is satisfied by the pre-click DOM, so after `I click on` assert
-the badge that has to *disappear* first — that one waits for the response to land.
 
 ### Modal
 
