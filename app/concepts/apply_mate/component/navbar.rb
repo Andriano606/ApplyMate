@@ -17,9 +17,12 @@ class ApplyMate::Component::Navbar < ApplyMate::Component::Base
     [
       #-- Logo --
       Item.new(label: 'ApplyMate', path: root_path, section: :logo),
-      Item.new(label: I18n.t('navbar.feedbacks'), path: helpers.feedbacks_path, section: :nav),
 
-      Item.new(label: I18n.t('navbar.connect_mcp'), path: helpers.mcp_connection_path, section: :user_menu, icon: :sparkles, render: signed_in?, turbo: :stream),
+      #-- Right side --
+      Item.new(label: I18n.t('navbar.feedbacks'), path: helpers.feedbacks_path, section: :actions, variant: :ghost,
+               badge: (I18n.t('navbar.feedbacks_unread') if unread_feedback_replies?), prefetch: false),
+      Item.new(label: I18n.t('navbar.connect_mcp'), path: helpers.mcp_connection_path, section: :actions, variant: :outline,
+               icon: :sparkles, render: signed_in?, turbo: :stream),
 
       Item.new(label: I18n.t('navbar.stop_impersonating'), path: helpers.admin_impersonation_path, section: :user_menu, render: impersonating?, method: :delete, turbo: false, divider: true),
       Item.new(label: I18n.t('navbar.sign_out'),     path: logout_path,       section: :user_menu, render: signed_in? && !impersonating?, method: :delete, turbo: false, divider: true),
@@ -28,6 +31,11 @@ class ApplyMate::Component::Navbar < ApplyMate::Component::Base
       Item.new(label: I18n.t('navbar.sign_in'),        path: helpers.login_path, section: :guest,  render: !signed_in?, turbo: :stream)
     ]
   end
+  # Prefetch is off on that link: a hover would load the page and mark the replies seen.
+  def unread_feedback_replies?
+    signed_in? && current_user.unread_feedback_replies?
+  end
+
   def oauth_path        = helpers.google_oauth_path
   def logout_path       = '/logout'
 end

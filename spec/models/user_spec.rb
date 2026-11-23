@@ -40,4 +40,31 @@ RSpec.describe User, type: :model do
       expect(other_provider).to be_valid
     end
   end
+
+  describe '#unread_feedback_replies?' do
+    let(:user)  { create(:user) }
+    let(:admin) { create(:user, :admin) }
+
+    it 'is false without a feedback' do
+      expect(user.unread_feedback_replies?).to be(false)
+    end
+
+    it 'is false while nobody replied or only the author did' do
+      feedback = create(:feedback, user:)
+      create(:feedback_reply, feedback:, user:)
+
+      expect(user.unread_feedback_replies?).to be(false)
+    end
+
+    it 'is true once somebody else replied, until the thread is read' do
+      feedback = create(:feedback, user:)
+      create(:feedback_reply, feedback:, user: admin)
+
+      expect(user.unread_feedback_replies?).to be(true)
+
+      feedback.read_new_replies!
+
+      expect(user.unread_feedback_replies?).to be(false)
+    end
+  end
 end

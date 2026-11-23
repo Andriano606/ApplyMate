@@ -102,7 +102,7 @@ RSpec.describe 'MCP endpoint', type: :request do
     names = JSON.parse(response.body).dig('result', 'tools').map { |tool| tool['name'] }
     expect(names).to contain_exactly('search_vacancies', 'get_vacancies', 'list_sources',
                                      'list_saved_filters', 'set_vacancy_hidden',
-                                     'get_my_feedback', 'submit_feedback')
+                                     'get_my_feedback', 'list_feedback', 'submit_feedback', 'reply_to_feedback')
   end
 
   describe 'search_vacancies' do
@@ -251,7 +251,7 @@ RSpec.describe 'MCP endpoint', type: :request do
     it 'returns null before the user left any feedback' do
       create(:feedback) # somebody else's
 
-      expect(tool_data('get_my_feedback')).to eq('feedback' => nil)
+      expect(tool_data('get_my_feedback')).to eq('feedback' => nil, 'unread_replies' => 0)
     end
 
     it "returns the user's own feedback only" do
@@ -262,6 +262,185 @@ RSpec.describe 'MCP endpoint', type: :request do
 
       expect(data['feedback']).to include('id' => mine.to_param, 'rating' => 8, 'sentiment' => 'positive',
                                           'comment' => 'Solid', 'posted_via' => 'web')
+    end
+  end
+
+  describe 'get_my_feedback replies' do
+    it 'returns the thread with roles, oldest first' do
+      mine  = create(:feedback, user:)
+      admin = create(:user, :admin, name: 'Support Admin')
+      create(:feedback_reply, feedback: mine, user: admin, body: 'Thanks!', created_at: 2.hours.ago)
+      create(:feedback_reply, feedback: mine, user:, body: 'You are welcome', created_at: 1.hour.ago)
+
+      replies = tool_data('get_my_feedback').dig('feedback', 'replies')
+
+      expect(replies).to match([
+        a_hash_including('author' => 'Support Admin', 'role' => 'admin', 'comment' => 'Thanks!'),
+        a_hash_including('author' => user.name, 'role' => 'author', 'comment' => 'You are welcome')
+      ])
+    end
+
+    it 'returns an empty thread when nobody replied' do
+      create(:feedback, user:)
+
+      expect(tool_data('get_my_feedback').dig('feedback', 'replies')).to eq([])
+    end
+  end
+
+  describe 'get_my_feedback unread replies' do
+    let(:admin) { create(:user, :admin, name: 'Support Admin') }
+    let!(:mine) { create(:feedback, user:) }
+
+    it 'counts unread replies, flags them new and reads them' do
+      seen   = create(:feedback_reply, feedback: mine, user: admin, body: 'Old', created_at: 3.hours.ago)
+      mine.update_column(:replies_seen_at, seen.created_at)
+      create(:feedback_reply, feedback: mine, user: admin, body: 'Fresh', created_at: 1.hour.ago)
+
+      first  = tool_data('get_my_feedback')
+      second = tool_data('get_my_feedback')
+
+      expect(first['unread_replies']).to eq(1)
+      expect(first['feedback']['replies'].map { |r| [ r['comment'], r['new'] ] }).to eq([ [ 'Old', false ], [ 'Fresh', true ] ])
+      expect(second['unread_replies']).to eq(0)
+      expect(second['feedback']['replies'].map { |r| r['new'] }).to eq([ false, false ])
+    end
+
+    it 'gives a role of nil to a reply of a demoted admin' do
+      former = create(:user, :admin)
+      create(:feedback_reply, feedback: mine, user: former)
+      former.update!(admin: false)
+
+      expect(tool_data('get_my_feedback').dig('feedback', 'replies', 0, 'role')).to be_nil
+    end
+  end
+
+  describe 'list_feedback' do
+    let!(:positive) { create(:feedback, rating: 9, body: 'Loved it', updated_at: 2.days.ago) }
+    let!(:negative) { create(:feedback, rating: 2, body: 'Hated it', updated_at: 1.day.ago) }
+
+    it 'lists others\' reviews with the author, stats and pagination' do
+      data = tool_data('list_feedback')
+
+      expect(data['feedbacks'].map { |f| f['comment'] }).to eq([ 'Hated it', 'Loved it' ])
+      expect(data['feedbacks'].first).to include('author' => negative.user.name, 'id' => negative.to_param,
+                                                 'sentiment' => 'negative')
+      expect(data['own_feedback']).to be_nil
+      expect(data['stats']).to include('total' => 2, 'average' => 5.5)
+      expect(data['pagination']).to include('page' => 1, 'total_entries' => 2, 'next_page' => nil)
+    end
+
+    it 'filters by sentiment' do
+      data = tool_data('list_feedback', { sentiment: 'positive' })
+
+      expect(data['feedbacks'].map { |f| f['comment'] }).to eq([ 'Loved it' ])
+      expect(data['stats']['total']).to eq(2)
+    end
+
+    it 'rejects an unknown sentiment at the schema level' do
+      expect(call_tool('list_feedback', { sentiment: 'angry' })['isError']).to be(true)
+    end
+
+    it 'returns the own review separately, never in the list' do
+      create(:feedback, user:, body: 'Mine')
+
+      data = tool_data('list_feedback')
+
+      expect(data['own_feedback']).to include('comment' => 'Mine')
+      expect(data['own_feedback']).not_to have_key('author')
+      expect(data['feedbacks'].map { |f| f['comment'] }).not_to include('Mine')
+    end
+
+    it 'flags unread replies under the own review as new and marks them seen' do
+      mine = create(:feedback, user:)
+      create(:feedback_reply, feedback: mine, user: create(:user, :admin), body: 'Hello')
+
+      first  = tool_data('list_feedback')
+      second = tool_data('list_feedback')
+
+      expect(first['own_feedback']['replies'].first).to include('comment' => 'Hello', 'new' => true)
+      expect(second['own_feedback']['replies'].first).to include('new' => false)
+      expect(user.reload.unread_feedback_replies?).to be(false)
+    end
+  end
+
+  describe 'reply_to_feedback' do
+    let(:admin_user)  { create(:user, :admin) }
+    let(:admin_token) { create(:api_token, user: admin_user).token }
+
+    def call_as(auth_token, arguments)
+      mcp_post({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reply_to_feedback', arguments: } },
+               auth: "Bearer #{auth_token}")
+      JSON.parse(response.body).fetch('result')
+    end
+
+    it "posts under the user's own feedback by default and returns the thread" do
+      mine = create(:feedback, user:)
+      create(:feedback_reply, feedback: mine, body: 'Admin question')
+
+      data = tool_data('reply_to_feedback', { comment: 'My answer' })
+
+      expect(data['feedback']['id']).to eq(mine.to_param)
+      expect(data['feedback']['replies'].map { |r| [ r['role'], r['comment'] ] })
+        .to eq([ [ 'admin', 'Admin question' ], [ 'author', 'My answer' ] ])
+      expect(mine.replies.last).to have_attributes(user:, body: 'My answer')
+    end
+
+    it 'lets an admin reply under any feedback by id' do
+      other = create(:feedback)
+
+      result = call_as(admin_token, { comment: 'Thanks!', feedback_id: other.to_param })
+
+      expect(result['isError']).to be(false)
+      expect(other.replies.reload.map { |r| [ r.user, r.body ] }).to eq([ [ admin_user, 'Thanks!' ] ])
+      expect(JSON.parse(result['content'].first['text']).dig('feedback', 'replies', 0, 'role')).to eq('admin')
+    end
+
+    it 'refuses a non-admin under somebody else\'s feedback' do
+      other = create(:feedback)
+
+      result = call_tool('reply_to_feedback', { comment: 'Sneaky', feedback_id: other.to_param })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to eq(I18n.t('mcp.errors.reply_forbidden'))
+      expect(other.replies).to be_empty
+    end
+
+    it 'reports an unknown id' do
+      result = call_tool('reply_to_feedback', { comment: 'Hi', feedback_id: 'nope' })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to eq(I18n.t('mcp.errors.unknown_feedback', id: 'nope'))
+      expect(FeedbackReply.count).to eq(0)
+    end
+
+    it 'reports a missing own feedback when no id is given' do
+      create(:feedback) # somebody else's
+
+      result = call_tool('reply_to_feedback', { comment: 'Hello' })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to eq(I18n.t('mcp.errors.no_feedback'))
+      expect(FeedbackReply.count).to eq(0)
+    end
+
+    it 'rejects an empty or oversized comment at the schema level' do
+      create(:feedback, user:)
+
+      [ '', 'a' * (FeedbackReply::BODY_MAX_LENGTH + 1) ].each do |comment|
+        expect(call_tool('reply_to_feedback', { comment: })['isError']).to be(true)
+      end
+      expect(FeedbackReply.count).to eq(0)
+    end
+
+    it 'reports a full thread as a readable tool error' do
+      mine = create(:feedback, user:)
+      stub_const('FeedbackReply::MAX_PER_FEEDBACK', 1)
+      create(:feedback_reply, feedback: mine)
+
+      result = call_tool('reply_to_feedback', { comment: 'One too many' })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to eq(I18n.t('feedback_reply.errors.thread_full', count: 1))
     end
   end
 

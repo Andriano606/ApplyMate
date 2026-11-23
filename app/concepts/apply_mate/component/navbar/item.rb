@@ -24,4 +24,11 @@ class ApplyMate::Component::Navbar::Item
   def turbo_stream? = turbo == :stream
   def divider?      = @divider
   def icon?         = icon_name.present?
+  def variant       = options.fetch(:variant, :primary)
+  def badge         = options[:badge]
+
+  # prefetch: false keeps Turbo from loading the page on hover (a GET with side effects).
+  def link_data
+    { turbo_stream: (true if turbo_stream?), turbo_prefetch: (false if options[:prefetch] == false) }.compact
+  end
 end

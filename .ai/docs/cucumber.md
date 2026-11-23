@@ -78,9 +78,20 @@ Given the vacancy search index is refreshed
 ```gherkin
 Given "Olena" has left a 9/10 feedback "Saves me hours"        # review by another user (factory)
 When I filter the feedback by positive                          # positive | neutral | negative | all
-Then I see 3 feedback cards                                     # everyone's list; the pinned own review is not counted
+Then I see 3 feedback cards                                     # other people's reviews; the viewer's own pinned review is not counted
+When I pick the rating 8                                        # clicks the visible chip <label> of the radio picker (inputs are sr-only)
+Given an admin "Support" has replied "Text" under the review by "Olena"
+When I start a reply under the review by "Olena"                # clicks the <summary> of the collapsed reply <details>
+When I fill in the reply with "Text"                            # textarea of the open reply form
+When I send the reply                                           # submits the OPEN form (an admin sees one form per review)
+Then the thread under the review by "Olena" shows "Text"        # scoped to that review's [data-test-id="feedback-thread"]
+Then there is no reply form on the page
+Then the navbar shows the unread feedback reply badge           # [data-test-id="navbar-unread-badge"] (desktop)
+Then the navbar shows no unread feedback reply badge
+Then the reply "Text" is marked as new                          # [data-test-id="feedback-reply-new"] inside that reply
+Then the reply "Text" is not marked as new
 Then my own feedback shows "Handy vacancy bank"                 # [data-test-id="own-feedback"]
-When I pick Connect Claude in the user menu                     # JS click on the user-menu item (opens the modal)
+When I press the Connect Claude button in the navbar                     # JS click on the navbar button (opens the modal)
 When I remember the MCP token                                   # stores the current personal token of the last User
 When I regenerate the MCP token and confirm                     # accepts the data-turbo-confirm dialog
 Then the MCP command has a placeholder instead of a token

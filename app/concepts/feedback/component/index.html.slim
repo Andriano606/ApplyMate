@@ -1,50 +1,66 @@
-= header(title: I18n.t('feedback.index.title'))
+.mx-auto.max-w-3xl.space-y-6
+  = header(title: I18n.t('feedback.index.title'))
 
-.space-y-6
-  / Summary
-  section.grid.grid-cols-2.gap-3.md:grid-cols-4[data-test-id="feedback-stats"]
-    .rounded-lg.bg-white.p-4.shadow.dark:bg-gray-800
-      p.text-xs.font-medium.uppercase.tracking-wide.text-gray-500.dark:text-gray-400 = I18n.t('feedback.index.average')
-      p.mt-1.text-2xl.font-semibold.text-gray-900.dark:text-gray-100
-        = average
-        span.text-sm.font-normal.text-gray-400 = ' / 10'
-    - Feedback::SENTIMENTS.each_key do |sentiment|
-      .rounded-lg.bg-white.p-4.shadow.dark:bg-gray-800
-        p.text-xs.font-medium.uppercase.tracking-wide.text-gray-500.dark:text-gray-400 = filter_label(sentiment)
-        p.mt-1.text-2xl.font-semibold.text-gray-900.dark:text-gray-100 = @stats[:by_sentiment][sentiment]
-
-  / The viewer's own review
-  section.rounded-lg.bg-white.p-4.shadow.md:p-6.dark:bg-gray-800[data-test-id="own-feedback"]
-    - if @own_feedback
-      .flex.flex-col.gap-3.sm:flex-row.sm:items-center.sm:justify-between.mb-4
-        h2.text-lg.font-semibold.text-gray-800.dark:text-gray-200 = I18n.t('feedback.index.own_title')
-        = link(**edit_link_options)
-      = render Feedback::Component::Card.new(feedback: @own_feedback, framed: false)
-    - else
-      .flex.flex-col.gap-4.md:flex-row.md:items-center.md:justify-between
+  / Summary: average + sentiment split
+  section.rounded-xl.bg-white.p-5.shadow-sm.ring-1.ring-gray-100.md:p-6.dark:bg-gray-800.dark:ring-gray-700[
+      data-test-id="feedback-stats"]
+    .flex.flex-col.gap-6.md:flex-row.md:items-center.md:gap-10
+      .flex.items-center.gap-4.md:border-r.md:border-gray-100.md:pr-10.dark:md:border-gray-700
+        p.text-5xl.font-bold.tracking-tight.text-gray-900.dark:text-gray-100[data-test-id="feedback-average"] = average
         div
-          h2.text-lg.font-semibold.text-gray-800.dark:text-gray-200 = I18n.t('feedback.index.cta_title')
-          p.mt-1.text-sm.text-gray-500.dark:text-gray-400
-            - if @signed_in
-              = I18n.t('feedback.index.cta_hint')
-            - else
-              = I18n.t('feedback.index.cta_guest')
-        = link(**cta_link_options)
+          p.text-sm.font-medium.text-gray-500.dark:text-gray-400 = I18n.t('feedback.index.average')
+          p.text-sm.text-gray-500.dark:text-gray-400 = total_label
+      .flex-1.space-y-3
+        .flex.h-2.5.overflow-hidden.rounded-full.bg-gray-100.dark:bg-gray-700
+          - sentiments.each do |sentiment|
+            - if count(sentiment).positive?
+              div[class=SENTIMENT_COLORS[sentiment][:bar] style="width: #{share(sentiment)}%"]
+        dl.grid.grid-cols-3.gap-2
+          - sentiments.each do |sentiment|
+            div
+              dt.flex.items-center.gap-1.5.text-xs.font-medium.text-gray-500.dark:text-gray-400
+                span[class="h-2 w-2 rounded-full #{SENTIMENT_COLORS[sentiment][:dot]}"]
+                = filter_label(sentiment)
+              dd.mt-0.5.text-lg.font-semibold.text-gray-900.dark:text-gray-100
+                = count(sentiment)
+                span.ml-1.text-xs.font-normal.text-gray-500.dark:text-gray-400 = "#{share(sentiment)}%"
 
-  / Everyone's reviews
+  / The viewer's own review, or a call to write one
+  - if @own_feedback
+    section.rounded-xl.bg-white.p-5.shadow-sm.ring-2.ring-indigo-100.md:p-6.dark:bg-gray-800.dark:ring-indigo-900[
+        data-test-id="own-feedback"]
+      h2.mb-3[class=OWN_TITLE_CLASSES] = I18n.t('feedback.index.own_title')
+      = render Feedback::Component::Card.new(feedback: @own_feedback, viewer: @viewer, framed: false, \
+                                             new_reply_ids: @new_reply_ids) do |card|
+        - card.with_action do
+          = link(**edit_link_options) do
+            = icon(:edit, size: 4)
+            span.hidden.sm:inline = I18n.t('feedback.index.edit')
+  - else
+    section[class=CTA_CLASSES data-test-id="own-feedback"]
+      span[class=CTA_ICON_CLASSES]
+        = icon(:chat_bubble, size: 6)
+      .flex-1
+        h2.text-base.font-semibold.text-gray-900.dark:text-gray-100 = I18n.t('feedback.index.cta_title')
+        p.mt-1.text-sm.text-gray-600.dark:text-gray-400 = cta_hint
+      = link(**cta_link_options)
+
+  / Everyone else's reviews
   section.space-y-4
-    nav.flex.flex-wrap.gap-2[aria-label=I18n.t('feedback.index.filter_label')]
-      - filters.each do |sentiment, count|
-        = helpers.link_to filter_url(sentiment), **filter_link_options(sentiment) do
-          = filter_label(sentiment)
-          span.opacity-70 = count
+    .flex.flex-col.gap-3.sm:flex-row.sm:items-center.sm:justify-between
+      h2.text-lg.font-semibold.text-gray-900.dark:text-gray-100 = I18n.t('feedback.index.list_title')
+      nav.flex.flex-wrap.gap-2[aria-label=I18n.t('feedback.index.filter_label')]
+        - [ nil, *sentiments ].each do |sentiment|
+          = helpers.link_to helpers.feedbacks_path(sentiment:), **filter_link_options(sentiment) do
+            = filter_label(sentiment)
+            span.tabular-nums.opacity-80 = filter_count(sentiment)
 
     - if @feedbacks.any?
-      .grid.grid-cols-1.gap-4.lg:grid-cols-2
+      .space-y-4
         - @feedbacks.each do |feedback|
-          = render Feedback::Component::Card.new(feedback:)
+          = render Feedback::Component::Card.new(feedback:, viewer: @viewer)
       - if paginate?
         = helpers.will_paginate @feedbacks, renderer: ApplyMate::Component::Table::PaginationRenderer
     - else
-      .rounded-lg.bg-white.shadow.dark:bg-gray-800
+      .rounded-xl.bg-white.shadow-sm.ring-1.ring-gray-100.dark:bg-gray-800.dark:ring-gray-700
         = render empty_state

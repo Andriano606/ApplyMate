@@ -3,8 +3,12 @@ div data-controller="mobile-menu"
   .flex.md:hidden.items-center.justify-between.h-14
     / Burger button
     = button(variant: :icon, data: { action: 'click->mobile-menu#toggle' }) do
-      span data-mobile-menu-target="burgerIcon"
+      span.relative data-mobile-menu-target="burgerIcon"
         = icon(:burger, size: 6)
+        - if unread_badge
+          span.absolute.-right-0.5.-top-0.5.h-2.5.w-2.5.rounded-full.bg-red-500.ring-2.ring-white.dark:ring-gray-800[
+              data-test-id="navbar-unread-badge-mobile"]
+          span.sr-only = unread_badge
       span.hidden data-mobile-menu-target="closeIcon"
         = icon(:close, size: 6)
 
@@ -40,10 +44,16 @@ div data-controller="mobile-menu"
                    'hover:bg-gray-50 dark:hover:bg-gray-700 ' \
                    'rounded-lg transition-colors'
         - elsif item.section == :actions
-          = link_to item.label, item.path, \
-            data: ({ turbo_stream: true } if item.turbo_stream?), \
-            class: 'block px-3 py-2 text-base font-medium text-indigo-600 dark:text-indigo-400 ' \
-                   'hover:bg-indigo-50 dark:hover:bg-gray-700 rounded-lg transition-colors'
+          = link_to item.path, \
+            data: item.link_data, \
+            class: 'flex items-center gap-2 px-3 py-2 text-base font-medium text-indigo-600 dark:text-indigo-400 ' \
+                   'hover:bg-indigo-50 dark:hover:bg-gray-700 rounded-lg transition-colors' do
+            = item.label
+            - if item.badge
+              span.relative.inline-flex
+                = icon(:chat_bubble, size: 5)
+                span.absolute.-right-0.5.-top-0.5.h-2.5.w-2.5.rounded-full.bg-red-500.ring-2.ring-white
+              span.sr-only = item.badge
         - else
           = link_to item.path, \
             data: ({ turbo_stream: true } if item.turbo_stream?), \

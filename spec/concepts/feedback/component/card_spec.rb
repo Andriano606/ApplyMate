@@ -15,7 +15,7 @@ RSpec.describe Feedback::Component::Card, type: :component do
   it 'colours the rating by sentiment and marks MCP posts' do
     render_inline(described_class.new(feedback: create(:feedback, rating: 3, posted_via: 'mcp')))
 
-    expect(page).to have_css('[data-test-id="feedback-rating"].bg-red-100', text: '3/10')
+    expect(page).to have_css('[data-test-id="feedback-rating"].bg-red-50', text: '3/10')
     expect(page).to have_text(I18n.t('feedback.card.via_mcp'))
   end
 end

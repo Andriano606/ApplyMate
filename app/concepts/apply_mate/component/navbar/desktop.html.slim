@@ -1,21 +1,33 @@
 .hidden.md:flex.items-center.justify-between.h-16
   / Left: Logo + nav links
-  .flex.items-center.gap-8
+  .flex.items-center.gap-6
     - if logo_item
       = link_to logo_item.label, logo_item.path, \
-        class: 'text-xl font-bold text-indigo-600 hover:text-indigo-700 transition-colors'
-    - nav_items.each do |item|
-      = link_to item.label, item.path, \
-        class: 'text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-indigo-600 transition-colors'
+        class: 'inline-flex h-9 items-center text-xl font-bold leading-none text-indigo-600 ' \
+               'hover:text-indigo-700 transition-colors'
+    - if nav_items.any?
+      .flex.items-center.gap-1
+        - nav_items.each do |item|
+          = link_to item.path, class: nav_link_classes(item), 'aria-current': ('page' if active?(item)) do
+            - if item.icon?
+              = icon(item.icon_name, size: 4)
+            = item.label
 
   / Right: actions + user dropdown / guest
-  .flex.items-center.gap-4
-    = debug_button(path: helpers.admin_root_path, text: I18n.t('components.debug_button.label'))
+  .flex.items-center.gap-3
     - action_items.each do |item|
-      = link_to item.label, item.path, \
-        data: ({ turbo_stream: true } if item.turbo_stream?), \
-        class: 'inline-flex items-center px-4 py-2 text-sm font-medium ' \
-               'text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors'
+      = link_to item.path, class: action_link_classes(item), data: item.link_data, \
+                           'aria-current': ('page' if active?(item)) do
+        - if item.icon?
+          = icon(item.icon_name, size: 4)
+        = item.label
+        - if item.badge
+          span.relative.inline-flex.text-indigo-600.dark:text-indigo-400[title=item.badge
+                                                                         data-test-id="navbar-unread-badge"]
+            = icon(:chat_bubble, size: 5)
+            span.absolute.-right-0.5.-top-0.5.h-2.5.w-2.5.rounded-full.bg-red-500.ring-2.ring-white.dark:ring-gray-800
+          span.sr-only = item.badge
+    = debug_button(path: helpers.admin_root_path, text: I18n.t('components.debug_button.label'))
 
     - if user_menu_items.any?
       = render ApplyMate::Component::Dropdown.new do |dropdown|
@@ -26,7 +38,7 @@
 
         - dropdown.with_menu do
           div class=('mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg ' \
-                     'ring-1 ring-black ring-opacity-5 py-1 overflow-hidden')
+                     'ring-1 ring-black/5 py-1 overflow-hidden')
             / User info header
             .px-4.py-3.border-b.border-gray-100.dark:border-gray-700
               p.text-sm.font-medium.text-gray-900.dark:text-gray-100 = user_display_name

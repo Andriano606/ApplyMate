@@ -11,13 +11,16 @@ class Mcp::Component::ConnectCommand < ApplyMate::Component::Base
       "--header \"Authorization: Bearer #{token || TOKEN_PLACEHOLDER}\""
   end
 
-  def initialize(token: nil, **html_options)
+  # wrap: true breaks the long command over lines instead of scrolling it sideways.
+  def initialize(token: nil, wrap: false, **html_options)
     @token = token
+    @wrap = wrap
     @html_options = html_options
   end
 
   def call
     helpers.content_tag(:code, self.class.text(url: helpers.mcp_url, token: @token),
-                        class: 'text-green-400 text-xs select-all whitespace-pre', **@html_options)
+                        class: "text-green-400 text-xs select-all #{@wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}",
+                        **@html_options)
   end
 end

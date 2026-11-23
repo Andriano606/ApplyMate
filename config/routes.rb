@@ -36,7 +36,9 @@ Rails.application.routes.draw do
     resource :hidden_vacancy, only: [ :create, :destroy ]
   end
   resources :saved_filters, only: [ :new, :create, :edit, :update, :destroy ]
-  resources :feedbacks, only: [ :index, :new, :create, :edit, :update ]
+  resources :feedbacks, only: [ :index, :new, :create, :edit, :update ] do
+    resources :replies, only: [ :create ], controller: 'feedback_replies'
+  end
 
   # The user's own MCP token: "Connect Claude (MCP)" modal in the user menu
   resource :mcp_connection, only: [ :show, :create, :update ]

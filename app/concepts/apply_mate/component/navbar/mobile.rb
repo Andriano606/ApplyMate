@@ -16,6 +16,10 @@ class ApplyMate::Component::Navbar::Mobile < ApplyMate::Component::Base
   def user_menu_items = @items_by_section.fetch(:user_menu, [])
   def guest_items     = @items_by_section.fetch(:guest, [])
 
+  def unread_badge
+    action_items.filter_map(&:badge).first
+  end
+
   def menu_items
     @menu_items ||= nav_items + action_items + user_menu_items + guest_items
   end

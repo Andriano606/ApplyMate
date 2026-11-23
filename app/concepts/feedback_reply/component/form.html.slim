@@ -1,0 +1,19 @@
+details.group[id=self.class.dom_id_for(feedback) open=open? data-controller="details"
+               data-test-id="feedback-reply-form"]
+  summary[class=TOGGLE_CLASSES]
+    = icon(:chat_bubble, size: 4)
+    = I18n.t('feedback_reply.form.toggle')
+  = helpers.simple_form_for reply, url: helpers.feedback_replies_path(feedback), \
+                             html: { class: 'mt-2 space-y-2' } do |f|
+    = f.input :body, \
+        as: :text, \
+        label: false, \
+        wrapper: false, \
+        input_html: { rows: 3, maxlength: FeedbackReply::BODY_MAX_LENGTH, class: textarea_classes, \
+                      placeholder: I18n.t('feedback_reply.form.placeholder'), data: { details_target: 'focus' } }
+    - if error
+      p.text-sm.text-red-600 = error
+    .flex.justify-end.gap-2
+      = button(label: I18n.t('admin.common.cancel'), variant: :secondary, data: { action: 'details#close' })
+      = f.button :submit, I18n.t('feedback_reply.form.submit'), \
+          class: "#{ApplyMate::Component::Button::VARIANTS[:primary]} cursor-pointer"

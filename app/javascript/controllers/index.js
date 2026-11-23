@@ -13,6 +13,9 @@ application.register('chat-input', ChatInputController);
 import ChatPanelController from './chat_panel_controller';
 application.register('chat-panel', ChatPanelController);
 
+import DetailsController from './details_controller';
+application.register('details', DetailsController);
+
 import DropdownController from './dropdown_controller';
 application.register('dropdown', DropdownController);
 

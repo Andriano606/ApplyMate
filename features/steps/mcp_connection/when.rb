@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# The user-menu dropdown is closed by default; the item is clicked through JS
-# (the generic `I click on` step), so opening the menu is not required.
-When('I pick Connect Claude in the user menu') do
+# The button sits in the right side of the navbar (desktop and mobile menus both
+# render it); it is clicked through JS like the generic `I click on` step.
+When('I press the Connect Claude button in the navbar') do
   find(:link_or_button, I18n.t('navbar.connect_mcp'), visible: :all, match: :first)
     .execute_script('this.click()')
 end

@@ -9,6 +9,7 @@ class Feedback < ApplicationRecord
   POSTED_VIA = %w[web mcp].freeze
 
   belongs_to :user
+  has_many :replies, -> { order(:created_at) }, class_name: 'FeedbackReply', dependent: :destroy, inverse_of: :feedback
 
   validates :rating, presence: true, inclusion: { in: RATINGS }
   validates :body, presence: true, length: { maximum: BODY_MAX_LENGTH }
@@ -29,8 +30,23 @@ class Feedback < ApplicationRecord
     posted_via == 'mcp'
   end
 
+  # Replies by others the author has not seen yet (feedback page or MCP marks them seen).
+  def unread_replies
+    scope = replies.where.not(user_id:)
+    replies_seen_at ? scope.where(FeedbackReply.arel_table[:created_at].gt(replies_seen_at)) : scope
+  end
+
+  # Reads the thread as its author: returns the ids of the replies that were new
+  # (to highlight once) and moves replies_seen_at to the newest of them — not to
+  # "now", so a reply committed meanwhile stays unread.
+  def read_new_replies!
+    new_replies = unread_replies.pluck(:id, :created_at)
+    update_column(:replies_seen_at, new_replies.map(&:last).max) if new_replies.any?
+    new_replies.map(&:first)
+  end
+
   def edited?
-    updated_at - created_at > 1.minute
+    updated_at - created_at > 1.hour
   end
 
   private

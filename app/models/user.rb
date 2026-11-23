@@ -4,6 +4,7 @@ class User < ApplicationRecord
   has_many :api_tokens, dependent: :destroy
   has_one :personal_api_token, -> { where(personal: true) }, class_name: 'ApiToken', inverse_of: :user
   has_one :feedback, dependent: :destroy
+  has_many :feedback_replies, dependent: :destroy
   has_many :saved_filters, dependent: :destroy
   has_many :hidden_vacancies, dependent: :delete_all
 
@@ -17,6 +18,11 @@ class User < ApplicationRecord
   validates :name, presence: true
   validates :provider, presence: true
   validates :uid, presence: true, uniqueness: { scope: :provider }
+
+  # Navbar badge: someone answered in the thread under this user's feedback.
+  def unread_feedback_replies?
+    Feedback.find_by(user_id: id)&.unread_replies&.exists? || false
+  end
 
   def admin?
     admin

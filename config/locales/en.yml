@@ -5,6 +5,8 @@ en:
       feedback:
         body: Feedback
         rating: Rating
+      feedback_reply:
+        body: Reply
     errors:
       messages:
         blank: can't be blank
@@ -231,27 +233,33 @@ en:
       body_placeholder: What do you like, what is missing, what is broken?
       hint: One feedback per person — you can always change it later. Everyone visiting
         the page can read it.
-      rating: Rating from 1 to 10
-      rating_placeholder: Pick a rating
+      rating: Your rating
+      rating_high: 10 — excellent
+      rating_low: 1 — very bad
     index:
       average: Average rating
       cta_guest: Only signed-in users can leave feedback.
       cta_hint: 'Write it here or ask Claude: "leave feedback about ApplyMate" — it
-        will publish it via MCP.'
+        will publish it via MCP. Admins answer in the thread under your feedback.'
       cta_title: Tell us what you think about ApplyMate
       edit: Edit
       empty: No feedback yet
       empty_filtered: No feedback of this kind
       empty_hint: Be the first to share your impressions.
+      empty_others: No one else has left feedback yet
       filter_label: Feedback filter
       filters:
         all: All
         negative: Negative
         neutral: Neutral
         positive: Positive
+      list_title: What others say
       new: Leave feedback
       own_title: Your feedback
       title: Feedback
+      total:
+        one: "%{count} review"
+        other: "%{count} reviews"
     new:
       header: New feedback
       submit: Publish
@@ -261,11 +269,29 @@ en:
       positive: positive
     update:
       success: Feedback updated
+  feedback_reply:
+    create:
+      success: Reply posted
+    errors:
+      thread_full: The thread already has %{count} messages — no more can be added.
+    form:
+      placeholder: Your reply…
+      submit: Send
+      toggle: Reply
+    thread:
+      admin: Admin
+      author: Author
+      new: new
   home:
     index:
       no_vacancy: No vacancies fetched
   mcp:
     errors:
+      no_feedback: You have no feedback yet — publish it with submit_feedback first.
+      reply_forbidden: Only admins can reply under someone else's feedback — without
+        feedback_id the reply goes to your own thread.
+      unknown_feedback: Feedback "%{id}" not found — list_feedback returns the current
+        ids.
       unknown_saved_filter: Saved filter "%{id}" not found. list_saved_filters returns
         the available ones.
       unknown_sources: 'Unknown sources: %{sources}. Available: %{known}.'
@@ -278,7 +304,7 @@ en:
       copy_failed: Could not copy — select the command by hand
       intro: Connect ApplyMate to Claude and it can search vacancies, read descriptions,
         hide the ones you have seen and leave feedback on your behalf.
-      never_used: never
+      never_used: not used yet
       no_token: No token yet — it is created when you copy the command.
       regenerate: Regenerate token
       regenerate_confirm: Create a new token? The old one stops working and Claude
@@ -290,15 +316,21 @@ en:
       step_copy: Copy the command with the button below.
       step_run: Run it in a terminal where Claude Code is installed.
       title: Connect Claude (MCP)
-      token_status: 'Token created %{created}, last used: %{used}.'
+      token_status: Token created %{created} · %{used}.
+      used: last used %{time}
     update:
       success: New token created — copy the command again and reconnect Claude
   navbar:
     connect_mcp: Connect Claude (MCP)
     feedbacks: Feedback
+    feedbacks_unread: New reply to your feedback
     sign_in: Sign in
     sign_out: Sign out
     stop_impersonating: Stop impersonating
+  number:
+    format:
+      delimiter: ","
+      separator: "."
   payments:
     pay_now: Pay Now
     redirecting: Redirecting to payment gateway...

@@ -38,8 +38,10 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | `list_sources` | `Mcp::Operation::ListSources` | counts come from `Vacancy::Operation::CountBySource` (cached 5 min, expired by the sync) |
 | `list_saved_filters` | `Mcp::Operation::ListSavedFilters` | only the token user's filters |
 | `set_vacancy_hidden` | `Mcp::Operation::SetVacancyHidden` | wraps `HiddenVacancy::Operation::{Create,Destroy}`; idempotent |
-| `get_my_feedback` | `Mcp::Operation::GetMyFeedback` | the token user's feedback or `null` |
+| `list_feedback` | `Feedback::Operation::Index` (the web page's operation) | `sentiment`, `page`; stats, `own_feedback` (never repeated in `feedbacks`), every review with its thread and `author`; marks the user's unread replies seen, flagging them `new: true` |
+| `get_my_feedback` | `Mcp::Operation::GetMyFeedback` | the token user's feedback with its thread, unread replies flagged `new: true` + `unread_replies` count, then marked seen; `null` when none |
 | `submit_feedback` | `Mcp::Operation::SubmitFeedback` | `rating` (1–10) + `comment`; creates the user's single feedback, later calls replace it (`created: false`); wraps `Feedback::Operation::{Create,Update}` with `posted_via: 'mcp'`. See `.ai/docs/feedback.md` |
+| `reply_to_feedback` | `Mcp::Operation::ReplyToFeedback` | `comment`, optional `feedback_id` (default: the user's own feedback; other ids only for admins — `FeedbackReplyPolicy`); wraps `FeedbackReply::Operation::Create` |
 
 Ids are hashids everywhere (`to_param`), never bare integers.
 

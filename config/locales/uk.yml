@@ -5,6 +5,8 @@ uk:
       feedback:
         body: Відгук
         rating: Оцінка
+      feedback_reply:
+        body: Відповідь
     errors:
       messages:
         blank: не може бути порожнім
@@ -229,27 +231,35 @@ uk:
       body_placeholder: Що подобається, чого бракує, що не працює?
       hint: Один відгук на людину — пізніше його завжди можна змінити. Його бачать
         усі відвідувачі сторінки.
-      rating: Оцінка від 1 до 10
-      rating_placeholder: Оберіть оцінку
+      rating: Ваша оцінка
+      rating_high: 10 — чудово
+      rating_low: 1 — дуже погано
     index:
       average: Середня оцінка
       cta_guest: Відгуки можуть залишати лише користувачі, що увійшли.
       cta_hint: 'Напишіть тут або попросіть Claude: «залиш відгук про ApplyMate» —
-        він опублікує його через MCP.'
+        він опублікує його через MCP. Адміни відповідають у треді під відгуком.'
       cta_title: Поділіться враженнями про ApplyMate
       edit: Редагувати
       empty: Відгуків ще немає
       empty_filtered: Таких відгуків немає
       empty_hint: Станьте першим, хто поділиться враженнями.
+      empty_others: Інші користувачі ще не залишили відгуків
       filter_label: Фільтр відгуків
       filters:
         all: Усі
         negative: Негативні
         neutral: Нейтральні
         positive: Позитивні
+      list_title: Що кажуть інші
       new: Залишити відгук
       own_title: Ваш відгук
       title: Відгуки
+      total:
+        few: "%{count} відгуки"
+        many: "%{count} відгуків"
+        one: "%{count} відгук"
+        other: "%{count} відгуку"
     new:
       header: Новий відгук
       submit: Опублікувати
@@ -259,11 +269,28 @@ uk:
       positive: позитивно
     update:
       success: Відгук оновлено
+  feedback_reply:
+    create:
+      success: Відповідь опубліковано
+    errors:
+      thread_full: У треді вже %{count} повідомлень — більше додати не можна.
+    form:
+      placeholder: Ваша відповідь…
+      submit: Надіслати
+      toggle: Відповісти
+    thread:
+      admin: Адмін
+      author: Автор
+      new: нове
   home:
     index:
       no_vacancy: Немає жодної вакансії
   mcp:
     errors:
+      no_feedback: У вас ще немає відгуку — спершу опублікуйте його через submit_feedback.
+      reply_forbidden: Відповідати під чужим відгуком можуть лише адміни — без feedback_id
+        відповідь піде у ваш власний тред.
+      unknown_feedback: Відгук «%{id}» не знайдено — актуальні id поверне list_feedback.
       unknown_saved_filter: Збережений фільтр «%{id}» не знайдено. Доступні фільтри
         поверне list_saved_filters.
       unknown_sources: 'Невідомі джерела: %{sources}. Доступні: %{known}.'
@@ -289,16 +316,22 @@ uk:
       step_copy: Скопіюйте команду кнопкою нижче.
       step_run: Виконайте її в терміналі, де встановлено Claude Code.
       title: Підключити Claude (MCP)
-      token_status: 'Токен створено %{created}, востаннє використано: %{used}.'
+      token_status: Токен створено %{created} · %{used}.
+      used: востаннє використано %{time}
     update:
       success: Новий токен створено — скопіюйте команду ще раз і підключіть Claude
         заново
   navbar:
     connect_mcp: Підключити Claude (MCP)
     feedbacks: Відгуки
+    feedbacks_unread: Нова відповідь на ваш відгук
     sign_in: Увійти
     sign_out: Вийти
     stop_impersonating: Зупинити імперсонацію
+  number:
+    format:
+      delimiter: " "
+      separator: ","
   payments:
     pay_now: Оплатити
     redirecting: Перенаправлення на платіжний шлюз...
