@@ -7,7 +7,6 @@ class User < ApplicationRecord
   has_many :feedback_replies, dependent: :destroy
   has_many :feedback_thread_reads, dependent: :delete_all
   has_many :saved_filters, dependent: :destroy
-  has_many :hidden_vacancies, dependent: :delete_all
 
   belongs_to :default_saved_filter, class_name: 'SavedFilter', optional: true
 

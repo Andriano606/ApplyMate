@@ -32,10 +32,6 @@ class Mcp::Tool::SearchVacancies < Mcp::Tool::Base
         type: 'string',
         description: "Start from one of the user's saved filters (list_saved_filters); `query` and `exclude` narrow it further."
       },
-      include_hidden: {
-        type: 'boolean',
-        description: 'Also return vacancies the user hid (they carry hidden: true). Default false.'
-      },
       sort: { type: 'string', enum: Vacancy::Operation::Search::SORTS.keys, description: 'Default `newest`.' },
       page: { type: 'integer', minimum: 1, description: 'Default 1.' },
       per_page: {
@@ -48,14 +44,9 @@ class Mcp::Tool::SearchVacancies < Mcp::Tool::Base
   annotations(**READ_ONLY)
 
   def self.call(server_context:, **params)
-    run(Mcp::Operation::SearchVacancies, server_context, params) do |model|
-      hidden_ids = model.hidden_vacancy_ids
-      {
-        vacancies: model.vacancies.map do |vacancy|
-          Vacancy::Serializer::Summary.call(vacancy).merge(hidden: hidden_ids.include?(vacancy.id))
-        end,
-        pagination: pagination(model.vacancies)
-      }
+    run(Mcp::Operation::SearchVacancies, server_context, params) do |vacancies|
+      { vacancies: vacancies.map { |vacancy| Vacancy::Serializer::Summary.call(vacancy) },
+        pagination: pagination(vacancies) }
     end
   end
 end

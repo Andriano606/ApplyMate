@@ -14,7 +14,7 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
   *Connect Claude (MCP)* modal (see below) or one an admin issued in *Admin → API tokens*
   (`ApiToken`, looked up by `UserHandling#user_from_token`, which also stamps `last_used_at`).
   No token / unknown token → `401` with `WWW-Authenticate: Bearer` (`McpPolicy#access?`).
-  Every tool runs as the token's user, so saved filters and hidden vacancies are that user's.
+  Every tool runs as the token's user, so saved filters and feedback are that user's.
 - DNS-rebinding protection of the gem is off: it protects cookie-authenticated local servers,
   this endpoint only accepts a bearer token, and `Host` is checked by Rails `config.hosts`.
 
@@ -26,18 +26,17 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | `Mcp::Operation::Handle` | `authorize! :mcp, :access?`, builds server (tools, instructions, `server_context: { current_user: }`) |
 | `Mcp::Tool::Base` | `run(operation, server_context, params) { |model| payload }` — runs ONE operation as the token user, verifies it authorized, turns a failed result into an MCP tool error (`isError: true`) and a payload into text JSON + `structuredContent` |
 | `Mcp::Tool::*` | Schema + description + serialization only. **No business logic** — that goes in an operation |
-| `Mcp::Operation::*` | The logic behind each tool (resolve saved filter / sources, batch lookups, hide/restore) |
+| `Mcp::Operation::*` | The logic behind each tool (resolve saved filter / sources, batch lookups, feedback lookups) |
 | `Vacancy::Serializer::{Summary,Detail}` | Search hit (with 300-char snippet) / full record (`include_html:` adds `description_html`) |
 
 ## Tools
 
 | Tool | Operation | Notes |
 |------|-----------|-------|
-| `search_vacancies` | `Mcp::Operation::SearchVacancies` → `Vacancy::Operation::Search` | `query` (boolean expression, same parser as the search bar), `exclude`, `sources` (names or ids), `saved_filter_id`, `include_hidden` (default false), `sort` (`newest`/`relevance`), `page`, `per_page` (≤ 100, default 20) |
+| `search_vacancies` | `Mcp::Operation::SearchVacancies` → `Vacancy::Operation::Search` | `query` (boolean expression, same parser as the search bar), `exclude`, `sources` (names or ids), `saved_filter_id`, `sort` (`newest`/`relevance`), `page`, `per_page` (≤ 100, default 20) |
 | `get_vacancies` | `Mcp::Operation::GetVacancies` | up to 20 ids, order kept, unknown ids in `missing_ids` |
 | `list_sources` | `Mcp::Operation::ListSources` | counts come from `Vacancy::Operation::CountBySource` (cached 5 min, expired by the sync) |
 | `list_saved_filters` | `Mcp::Operation::ListSavedFilters` | only the token user's filters |
-| `set_vacancy_hidden` | `Mcp::Operation::SetVacancyHidden` | wraps `HiddenVacancy::Operation::{Create,Destroy}`; idempotent |
 | `list_feedback` | `Feedback::Operation::Index` (the web page's operation) | `sentiment`, `unread_only`, `page`; stats, `own_feedback` (never repeated in `feedbacks`), every review with its thread and `author`; replies the user had not read (own thread or threads they replied in) flagged `new: true`, then marked read |
 | `get_my_feedback` | `Mcp::Operation::GetMyFeedback` | the token user's feedback with its thread, unread replies flagged `new: true` + `unread_replies` count, then marked seen; `null` when none |
 | `submit_feedback` | `Mcp::Operation::SubmitFeedback` | `rating` (1–10) + `comment`; creates the user's single feedback, later calls replace it (`created: false`); wraps `Feedback::Operation::{Create,Update}` with `posted_via: 'mcp'`. See `.ai/docs/feedback.md` |
@@ -52,9 +51,9 @@ Ids are hashids everywhere (`to_param`), never bare integers.
 `include_tags/include_ops/exclude_tags`, `query` becomes a `must_tags` entry (ANDed with the whole
 filter expression — appending it as another tag would bind wrongly next to an `or`), `exclude` is
 appended to `exclude_tags`, and `Vacancy::Operation::BuildSearchQuery` turns it all into one bool
-query, adding `filter: terms source_id` and `must_not: terms vacancy_id` (hidden ids).
+query, adding `filter: terms source_id`.
 These keyword options of `Vacancy::Operation::Search` (`per_page`, `sort`, `must_tags`,
-`source_ids`, `exclude_hidden`) are never read from request params — only trusted callers set them.
+`source_ids`) are never read from request params — only trusted callers set them.
 
 `source_id` is an Elasticsearch field added after the index existed. On boot the ES initializer
 reads the index mapping and `put_mapping`s only when a field is missing, capped at 5s

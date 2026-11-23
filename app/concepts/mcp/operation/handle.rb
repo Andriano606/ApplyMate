@@ -16,7 +16,6 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     Mcp::Tool::GetVacancies,
     Mcp::Tool::ListSources,
     Mcp::Tool::ListSavedFilters,
-    Mcp::Tool::SetVacancyHidden,
     Mcp::Tool::GetMyFeedback,
     Mcp::Tool::ListFeedback,
     Mcp::Tool::SubmitFeedback,
@@ -30,7 +29,6 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     (boolean expressions with and/or/parentheses, Ukrainian operators і/або work too), by job
     board or via one of the user's saved filters (list_saved_filters), then get_vacancies to read
     the full descriptions. Closed vacancies disappear after the next sync, so ids can go stale.
-    set_vacancy_hidden marks a vacancy as dismissed for the user; hidden ones are skipped by search.
     ApplyMate also has a public feedback page about the service itself: list_feedback reads it,
     submit_feedback publishes the user's rating (1–10) and comment — one per user, later calls
     replace it — get_my_feedback shows their review with the thread of admins' answers (new ones

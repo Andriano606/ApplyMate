@@ -17,12 +17,10 @@ class Vacancy::Operation::Index < ApplyMate::Operation::Base
     saved_filter = resolve_saved_filter(params, current_user)
     remember_default_filter(saved_filter, current_user)
 
-    result = run_operation Vacancy::Operation::Search, { params:, current_user: }
-    vacancies = result.model
+    vacancies = run_operation(Vacancy::Operation::Search, { params:, current_user: }).model
 
     self.model = ApplyMate::Operation::Struct.new(
       vacancies:,
-      hidden_vacancy_ids: HiddenVacancy.vacancy_ids_for(user: current_user, vacancies:),
       include_tags: params[:include_tags],
       include_ops:  params[:include_ops],
       exclude_tags: params[:exclude_tags],

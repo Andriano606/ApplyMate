@@ -9,7 +9,6 @@
 #   per_page       — page size, clamped to 1..MAX_PER_PAGE
 #   sort           — 'newest' (default) or 'relevance' (ES score, newest on ties)
 #   must_tags / source_ids — passed through to BuildSearchQuery
-#   exclude_hidden — drop the vacancies current_user has hidden
 class Vacancy::Operation::Search < ApplyMate::Operation::Base
   MAX_PER_PAGE = 100
   SORTS = {
@@ -25,7 +24,7 @@ class Vacancy::Operation::Search < ApplyMate::Operation::Base
   end
 
   def perform!(params:, current_user:, per_page: WillPaginate.per_page, sort: 'newest',
-               must_tags: nil, source_ids: nil, exclude_hidden: false, **)
+               must_tags: nil, source_ids: nil, **)
     authorize! Vacancy.new, :index?
 
     query = run_operation(Vacancy::Operation::BuildSearchQuery,
@@ -33,8 +32,7 @@ class Vacancy::Operation::Search < ApplyMate::Operation::Base
                             include_ops:  params[:include_ops],
                             exclude_tags: params[:exclude_tags],
                             must_tags:,
-                            source_ids:,
-                            exclude_vacancy_ids: (hidden_vacancy_ids(current_user) if exclude_hidden) }).model
+                            source_ids: }).model
     per_page = per_page.to_i.clamp(1, MAX_PER_PAGE)
     page     = params[:page].to_i.clamp(1, self.class.last_reachable_page(per_page))
 
@@ -50,13 +48,6 @@ class Vacancy::Operation::Search < ApplyMate::Operation::Base
   end
 
   private
-
-  # Rides the unique (user_id, vacancy_id) index; a user hides at most thousands.
-  def hidden_vacancy_ids(current_user)
-    return [] if current_user.nil?
-
-    current_user.hidden_vacancies.pluck(:vacancy_id)
-  end
 
   def search_body(query, page, per_page, sort)
     {

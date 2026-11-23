@@ -6,7 +6,7 @@
 class Home::Component::GuestBanner < ApplyMate::Component::Base
   POINTS = [
     [ :magnifying_glass, 'search' ],
-    [ :eye_slash, 'hide' ],
+    [ :clipboard_list, 'filters' ],
     [ :sparkles, 'claude' ]
   ].freeze
 

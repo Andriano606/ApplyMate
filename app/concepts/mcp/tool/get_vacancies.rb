@@ -6,7 +6,7 @@ class Mcp::Tool::GetVacancies < Mcp::Tool::Base
   description <<~TEXT
     Everything ApplyMate stores about the given vacancies: title, company, source job board,
     original URL, the full plain-text description, when it was first seen (created_at) and last
-    refreshed by a sync (updated_at), and whether the user hid it. Ids come from search_vacancies.
+    refreshed by a sync (updated_at). Ids come from search_vacancies.
     Ids that no longer exist (the vacancy was closed and removed by a sync) are listed in missing_ids.
   TEXT
   input_schema(
@@ -28,10 +28,7 @@ class Mcp::Tool::GetVacancies < Mcp::Tool::Base
   def self.call(ids:, server_context:, include_html: false, **)
     run(Mcp::Operation::GetVacancies, server_context, { ids: }) do |model|
       {
-        vacancies: model.vacancies.map do |vacancy|
-          Vacancy::Serializer::Detail.call(vacancy, include_html:)
-                                     .merge(hidden: model.hidden_vacancy_ids.include?(vacancy.id))
-        end,
+        vacancies: model.vacancies.map { |vacancy| Vacancy::Serializer::Detail.call(vacancy, include_html:) },
         missing_ids: model.missing_ids
       }
     end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_23_100003) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_23_100004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -85,15 +85,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100003) do
     t.index ["updated_at"], name: "index_feedbacks_on_updated_at"
     t.index ["user_id"], name: "index_feedbacks_on_user_id", unique: true
     t.check_constraint "rating >= 1 AND rating <= 10", name: "feedbacks_rating_range"
-  end
-
-  create_table "hidden_vacancies", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
-    t.bigint "vacancy_id", null: false
-    t.index ["user_id", "vacancy_id"], name: "index_hidden_vacancies_on_user_id_and_vacancy_id", unique: true
-    t.index ["vacancy_id"], name: "index_hidden_vacancies_on_vacancy_id"
   end
 
   create_table "proxies", force: :cascade do |t|
@@ -328,8 +319,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100003) do
   add_foreign_key "feedback_thread_reads", "feedbacks"
   add_foreign_key "feedback_thread_reads", "users"
   add_foreign_key "feedbacks", "users"
-  add_foreign_key "hidden_vacancies", "users"
-  add_foreign_key "hidden_vacancies", "vacancies"
   add_foreign_key "proxy_source_stats", "proxies"
   add_foreign_key "proxy_source_stats", "sources"
   add_foreign_key "saved_filters", "users"

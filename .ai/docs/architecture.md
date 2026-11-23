@@ -1,6 +1,6 @@
 # Vacancy Bank Architecture
 
-ApplyMate is a vacancy bank: it keeps the list of live vacancies from several job boards (DOU, Djinni) up to date through a proxy pool, and lets users search, filter and hide them (Elasticsearch).
+ApplyMate is a vacancy bank: it keeps the list of live vacancies from several job boards (DOU, Djinni) up to date through a proxy pool, and lets users search and filter them (Elasticsearch).
 
 ## Module Boundaries
 
@@ -15,7 +15,7 @@ These are enforced boundaries, not guidelines. Violating them causes cross-layer
 | `Vacancy::Operation::SyncVacancies` | Drives the scrapers: proxy pool, fibers, pagination, upsert, stale-vacancy handling | scrapers, clients, `Proxy` |
 | `Proxy::Operation::*` | Fetch candidate proxies, persist them, validate them against a source's `listing_url` | clients, `ProxySourceStat` |
 | `Vacancy::Operation::{Index,Search,...}` | Read side: Elasticsearch search over `Vacancy` | `Vacancy` (ES mappings) |
-| `Mcp::Tool::*` / `Mcp::Operation::*` | MCP server at `/mcp`: tools are adapters, each runs one operation that reuses the read side | `Vacancy::Operation::Search`, `HiddenVacancy::Operation::*` |
+| `Mcp::Tool::*` / `Mcp::Operation::*` | MCP server at `/mcp`: tools are adapters, each runs one operation that reuses the read side | `Vacancy::Operation::Search`, `Feedback::Operation::*` |
 
 Details: `.ai/docs/scrapers.md`, `.ai/docs/sync_vacancies.md`, `.ai/docs/mcp.md`, `.ai/docs/proxy.md`, `.ai/docs/fetch_proxies.md`, `.ai/docs/async.md`.
 
