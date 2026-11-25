@@ -310,6 +310,13 @@ uk:
       no_feedback: У вас ще немає відгуку — спершу опублікуйте його через submit_feedback.
       reply_forbidden: Відповідати під чужим відгуком можуть лише адміни — без feedback_id
         відповідь піде у ваш власний тред.
+      saved_filter_empty: Фільтр порожній — задайте хоча б один тег у include_tags
+        або exclude_tags.
+      saved_filter_ops_count: 'include_ops: %{count} операторів на %{tags} тегів —
+        потрібно рівно %{expected} (по одному між сусідніми тегами), або пропустіть
+        include_ops, і теги з’єднаються через and.'
+      saved_filter_tag_comma: Тег «%{tag}» містить кому — пошук ділить теги по комах.
+        Розбийте його на окремі теги або з’єднайте частини через or.
       unknown_feedback: Відгук «%{id}» не знайдено — актуальні id поверне list_feedback.
       unknown_saved_filter: Збережений фільтр «%{id}» не знайдено. Доступні фільтри
         поверне list_saved_filters.

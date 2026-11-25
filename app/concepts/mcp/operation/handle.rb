@@ -22,6 +22,9 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     Mcp::Tool::GetVacancies,
     Mcp::Tool::ListSources,
     Mcp::Tool::ListSavedFilters,
+    Mcp::Tool::CreateSavedFilter,
+    Mcp::Tool::UpdateSavedFilter,
+    Mcp::Tool::DeleteSavedFilter,
     Mcp::Tool::GetMyFeedback,
     Mcp::Tool::ListFeedback,
     Mcp::Tool::SubmitFeedback,
@@ -35,6 +38,9 @@ class Mcp::Operation::Handle < ApplyMate::Operation::Base
     (boolean expressions with and/or/parentheses, Ukrainian operators і/або work too), by job
     board or via one of the user's saved filters (list_saved_filters), then get_vacancies to read
     the full descriptions. Closed vacancies disappear after the next sync, so ids can go stale.
+    When the user wants a search kept, create_saved_filter saves it as a preset of the web search
+    bar; update_saved_filter and delete_saved_filter change or remove one — tune the expression
+    with search_vacancies first.
     ApplyMate also has a public feedback page about the service itself: list_feedback reads it,
     submit_feedback publishes the user's rating (1–10) and comment — one per user, later calls
     replace it — get_my_feedback shows their review with the thread of admins' answers (new ones
