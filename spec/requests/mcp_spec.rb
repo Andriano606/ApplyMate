@@ -147,7 +147,7 @@ RSpec.describe 'MCP endpoint', type: :request do
 
     names = JSON.parse(response.body).dig('result', 'tools').map { |tool| tool['name'] }
     expect(names).to contain_exactly('search_vacancies', 'get_vacancies', 'list_sources',
-                                     'list_saved_filters',
+                                     'list_saved_filters', 'create_saved_filter', 'update_saved_filter', 'delete_saved_filter',
                                      'get_my_feedback', 'list_feedback', 'submit_feedback', 'reply_to_feedback', 'delete_feedback')
   end
 
@@ -602,6 +602,142 @@ RSpec.describe 'MCP endpoint', type: :request do
         expect(result['isError']).to be(true)
       end
       expect(Feedback.where(user:)).to be_empty
+    end
+  end
+
+  describe 'create_saved_filter' do
+    it 'saves the filter as a web preset and the user\'s default, joining tags with and by default' do
+      data = nil
+      expect do
+        data = tool_data('create_saved_filter', { name: 'RoR', include_tags: [ '"ruby on rails" or "ruby developer"', 'remote' ],
+                                                  exclude_tags: [ 'data engineer' ] })
+      end.to change { user.saved_filters.count }.by(1)
+
+      filter = user.saved_filters.sole
+      expect(data['saved_filter']).to eq('id' => filter.to_param, 'name' => 'RoR',
+                                         'include_tags' => [ '"ruby on rails" or "ruby developer"', 'remote' ],
+                                         'include_ops' => [ 'and' ], 'exclude_tags' => [ 'data engineer' ])
+      expect(user.reload.default_saved_filter).to eq(filter)
+    end
+
+    it 'searches like the saved filter it created' do
+      id = tool_data('create_saved_filter', { name: 'Rails', include_tags: [ 'rails' ] })['saved_filter']['id']
+
+      found = tool_data('search_vacancies', { saved_filter_id: id })
+
+      expect(found['vacancies'].map { |v| v['id'] }).to eq([ rails_vacancy.to_param ])
+    end
+
+    it 'keeps explicit ops' do
+      tool_data('create_saved_filter', { name: 'Either', include_tags: %w[rails python remote], include_ops: %w[or g_or] })
+
+      expect(user.saved_filters.sole.include_ops).to eq(%w[or g_or])
+    end
+
+    {
+      'a tag with a comma' => [ { include_tags: [ 'ruby, rails' ] }, 'ruby, rails' ],
+      'too few ops' => [ { include_tags: %w[a b c], include_ops: [ 'and' ] }, 'include_ops' ],
+      'too many ops' => [ { include_tags: [ 'a' ], include_ops: [ 'and' ] }, 'include_ops' ],
+      'an empty filter' => [ { include_tags: [ '  ' ], exclude_tags: [] }, 'include_tags' ]
+    }.each do |label, (arguments, message)|
+      it "refuses #{label} with a readable error" do
+        result = call_tool('create_saved_filter', { name: 'Bad' }.merge(arguments))
+
+        expect(result['isError']).to be(true)
+        expect(result['content'].first['text']).to include(message)
+        expect(user.saved_filters).to be_empty
+      end
+    end
+
+    it 'refuses an unknown op at the schema level' do
+      result = call_tool('create_saved_filter', { name: 'Bad', include_tags: %w[a b], include_ops: [ 'xor' ] })
+
+      expect(result['isError']).to be(true)
+      expect(user.saved_filters).to be_empty
+    end
+
+    it 'reports a taken name as a tool error' do
+      create(:saved_filter, user:, name: 'RoR')
+
+      result = call_tool('create_saved_filter', { name: 'RoR', include_tags: [ 'rails' ] })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to be_present
+      expect(user.saved_filters.count).to eq(1)
+    end
+  end
+
+  describe 'update_saved_filter' do
+    let!(:filter) do
+      create(:saved_filter, user:, name: 'Embedded', include_tags: %w[embedded stm32 remote], include_ops: %w[and g_or],
+                            exclude_tags: [ 'altium' ])
+    end
+
+    it 'renames and keeps everything that was not sent' do
+      data = tool_data('update_saved_filter', { id: filter.to_param, name: 'Firmware' })
+
+      expect(data['saved_filter']).to include('name' => 'Firmware', 'include_tags' => %w[embedded stm32 remote],
+                                              'include_ops' => %w[and g_or], 'exclude_tags' => [ 'altium' ])
+      expect(filter.reload.name).to eq('Firmware')
+    end
+
+    it 'joins new include_tags with and when ops are not sent' do
+      tool_data('update_saved_filter', { id: filter.to_param, include_tags: %w[rails ruby] })
+
+      expect(filter.reload).to have_attributes(include_tags: %w[rails ruby], include_ops: [ 'and' ], exclude_tags: [ 'altium' ])
+    end
+
+    it 'clears a list sent as empty' do
+      tool_data('update_saved_filter', { id: filter.to_param, exclude_tags: [] })
+
+      expect(filter.reload.exclude_tags).to eq([])
+    end
+
+    it 'renames a filter whose stored ops do not line up (old web data) without touching them' do
+      filter.update_columns(vacancy_search: filter.vacancy_search.merge('include_ops' => %w[and g_or or]))
+
+      tool_data('update_saved_filter', { id: filter.to_param, name: 'Renamed' })
+
+      expect(filter.reload).to have_attributes(name: 'Renamed', include_ops: %w[and g_or or])
+    end
+
+    it 'checks new ops against the kept tags' do
+      result = call_tool('update_saved_filter', { id: filter.to_param, include_ops: [ 'or' ] })
+
+      expect(result['isError']).to be(true)
+      expect(filter.reload.include_ops).to eq(%w[and g_or])
+    end
+
+    it "refuses another user's filter as unknown" do
+      foreign = create(:saved_filter, name: 'Theirs')
+
+      result = call_tool('update_saved_filter', { id: foreign.to_param, name: 'Mine now' })
+
+      expect(result['isError']).to be(true)
+      expect(result['content'].first['text']).to include(foreign.to_param)
+      expect(foreign.reload.name).to eq('Theirs')
+    end
+  end
+
+  describe 'delete_saved_filter' do
+    it 'deletes the filter and clears it as the default' do
+      filter = create(:saved_filter, user:, name: 'Old')
+      user.update!(default_saved_filter: filter)
+
+      data = tool_data('delete_saved_filter', { id: filter.to_param })
+
+      expect(data).to eq('deleted' => true, 'id' => filter.to_param, 'name' => 'Old')
+      expect(SavedFilter.exists?(filter.id)).to be(false)
+      expect(user.reload.default_saved_filter).to be_nil
+    end
+
+    it "refuses another user's filter as unknown" do
+      foreign = create(:saved_filter)
+
+      result = call_tool('delete_saved_filter', { id: foreign.to_param })
+
+      expect(result['isError']).to be(true)
+      expect(SavedFilter.exists?(foreign.id)).to be(true)
     end
   end
 end

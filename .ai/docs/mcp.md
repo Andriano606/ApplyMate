@@ -28,6 +28,7 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | `Mcp::Tool::*` | Schema + description + serialization only. **No business logic** — that goes in an operation |
 | `Mcp::Operation::*` | The logic behind each tool (resolve saved filter / sources, batch lookups, feedback lookups) |
 | `Vacancy::Serializer::{Summary,Detail}` | Search hit (with 300-char snippet) / full record (`include_html:` adds `description_html`) |
+| `SavedFilter::Serializer::Detail` | A saved filter (`id`, `name`, `include_tags`, `include_ops`, `exclude_tags`) — what `list_saved_filters` returns and the write tools accept and return |
 
 ## Tools
 
@@ -37,6 +38,9 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | `get_vacancies` | `Mcp::Operation::GetVacancies` | up to 20 ids, order kept, unknown ids in `missing_ids` |
 | `list_sources` | `Mcp::Operation::ListSources` | counts come from `Vacancy::Operation::CountBySource` (cached 5 min, expired by the sync) |
 | `list_saved_filters` | `Mcp::Operation::ListSavedFilters` | only the token user's filters |
+| `create_saved_filter` | `Mcp::Operation::CreateSavedFilter` | `name` + `include_tags` / `include_ops` / `exclude_tags`; wraps `SavedFilter::Operation::Create` (the web form), so the name is unique per user and the new filter becomes the user's `default_saved_filter` like on the web |
+| `update_saved_filter` | `Mcp::Operation::UpdateSavedFilter` | `id` + only the fields that change (omitted = kept, `[]` = cleared; new `include_tags` without `include_ops` get `and` between every tag); wraps `SavedFilter::Operation::Update` with the merged full state; also becomes the default filter |
+| `delete_saved_filter` | `Mcp::Operation::DeleteSavedFilter` | `id`; wraps `SavedFilter::Operation::Destroy` (the `users.default_saved_filter_id` FK nullifies) |
 | `list_feedback` | `Feedback::Operation::Index` (the web page's operation) | `sentiment`, `unread_only`, `page`; stats, `own_feedback` (never repeated in `feedbacks`), every review with its thread and `author`; replies the user had not read (own thread or threads they replied in) flagged `new: true`, then marked read |
 | `get_my_feedback` | `Mcp::Operation::GetMyFeedback` | the token user's feedback with its thread, unread replies flagged `new: true` + `unread_replies` count, then marked seen; `null` when none |
 | `submit_feedback` | `Mcp::Operation::SubmitFeedback` | `rating` (1–10) + `comment`; creates the user's single feedback, later calls replace it (`created: false`); wraps `Feedback::Operation::{Create,Update}` with `posted_via: 'mcp'`. See `.ai/docs/feedback.md` |
@@ -44,6 +48,19 @@ official `mcp` gem. Read this before adding or changing an MCP tool.
 | `delete_feedback` | `Mcp::Operation::DeleteFeedback` | optional `feedback_id` (default: own; others only for admins); wraps `Feedback::Operation::Destroy`; thread goes with it |
 
 Ids are hashids everywhere (`to_param`), never bare integers.
+
+### Saved filter input checks
+
+The web search bar always sends a consistent state, a model calling the write tools may not — and
+`Vacancy::Operation::BuildSearchQuery` would silently search for something else (it splits every
+tag on commas and fills missing ops with `and`). `Mcp::Operation::SavedFilterInput` therefore
+refuses, with a readable `mcp.errors.saved_filter_*` message: a tag containing a comma, an
+`include_ops` count other than `include_tags.size - 1`, and a filter with no tags at all. Op values
+are checked earlier by the tool schema (`enum` of `BuildSearchQuery::OPS`). A rename alone never
+re-checks the stored ops, so old web data cannot block it. Another user's filter id is reported as
+unknown, like a stale one (`mcp.errors.unknown_saved_filter`). The tool descriptions carry the
+matching rules (`Mcp::Tool::CreateSavedFilter::SYNTAX`) — notably that a one-word `exclude_tags`
+entry is a prefix match anywhere in the text, so multi-word phrases are safer.
 
 ### How search composes
 

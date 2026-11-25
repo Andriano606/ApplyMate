@@ -311,6 +311,13 @@ en:
       no_feedback: You have no feedback yet — publish it with submit_feedback first.
       reply_forbidden: Only admins can reply under someone else's feedback — without
         feedback_id the reply goes to your own thread.
+      saved_filter_empty: The filter is empty — give at least one tag in include_tags
+        or exclude_tags.
+      saved_filter_ops_count: 'include_ops: %{count} ops for %{tags} tags — exactly
+        %{expected} are needed (one between each pair of neighbours), or omit include_ops
+        to join the tags with and.'
+      saved_filter_tag_comma: Tag "%{tag}" contains a comma — the search splits tags
+        on commas. Split it into separate tags or join the parts with or.
       unknown_feedback: Feedback "%{id}" not found — list_feedback returns the current
         ids.
       unknown_saved_filter: Saved filter "%{id}" not found. list_saved_filters returns
