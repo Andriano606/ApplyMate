@@ -29,25 +29,29 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
 
     content_tag(:div) do
       # 1. Основний контейнер
-      # Fixed height: pills never wrap; overflow scrolls horizontally instead of growing the bar
-      concat(content_tag(:div, class: 'flex flex-nowrap items-center gap-2 px-2 h-14 overflow-x-auto [scrollbar-width:thin] rounded-xl border-0 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 bg-white dark:bg-gray-800 shadow-sm transition-all') do
+      # Pills wrap onto new lines and the bar grows: a long filter stays fully visible, without a
+      # horizontal scrollbar that eats the bar's height and pushes the pills up
+      concat(content_tag(:div, class: 'flex flex-wrap items-center gap-2 px-2 py-2 min-h-14 rounded-xl border-0 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 bg-white dark:bg-gray-800 shadow-sm transition-all') do
         # Рендеримо згруповані теги (метод, який ми створили раніше)
         concat render_grouped_tags(f, tags, ops, name_prefix)
 
-        # Текстове поле для нового тегу
-        concat text_field_tag(new_tag_field, nil,
-                              class: 'flex-1 border-0 bg-transparent text-gray-900 dark:text-white p-1 outline-none text-sm min-w-[200px]',
-                              placeholder: I18n.t("vacancy.search.#{name_prefix}_label"),
-                              data: { action: 'change->turbo-form#update' }
-               )
+        # The input and its Add button wrap as one unit, so the button never lands alone on a line
+        concat(content_tag(:div, class: 'flex flex-1 items-center gap-2 min-w-[260px]') do
+          # Текстове поле для нового тегу
+          concat text_field_tag(new_tag_field, nil,
+                                class: 'flex-1 min-w-0 border-0 bg-transparent text-gray-900 dark:text-white p-1 outline-none text-sm',
+                                placeholder: I18n.t("vacancy.search.#{name_prefix}_label"),
+                                data: { action: 'change->turbo-form#update' }
+                 )
 
-        # Кнопка Add
-        concat button(label: I18n.t('vacancy.search.add'),
-                      variant: :secondary,
-                      size: :md,
-                      tag: :button,
-                      class: 'text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium text-sm px-3 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex-shrink-0',
-                      'data-action': 'click->turbo-form#update')
+          # Кнопка Add
+          concat button(label: I18n.t('vacancy.search.add'),
+                        variant: :secondary,
+                        size: :md,
+                        tag: :button,
+                        class: 'text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium text-sm px-3 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex-shrink-0',
+                        'data-action': 'click->turbo-form#update')
+        end)
       end)
 
       # 2. Приховані поля для передачі масиву тегів у параметри
@@ -59,10 +63,12 @@ class Vacancy::Component::SearchBar < ApplyMate::Component::Base
     end
   end
 
-  AND_GROUP_CLASSES = 'inline-flex items-center gap-2 p-1 bg-gray-50 dark:bg-gray-800 ' \
-    'border border-gray-200 dark:border-gray-700 rounded-full shadow-sm flex-shrink-0'
-  OR_GROUP_CLASSES = 'inline-flex items-center gap-1 p-1 bg-indigo-50/50 dark:bg-indigo-900/20 ' \
-    'border border-indigo-200 dark:border-indigo-800 rounded-full shadow-sm flex-shrink-0'
+  # Groups wrap inside too (a long OR group would not fit a phone's width); rounded-2xl reads as
+  # a pill on one line and stays a rounded box when the group spans several
+  AND_GROUP_CLASSES = 'inline-flex flex-wrap items-center gap-2 p-1 max-w-full bg-gray-50 dark:bg-gray-800 ' \
+    'border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm'
+  OR_GROUP_CLASSES = 'inline-flex flex-wrap items-center gap-1 p-1 max-w-full bg-indigo-50/50 dark:bg-indigo-900/20 ' \
+    'border border-indigo-200 dark:border-indigo-800 rounded-2xl shadow-sm'
   PAREN_CLASSES = 'text-sm font-semibold text-indigo-400 dark:text-indigo-500 select-none'
 
   # Ops between pills: 'g_or' joins the neighbours into an explicit
