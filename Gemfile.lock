@@ -690,10 +690,10 @@ GEM
     uri (1.1.2)
     useragent (0.16.11)
     version_gem (1.1.12)
-    view_component (4.16.0)
+    view_component (4.25.0)
       actionview (>= 7.1.0)
       activesupport (>= 7.1.0)
-      concurrent-ruby (~> 1)
+      prism (>= 1.0)
     wannabe_bool (0.7.1)
     web-console (4.3.0)
       actionview (>= 8.0.0)
@@ -1056,7 +1056,7 @@ CHECKSUMS
   uri (1.1.2) sha256=89292e98eabbef6248b0a0ed5e7e398e152f83f17560023a6d94a7f492b169fb
   useragent (0.16.11) sha256=700e6413ad4bb954bb63547fa098dddf7b0ebe75b40cc6f93b8d54255b173844
   version_gem (1.1.12) sha256=b78f691677807997e63901e8aba1b96d4ae172ce5570ad9ceb0208eb3a0edb3d
-  view_component (4.16.0) sha256=e070850e01f05cabde569c9158350c44d25ebbc90b4e60de4413e2131daeee07
+  view_component (4.25.0) sha256=c6acf5d257dded3c9afc3b3c4d10c92e06ec1ba42d382028d1f30e3efc41b1f5
   wannabe_bool (0.7.1) sha256=838ef671066868424de888fb22eeae57c7012709aabd5d17141ea6fea964c61f
   web-console (4.3.0) sha256=e13b71301cdfc2093f155b5aa3a622db80b4672d1f2f713119cc7ec7ac6a6da4
   webmock (3.34.0) sha256=72eed29dc8c00148d592acaedaaa6b869e2e397de57dfc8602b84aa834f46b33
