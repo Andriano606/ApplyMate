@@ -11,3 +11,8 @@ ignore_unused:
   - 'will_paginate.*'
   - 'date.*'
   - 'time.*'
+
+# Keys built with interpolation (I18n.t("feedback.sentiments.#{x}")) count as used.
+# i18n-tasks >= 1.2 no longer infers them by default.
+search:
+  strict: false
