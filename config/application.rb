@@ -31,7 +31,7 @@ module ApplyMate
     config.autoload_paths << Rails.root.join('app/concepts')
 
     # Configure ViewComponent to look for templates alongside component classes
-    config.view_component.view_component_path = 'app/concepts'
+    config.view_component.generate.path = 'app/concepts'
 
     # Set default locale to Ukrainian
     config.i18n.default_locale = :uk
