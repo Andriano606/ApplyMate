@@ -1,0 +1,47 @@
+= header(**header_opts)
+
+.space-y-6
+  section.bg-white.dark:bg-gray-800.rounded-lg.shadow.p-4.md:p-6
+    p.text-sm.text-gray-500.dark:text-gray-400.mb-4 = I18n.t('admin.proxy_mate_setting.show.intro')
+    = helpers.simple_form_for @setting, url: helpers.admin_proxy_mate_setting_path, method: :patch,
+        html: { class: 'space-y-4', data: { test_id: 'proxy-mate-form' } } do |f|
+      - if f.object.errors[:base].any?
+        = alert(text: f.object.errors[:base].first, type: :error)
+      = f.input :url, as: :string, required: false,
+          label: I18n.t('admin.proxy_mate_setting.show.url'),
+          hint: I18n.t('admin.proxy_mate_setting.show.url_hint'),
+          input_html: { value: url_value, type: 'url', autocomplete: 'off', \
+                        placeholder: 'https://proxymate.example.com' }
+      = f.input :api_key, as: :password, required: false,
+          label: I18n.t('admin.proxy_mate_setting.show.api_key'),
+          hint: key_hint,
+          input_html: { value: nil, autocomplete: 'new-password', \
+                        placeholder: I18n.t('admin.proxy_mate_setting.show.api_key_placeholder') }
+      .flex.justify-end
+        = f.button :submit, I18n.t('admin.proxy_mate_setting.show.submit'),
+            class: "#{ApplyMate::Component::Button::VARIANTS[:primary]} cursor-pointer w-full sm:w-auto"
+
+  - if @status
+    section.bg-white.dark:bg-gray-800.rounded-lg.shadow.p-4.md:p-6[
+        data-test-id="proxy-mate-status"]
+      h2.text-lg.font-semibold.text-gray-800.dark:text-gray-200.mb-3
+        = I18n.t('admin.proxy_mate_setting.status.title')
+      - if @status.error
+        = alert(text: @status.error, type: :error)
+      - elsif @status.sites.empty?
+        p.text-sm.text-gray-500.dark:text-gray-400 = I18n.t('admin.proxy_mate_setting.status.no_sites')
+      - else
+        = alert(text: I18n.t('admin.proxy_mate_setting.status.connected'), type: :notice)
+        ul.mt-3.divide-y.divide-gray-100.dark:divide-gray-700
+          - @status.sites.each do |site|
+            li.py-3.flex.flex-col.sm:flex-row.sm:items-center.sm:justify-between.gap-1[
+                data-test-id="proxy-mate-site-#{site.slug}"]
+              .min-w-0
+                span.text-sm.font-medium.text-gray-800.dark:text-gray-200 = site.name
+                code.ml-2.font-mono.text-xs.text-gray-500.dark:text-gray-400 = site.slug
+              .text-sm.text-gray-600.dark:text-gray-300
+                = I18n.t('admin.proxy_mate_setting.status.working', count: site.working)
+                - if site.working_with_clearance.positive?
+                  span.text-gray-400.dark:text-gray-500
+                    = " · #{I18n.t('admin.proxy_mate_setting.status.with_clearance',
+                                    count: site.working_with_clearance)}"

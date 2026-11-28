@@ -32,6 +32,10 @@ servers:
     options:
       ulimit:
         - "nofile=65536:65536"
+      # ProxyMate (proxy pool for the vacancy sync) runs on the same Pi behind kamal-proxy;
+      # its URL and API key are set on the admin page /admin/proxy_mate.
+      add-host:
+        - "staging.proxymate.local:192.168.50.155"
 
   worker:
     hosts:
@@ -40,6 +44,8 @@ servers:
     options:
       ulimit:
         - "nofile=65536:65536"
+      add-host:
+        - "staging.proxymate.local:192.168.50.155"
       # Hard cap so a runaway job gets this container OOM-killed instead of freezing the
       # whole Pi (no swap; shared with taxmate and the Home Assistant VM).
       memory: "3g"
@@ -80,6 +86,8 @@ env:
     # Grafana is published on host port 3001 (see grafana accessory below).
     # Adjust if Grafana is reverse-proxied behind a domain.
     GRAFANA_URL: http://192.168.50.155:3001
+    # Default ProxyMate URL; the admin page can override it. The API key is set only there.
+    PROXY_MATE_URL: http://staging.proxymate.local
 
 accessories:
   db:

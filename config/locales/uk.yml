@@ -55,8 +55,8 @@ uk:
         jobs_description: Моніторинг фонових завдань
         mcp: MCP сервер
         mcp_description: Підключення Claude до банку вакансій
-        proxies: Проксі
-        proxies_description: Список валідних проксі-серверів
+        proxy_mate: ProxyMate
+        proxy_mate_description: Адреса та API-ключ сервісу проксі
         sources: Джерела
         sources_description: Джерела
         title: Панель адміністратора
@@ -83,26 +83,34 @@ uk:
         title: MCP сервер
         tools_title: Доступні інструменти
         unnamed_token: Токен від %{created_at}
-    proxy:
-      index:
-        empty: Проксі не знайдено
-        stats:
-          dead: мертві
-          flaky: нестабільні
-          untested: неперевірені
-          working: робочі
-        table:
-          actions: Дії
-          fail_count: Помилки
-          failed_at: Остання помилка
-          ratio: Надійність
-          source: Джерело
-          success_count: Успіхи
-          url: URL
-        title: Проксі
+    proxy_mate_setting:
+      errors:
+        invalid_url: Вкажіть адресу, що починається з http:// або https://
       show:
-        copy: Скопіювати команду
-        title: 'curl: %{url}'
+        api_key: API-ключ
+        api_key_placeholder: Вставте новий ключ, щоб замінити збережений
+        intro: ProxyMate — окремий сервіс, з якого синхронізація вакансій бере проксі.
+          Збережені тут значення мають пріоритет над змінними оточення PROXY_MATE_URL
+          та PROXY_MATE_API_KEY.
+        key_missing: Ключ не збережено (використовується змінна оточення, якщо вона
+          задана).
+        key_saved: 'Збережено ключ: %{preview}. Залиште поле порожнім, щоб не змінювати.'
+        submit: Зберегти
+        title: ProxyMate
+        url: Адреса (URL)
+        url_hint: Наприклад, https://proxymate.example.com
+      status:
+        connected: З'єднання працює
+        no_sites: ProxyMate відповів, але не має жодного сайту.
+        not_configured: ProxyMate не налаштований — вкажіть адресу та API-ключ.
+        rejected: 'ProxyMate відхилив запит: %{detail}'
+        title: Стан з'єднання
+        unauthorized: ProxyMate не прийняв API-ключ (unauthorized).
+        unreachable: 'ProxyMate недоступний: %{detail}'
+        with_clearance: 'з Cloudflare-токеном: %{count}'
+        working: 'Робочих проксі: %{count}'
+      update:
+        success: Налаштування ProxyMate збережено
     source:
       create:
         success: Джерело успішно додано

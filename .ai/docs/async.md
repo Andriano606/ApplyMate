@@ -5,9 +5,11 @@ Used in `Vacancy::Job::SyncVacancies` to run one fiber per `Source` concurrently
 ## Gems
 
 ```ruby
-gem 'async'      # fiber scheduler + reactor
-gem 'async-http' # fiber-aware HTTP client (Async::HTTP::Internet)
+gem 'async' # fiber scheduler + reactor (Async, Async::Barrier, Async::Semaphore)
 ```
+
+There is no Ruby HTTP client gem in the pipeline: scrapers go through curl-impersonate
+subprocesses (`ApplyMate::Client::ImpersonateHttp`), ProxyMate through plain `Net::HTTP`.
 
 ## Pattern: fan-out job
 
@@ -30,79 +32,37 @@ end
 - **Inner `Async do`** — spawns a child `Async::Task` (fiber). All children are scheduled concurrently within the same reactor.
 - **Single-threaded** — only one fiber runs at a time; switching happens on I/O yield or `sleep`.
 
-## AsyncHttp client
+## HTTP inside the reactor
 
-`ApplyMate::Client::AsyncHttp` sends HTTP/HTTPS requests through a SOCKS5 or HTTP-CONNECT proxy using raw `TCPSocket` — no `Async::HTTP::Internet` involved. It exposes the same interface as `Http` (`get`, `fetch_body`, `post`, `post_xhr`) so scrapers can swap clients transparently. Use it instead of `Http` inside Async fibers — `Http` uses Faraday/Net::HTTP which blocks the entire thread.
+**Scrapers — `ApplyMate::Client::ImpersonateHttp`.** One `Open3.capture3` curl-impersonate
+subprocess per request. The reactor hooks `process_wait` and the pipes, so a fiber **yields**
+while its curl runs (8 concurrent requests: 0.07 s vs 0.46 s sequential). Fan-out is capped in
+the client, process-wide: `ImpersonateHttp::MAX_PROCESSES` (ENV `CURL_IMPERSONATE_MAX_PROCESSES`,
+default 64 — 2 sources × 32 sync fibers on the 4-core Pi 5) slots in a `Thread::Queue` of tokens
+(`SLOTS`). `Thread::Queue#pop` goes through the fiber scheduler inside a reactor (the fiber waits,
+others run) and blocks plainly outside one, and is thread-safe — `Async::Semaphore` would be
+neither. A slot is given back in `ensure`, failed requests included.
 
-```ruby
-# proxy: is required
-client = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url)
-# no close method — each request manages its own socket
-```
-
-### Constructor
-
-```ruby
-ApplyMate::Client::AsyncHttp.new(request_timeout: 30, proxy:)
-# request_timeout: overall request deadline in seconds (default 15)
-# proxy:           proxy URL string — supports http://, https://, socks5://, socks5h://
-```
-
-The client must be called inside an `Async` block (uses `Async::Task.current.with_timeout`).
-
-### Proxy protocols
-
-| Scheme | Tunnel method |
-|--------|--------------|
-| `http`, `https` | HTTP CONNECT |
-| `socks5`, `socks5h` | SOCKS5 domain-name mode (address type 0x03) |
-
-The proxy URL scheme selects only the tunnel method. TLS to the *target* is layered separately by `SSLSocket` — an `https://` proxy URL still opens a plain TCP connection to the proxy host.
-
-### Timeouts
-
-| | Default | Controls |
-|---|---|---|
-| `TCP_CONNECT_TIMEOUT` | 5 s | `Socket.tcp` connect to the proxy host |
-| `request_timeout:` | 15 s | `Async::Task.current.with_timeout` — entire request |
-
-### Request / Response
-
-All requests use HTTP/1.0 (server closes after response, no chunked-encoding parsing needed). `get` and `post` return a `Response` with `.body` (String), `.headers` (plain Hash, keys downcased), and `.status` (Integer). `fetch_body` and `post_xhr` unwrap to the body String.
-
-```ruby
-response = client.get(url)     # Response or raises DeadProxyError
-response.body    # String
-response.status  # Integer
-response.headers # plain Hash — lowercase string keys
-
-body = client.fetch_body(url)  # String or raises DeadProxyError
-```
+**ProxyMate — `ApplyMate::Client::ProxyMate`.** `Net::HTTP` does **not** block the reactor on
+Ruby 3.4 + async 2.x: its socket waits, DNS and `Timeout.timeout` go through the fiber scheduler
+(measured: 3 concurrent 1-second requests finish in 1.0 s with a ticker fiber still running). The
+client relies on this — it is plain `Net::HTTP` (so WebMock can stub it) called from worker
+fibers when a pool refills, and outside any reactor for the run-level meta lookup and the pool
+seeds.
 
 ### Failure behavior
 
-Any tunnel or I/O failure returns `nil` internally. `get` and `post` raise `DeadProxyError` on `nil` — callers rescue it to mark the proxy dead and retry with another proxy. The client does **not** retry internally — every failure fails fast, and retrying with a different proxy is the caller's responsibility.
+Neither client retries. `ImpersonateHttp` raises `RequestError` (message: curl's exit code and
+error text) when curl fails and `BinaryError` when the binary cannot start; the scraper's
+`via_proxy` turns the first (and 429/5xx/Cloudflare pages) into `DeadProxyError`, lets the second
+through. Retrying on another proxy is the sync worker's job:
 
 ```ruby
-rescue ApplyMate::Client::DeadProxyError
-  release_proxy(proxy, in_use_proxy_ids)
+rescue ApplyMate::Scraper::Base::DeadProxyError
+  stats.dead!        # counted for dead_proxies
+  pool.drop(proxy)   # out of the pool until its next round; nothing reported to ProxyMate
   proxy = nil
   retry
-```
-
-### `Protocol::HTTP::Headers` gotchas (Async::HTTP::Internet only)
-
-This does **not** apply to `AsyncHttp` — it returns plain Ruby hashes. It applies only if you use `Async::HTTP::Internet` directly elsewhere:
-
-`response.headers` returns `Protocol::HTTP::Headers`, **not** a Hash. It does **not** include `Enumerable` — methods like `each_with_object`, `map`, `select` are unavailable. Use plain `each`:
-
-```ruby
-# ✅ correct
-result = {}
-headers.each { |k, v| result[k.to_s.downcase] ||= v.to_s }
-
-# ❌ fails — NoMethodError
-headers.each_with_object({}) { |(k, v), h| h[k] = v }
 ```
 
 ## sleep is fiber-aware
@@ -131,47 +91,20 @@ This means scraper polite-delay sleeps automatically interleave across sources.
 ### Shared data structures
 
 ```ruby
-pages_queue      = (1..MAX_PAGES).to_a   # plain Array — safe, fibers don't truly interleave
-in_use_proxy_ids = Set.new               # tracks which proxies are held right now
-external_ids     = Concurrent::Array.new # written from N fibers concurrently
+pages_queue  = (1..MAX_PAGES).to_a     # plain Array — safe, fibers don't truly interleave
+external_ids = Concurrent::Array.new   # written from N fibers concurrently
 ```
 
-`Array`/`Set` are safe for `pages_queue` and `in_use_proxy_ids` because Async fibers are single-threaded — switching only happens at I/O yields. Use `Concurrent::Array` only for collections written from truly parallel workers.
+`Array`/`Set`/`Hash` are safe for `pages_queue` and the pool's own state because Async fibers are single-threaded — switching only happens at I/O yields. Use `Concurrent::Array` only for collections written from truly parallel workers.
 
 ### Proxy acquire / release
 
-```ruby
-def acquire_proxy(in_use_proxy_ids)
-  ActiveRecord::Base.connection_pool.with_connection do
-    Proxy.transaction do
-      proxy = Proxy.ready_for_use
-                   .where.not(id: in_use_proxy_ids.to_a)
-                   .lock('FOR UPDATE SKIP LOCKED')
-                   .first
-      if proxy
-        in_use_proxy_ids << proxy.id
-        proxy.mark_used!
-      end
-      proxy
-    end
-  end
-end
-
-def release_proxy(proxy, in_use_proxy_ids)
-  return unless proxy
-  in_use_proxy_ids.delete(proxy.id)
-  return if proxy.destroyed?
-  with_db { proxy.mark_used! }
-end
-
-def with_db(&block)
-  ActiveRecord::Base.connection_pool.with_connection(&block)
-end
-```
-
-**All DB operations inside async fibers must use `with_db` (or `connection_pool.with_connection` directly).** Without it, AR holds one connection per fiber for its entire lifetime — with 500 fibers, the pool exhausts instantly and subsequent fibers time out. `with_db` borrows a connection only for the duration of the block, then returns it immediately. Group related DB calls into one `with_db` block to minimize round-trips.
-
-`FOR UPDATE SKIP LOCKED` prevents two fibers from grabbing the same proxy row even if both hit the DB in the same reactor tick (DB calls block the fiber but two fibers can both be waiting for connection pool slots).
+Proxies are not rows: `Vacancy::Operation::SyncVacancies::ProxyPool` holds the
+`ApplyMate::Client::ProxyMate::Proxy` value objects ProxyMate handed out for the source and
+rotates them in memory — `acquire` (nil when none is ready), `release(proxy)` after a use
+(`release(proxy, ok: false)` after an unexpected error: not a successful use), `drop(proxy)` after
+a `DeadProxyError` — with no DB access. Use limit, ProxyMate session, rounds and termination:
+`.ai/docs/sync_vacancies.md`.
 
 ### ensure + retry — proxy release rules
 
@@ -180,30 +113,29 @@ end
 ```ruby
 loop do
   begin
-    client = nil   # reset on each begin, including after retry
-    proxy  = nil
-    page   = pages_queue.shift
+    proxy = nil    # reset on each begin, including after retry
+    page  = pages_queue.shift
     break unless page
 
-    proxy  = acquire_proxy(in_use_proxy_ids)
-    client = Client::AsyncHttp.new(proxy: proxy.url)
+    proxy = pool.acquire
     # ...
   rescue DeadProxyError
-    release_proxy(proxy, in_use_proxy_ids)
+    pool.drop(proxy)
     proxy = nil          # ← ensure sees nil, skips double-release
     pages_queue.unshift(page)
     retry                # ← ensure does NOT run here
   rescue StandardError
+    pool.release(proxy, ok: false)
+    proxy = nil
     pages_queue.unshift(page)
-    break                # ← ensure runs once here with current proxy ✓
+    retry
   ensure
-    release_proxy(proxy, in_use_proxy_ids)   # no-op if proxy is nil
-    client&.close
+    pool.release(proxy)  # no-op if proxy is nil
   end
 end
 ```
 
-Initializing `client = nil; proxy = nil` **inside** `begin` (not before it) ensures they reset on `retry` without any explicit reset at the loop top.
+Initializing `proxy = nil` **inside** `begin` (not before it) resets it on `retry` without any explicit reset at the loop top. `ProxyPool#release` / `#drop` also ignore a proxy that is not checked out, so a double call cannot re-queue it twice.
 
 ### Stop signal — confirmed last page
 
@@ -291,131 +223,4 @@ Workers that exit early (e.g. target reached) skip `dequeue` — their unconsume
 
 `Fiber.blocking { some_c_extension_call }` bypasses the scheduler **and blocks the entire reactor thread**. All 512 fibers stall until the block returns.
 
-This is only safe if `IO::Event::WorkerPool` is available (check: `IO::Event.const_defined?(:WorkerPool)`). In this project it is **not** available, so `Fiber.blocking` is effectively synchronous.
-
-**Workaround:** use raw `TCPSocket` (fiber-aware) for any blocking I/O that can be expressed as plain TCP. See the section below.
-
-## TCPSocket is fully fiber-aware
-
-Under Ruby 3's Async scheduler, standard `TCPSocket.new`, `sock.read`, `sock.write`, and `sock.gets` are **all** intercepted by the scheduler — the fiber suspends and other fibers run during I/O waits. No special async wrappers needed.
-
-Use this for lightweight raw-protocol probes (CONNECT handshakes, SOCKS handshakes, custom TCP protocols) instead of `Async::HTTP::Client`:
-
-```ruby
-def probe(host, port)
-  Async::Task.current.with_timeout(3) do
-    sock = TCPSocket.new(host, port.to_s)
-    begin
-      sock.write("CONNECT target.com:443 HTTP/1.1\r\nHost: target.com:443\r\n\r\n")
-      sock.gets&.split(' ', 3)&.at(1).to_i == 200
-    ensure
-      sock.close rescue nil
-    end
-  end
-rescue StandardError
-  false
-end
-```
-
-## Async::HTTP::Client — avoid for short-lived probes
-
-`Async::HTTP::Client` maintains a **persistent connection pool**. When used for one-shot CONNECT tunnels, `client.close` emits:
-
-```
-warn: Waiting for Async::HTTP::Protocol::HTTP pool to drain: #<Async::Pool::Controller(1/∞) 1/1*/1>
-```
-
-Root cause: the CONNECT response body is a streaming `Body::Pipe` (the tunnel itself). Closing `proxied` doesn't synchronously signal `client`'s pool — the pool sees the connection as busy and waits.
-
-**Rule:** use `Async::HTTP::Client` only when you need keep-alive across multiple requests to the same host. For one-shot probes use a bare `TCPSocket` instead.
-
-## Async::HTTP::Proxy::Client — module, not class
-
-`Async::HTTP::Proxy::Client` is a **module** prepended to `Async::HTTP::Client`, not a standalone class. `Async::HTTP::Proxy::Client.new` does not exist.
-
-```ruby
-# ❌ wrong
-proxy_client = Async::HTTP::Proxy::Client.new(proxy_endpoint)
-
-# ✅ correct — Proxy::Client methods are prepended to every Client instance
-Async::HTTP::Client.open(proxy_endpoint) do |client|
-  proxied = client.proxied_client(target_endpoint)   # returns a new Client
-  proxied.close                                       # Client#close exists
-end
-```
-
-## OpenSSL::SSL::SSLSocket — use connect_nonblock, not connect
-
-`OpenSSL::SSL::SSLSocket#connect` internally loops over `connect_nonblock` with `IO.select`. In theory, `IO.select` goes through the fiber scheduler in Ruby 3.1+. In practice, on some Ruby/io-event/platform combinations (observed on ARM64/RPI5) it does not — `ssl.connect` blocks the reactor thread and `with_timeout` cannot fire.
-
-**Always use `connect_nonblock` + explicit `IO.select` with a deadline.** This is correct in both cases: when the scheduler intercepts `IO.select`, the fiber yields during wait; when it does not, the OS-level `select(2)` enforces the timeout.
-
-```ruby
-def ssl_connect(ssl)
-  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @request_timeout
-  loop do
-    ssl.connect_nonblock
-    return true
-  rescue IO::WaitReadable
-    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    return false if remaining <= 0
-    IO.select([ssl.to_io], nil, nil, remaining) or return false
-  rescue IO::WaitWritable
-    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    return false if remaining <= 0
-    IO.select(nil, [ssl.to_io], nil, remaining) or return false
-  rescue StandardError
-    return false
-  end
-end
-```
-
-To do TLS over a raw tunnel socket inside an Async fiber:
-
-```ruby
-sock = TCPSocket.new(host, port.to_s)      # fiber-aware
-ssl  = OpenSSL::SSL::SSLSocket.new(sock)
-ssl.hostname   = host                       # SNI
-ssl.sync_close = true                       # ssl.close also closes sock
-ssl_connect(ssl)                            # safe on all platforms
-ssl.write("GET / HTTP/1.0\r\nHost: #{host}\r\n\r\n")
-raw = ssl.read(4096)
-ssl.close                                   # closes sock too
-```
-
-`sync_close = true` ensures the underlying `TCPSocket` is closed when the `SSLSocket` is closed — avoids double-close management.
-
-## Reusing a SOCKS/HTTP CONNECT tunnel socket for TLS
-
-After a SOCKS or HTTP CONNECT handshake succeeds, the raw `TCPSocket` is a transparent byte pipe to the target. Wrap it directly in `OpenSSL::SSL::SSLSocket` to layer TLS on top:
-
-```ruby
-# 1. Establish tunnel (SOCKS5 example)
-sock = TCPSocket.new(proxy_host, proxy_port.to_s)
-return unless socks5_tunnel_open?(sock, target_host, 443)
-
-# 2. Layer TLS — sock is now a pipe to target_host:443
-ssl = OpenSSL::SSL::SSLSocket.new(sock)
-ssl.hostname   = target_host
-ssl.sync_close = true
-ssl.connect
-
-# 3. Send HTTP over TLS
-ssl.write("GET / HTTP/1.1\r\nHost: #{target_host}\r\nConnection: close\r\n\r\n")
-raw = ssl.read(4096)
-ssl.close
-```
-
-This pattern lets you parameterize SOCKS/HTTP-CONNECT tunnel methods with `host`/`port` and reuse them for both quick handshake probes (default = test host) and real-content validation (target = actual site).
-
-## Async::HTTP::Endpoint#address crashes before connect
-
-`Async::HTTP::Endpoint.parse("http://host:port").address` raises `NoMethodError` because `IO::Endpoint::HostEndpoint` has no `address` until a connection is resolved. Use `.url.to_s` for logging:
-
-```ruby
-# ❌ NoMethodError on HostEndpoint
-proxy_endpoint.address.to_s
-
-# ✅
-proxy_endpoint.url.to_s
-```
+This is only safe if `IO::Event::WorkerPool` is available (check: `IO::Event.const_defined?(:WorkerPool)`). In this project it is **not** available, so `Fiber.blocking` is effectively synchronous — keep blocking work in a subprocess (as `ImpersonateHttp` does) or on fiber-aware I/O.

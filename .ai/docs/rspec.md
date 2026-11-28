@@ -149,7 +149,7 @@ Spec files must be named after the **class under test**; the path mirrors the cl
 |-------|-----------|
 | `Vacancy::Operation::SyncVacancies` | `spec/concepts/vacancy/operation/sync_vacancies_spec.rb` |
 | `ApplyMate::Scraper::Dou` | `spec/concepts/apply_mate/scraper/dou_spec.rb` |
-| `ApplyMate::Client::AsyncHttp` | `spec/concepts/apply_mate/client/async_http_spec.rb` |
+| `ApplyMate::Client::ImpersonateHttp` | `spec/concepts/apply_mate/client/impersonate_http_spec.rb` |
 
 When several fixtures exercise the **same class**, wrap each in a `context` block inside one file — do not create one spec file per fixture or per company.
 
@@ -163,6 +163,7 @@ Defined in `spec/support/` and loaded by `spec/rails_helper.rb`:
 | `"with elasticsearch index"` | `elasticsearch.rb` | Creates/drops the `Vacancy` index around the example group |
 | `ViewComponent::TestHelpers` | `view_component.rb` | Included for `type: :component` |
 | WebMock | `webmock.rb` | Blocks real HTTP except localhost |
+| `"with ProxyMate"` + `ProxyMateSupport` | `proxy_mate.rb` | ENV config at a fake ProxyMate; a default stub for `GET /api/v1/meta` (release = `ImpersonateHttp::RELEASE`) — any other ProxyMate call an example does not stub fails under WebMock; `stub_proxy_mate(site, rows)`, `proxy_mate_row`, `proxy_mate_response(remaining:)`, `proxy_mate_bodies(verb, url)` (the JSON bodies sent). The sync's scrapers are stubbed at `ImpersonateHttp#get` / `#post` |
 
 For setup shared between several spec files, add a `RSpec.shared_context` under `spec/support/`. Keep constants in a companion module — constants inside `RSpec.describe` blocks are silently promoted to `Object` and clash across files.
 

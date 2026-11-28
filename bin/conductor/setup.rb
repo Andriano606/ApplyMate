@@ -164,12 +164,13 @@ def install_dependencies
   system!('bun', 'install')
 end
 
-# ApplyMate::Client::ImpersonateHttp shells out to vendor/curl-impersonate/curl_chrome136
-# (used by the Dou scraper and apply flow). vendor/curl-impersonate/ is gitignored, so a
-# fresh worktree doesn't have it — applying then fails with ENOENT. Reuse the root
-# checkout's copy when it's runnable (no download), otherwise run the installer.
-CURL_IMPERSONATE_DIR = 'vendor/curl-impersonate'
-CURL_IMPERSONATE_BIN = "#{CURL_IMPERSONATE_DIR}/curl_chrome136".freeze
+# ApplyMate::Client::ImpersonateHttp shells out to vendor/curl-impersonate/curl-impersonate
+# (the Dou scraper). vendor/curl-impersonate/ is gitignored, so a fresh worktree doesn't have
+# it — scraping then fails with ENOENT. Reuse the root checkout's copy when it can run the
+# target we use, otherwise run the installer (an old build that lacks the target is replaced).
+CURL_IMPERSONATE_DIR    = 'vendor/curl-impersonate'
+CURL_IMPERSONATE_BIN    = "#{CURL_IMPERSONATE_DIR}/curl-impersonate".freeze
+CURL_IMPERSONATE_TARGET = 'chrome146' # ApplyMate::Client::ImpersonateHttp::DEFAULT_IMPERSONATE
 
 def install_curl_impersonate
   puts ''
@@ -189,16 +190,19 @@ def install_curl_impersonate
     system!('bin/install-curl-impersonate')
   end
 
-  # The installer only WARNs when the binary can't run — fail setup loudly instead.
+  # Belt and braces: the installer already exits non-zero on an unusable binary.
   return if curl_impersonate_runnable?(workspace_root)
 
-  error_exit("#{CURL_IMPERSONATE_BIN} is not runnable on this host",
+  error_exit("#{CURL_IMPERSONATE_BIN} cannot run --impersonate #{CURL_IMPERSONATE_TARGET} on this host",
              'Run bin/install-curl-impersonate manually and check its output.')
 end
 
+# Same probe as bin/install-curl-impersonate: the binary runs AND knows our target.
 def curl_impersonate_runnable?(dir)
   bin = File.join(dir, CURL_IMPERSONATE_BIN)
-  File.executable?(bin) && system(bin, '--version', out: File::NULL, err: File::NULL)
+  File.executable?(bin) &&
+    system(bin, '--impersonate', CURL_IMPERSONATE_TARGET, '--compressed', '-s', '-o', File::NULL, 'file:///dev/null',
+           out: File::NULL, err: File::NULL)
 end
 
 def prepare_databases

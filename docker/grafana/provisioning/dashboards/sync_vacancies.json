@@ -1365,8 +1365,8 @@
     {
       "type": "timeseries",
       "id": 14,
-      "title": "Живі проксі на старті",
-      "description": "На старті для кожного сайту перевіряється до 1500 найкращих проксі; тут — скільки з них відповіли. 0 означає, що сайт пропущено.",
+      "title": "Проксі від ProxyMate на старті",
+      "description": "На старті для кожного сайту ProxyMate віддає до 1000 найстабільніших робочих проксі (перевіряє їх сам); тут — скільки потрапило в пул. 0 означає, що сайт пропущено (причина — у «Помилки та попередження»).",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -1813,373 +1813,13 @@
     },
     {
       "type": "row",
-      "id": 17,
-      "title": "Пул проксі (фонові задачі)",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "x": 0,
-        "y": 35,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "timeseries",
-      "id": 18,
-      "title": "Валідатор: знайдено живих проксі",
-      "description": "Proxy::Job::Validate кожні 5 хвилин перевіряє пачку (до 2000) нових проксі на кожному сайті. Кожна точка — скільки живих знайдено за 6 годин. Живі поповнюють пул, з якого стартує синхронізація; якщо лінія падає до нуля, пул перестав рости.",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 36,
-        "w": 12,
-        "h": 9
-      },
-      "interval": "6h",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          },
-          "expr": "sum by (source) (sum_over_time({job=\"rails\"} |= \"proxy_validation_finished\" | json | __error__=\"\" | event=\"proxy_validation_finished\" | unwrap alive [$__interval]))",
-          "legendFormat": "{{source}}",
-          "refId": "A",
-          "queryType": "range",
-          "editorMode": "code"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "showPoints": "never",
-            "pointSize": 7,
-            "spanNulls": true,
-            "axisSoftMin": 0,
-            "axisCenteredZero": false,
-            "barAlignment": 0,
-            "gradientMode": "none",
-            "lineInterpolation": "linear",
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*Djinni.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3274D9"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*Dou.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FF9830"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*описи.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#F2CC0C"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*не вдалося.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E02F44"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/Весь запуск/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#8E8E8E"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "id": 19,
-      "title": "Нові проксі з публічних списків",
-      "description": "Proxy::Job::FetchProxies раз на добу збирає проксі з публічних списків; тут — скільки з них виявились новими для бази. Пунктир — скільки всього зібрано (права вісь).",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 36,
-        "w": 12,
-        "h": 9
-      },
-      "interval": "1h",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          },
-          "expr": "sum (sum_over_time({job=\"rails\"} |= \"proxy_fetch_finished\" | json | __error__=\"\" | event=\"proxy_fetch_finished\" | unwrap inserted [$__interval]))",
-          "legendFormat": "нових",
-          "refId": "A",
-          "queryType": "range",
-          "editorMode": "code"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          },
-          "expr": "sum (sum_over_time({job=\"rails\"} |= \"proxy_fetch_finished\" | json | __error__=\"\" | event=\"proxy_fetch_finished\" | unwrap candidates [$__interval]))",
-          "legendFormat": "зібрано",
-          "refId": "B",
-          "queryType": "range",
-          "editorMode": "code"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "always",
-            "pointSize": 7,
-            "spanNulls": true,
-            "axisSoftMin": 0,
-            "axisCenteredZero": false,
-            "barAlignment": 0,
-            "gradientMode": "none",
-            "lineInterpolation": "linear",
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*Djinni.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3274D9"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*Dou.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FF9830"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*описи.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#F2CC0C"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/.*не вдалося.*/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E02F44"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/Весь запуск/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#8E8E8E"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "зібрано"
-            },
-            "properties": [
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    10,
-                    10
-                  ]
-                }
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#8E8E8E"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "нових"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#73BF69"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "row",
       "id": 20,
       "title": "Журнал",
       "collapsed": false,
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 45,
+        "y": 35,
         "w": 24,
         "h": 1
       }
@@ -2195,7 +1835,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 46,
+        "y": 36,
         "w": 24,
         "h": 14
       },
@@ -2205,7 +1845,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=\"rails\"} |~ \"vacancy_sync_(started|proxy_pool_ready|listing_finished|descriptions_finished|finished)\" | json | __error__=\"\" | event=~\"vacancy_sync_(started|proxy_pool_ready|listing_finished|descriptions_finished|finished)\" | line_format \"{{ if eq .event \\\"vacancy_sync_started\\\" }}▶ Старт синхронізації · джерела: {{ .sources }}{{ else if eq .event \\\"vacancy_sync_proxy_pool_ready\\\" }}{{ if eq .alive \\\"0\\\" }}⚠ {{ .source }}: жодного живого проксі з {{ .checked }} перевірених — джерело пропущено{{ else }}🔌 {{ .source }}: живих проксі {{ .alive }} з {{ .checked }} перевірених{{ end }}{{ else if eq .event \\\"vacancy_sync_listing_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅ {{ .source }} · список: {{ .vacancies }} вакансій на {{ .pages }} стор. · нових {{ .new_vacancies }}, видалено {{ .stale_deleted }}, у банку {{ .vacancies_total }}{{ else }}❌ {{ .source }} · список зупинився на {{ .pages }} стор.: {{ .error }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}, мертвих проксі {{ .dead_proxies }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_descriptions_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅{{ else }}❌{{ end }} {{ .source }} · описи: завантажено {{ .fetched }} з {{ .missing }}{{ if ne .gave_up \\\"0\\\" }}, не вдалося {{ .gave_up }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}{{ if .error }} · {{ .error }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_finished\\\" }}{{ if eq .result \\\"ok\\\" }}🏁 Синхронізація завершена успішно{{ else if eq .result \\\"partial\\\" }}⚠ Синхронізація завершена частково: джерел зі збоєм — {{ .sources_failed }}{{ else }}❌ Синхронізація не вдалася{{ if .error }}: {{ .error }}{{ end }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }}{{ else }}{{ __line__ }}{{ end }}\"",
+          "expr": "{job=\"rails\"} |~ \"vacancy_sync_(started|proxy_pool_ready|proxy_round_started|listing_finished|descriptions_finished|finished)\" | json | __error__=\"\" | event=~\"vacancy_sync_(started|proxy_pool_ready|proxy_round_started|listing_finished|descriptions_finished|finished)\" | line_format \"{{ if eq .event \\\"vacancy_sync_started\\\" }}▶ Старт синхронізації · джерела: {{ .sources }}{{ else if eq .event \\\"vacancy_sync_proxy_pool_ready\\\" }}{{ if eq .alive \\\"0\\\" }}⚠ {{ .source }}: ProxyMate не дав жодного проксі{{ if .error }} — {{ .error }}{{ end }} — джерело пропущено{{ else }}🔌 {{ .source }}: проксі від ProxyMate {{ .alive }}, з токеном Cloudflare {{ .with_clearance }}{{ end }}{{ else if eq .event \\\"vacancy_sync_proxy_round_started\\\" }}🔄 {{ .source }}: нових проксі ProxyMate не дає — раунд {{ .round }}: повернуто {{ .proxies }} проксі запуску{{ else if eq .event \\\"vacancy_sync_proxy_refill_failed\\\" }}⚠ {{ .source }}: ProxyMate не відповів на дозапит проксі ({{ .failures }}-й раз поспіль, у пулі {{ .alive }}): {{ .error }}{{ else if eq .event \\\"vacancy_sync_listing_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅ {{ .source }} · список: {{ .vacancies }} вакансій на {{ .pages }} стор. · нових {{ .new_vacancies }}, видалено {{ .stale_deleted }}, у банку {{ .vacancies_total }}{{ else }}❌ {{ .source }} · список зупинився на {{ .pages }} стор.: {{ .error }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}, мертвих проксі {{ .dead_proxies }}{{ if and .proxy_rounds (ne .proxy_rounds \\\"1\\\") }}, раундів проксі {{ .proxy_rounds }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_descriptions_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅{{ else }}❌{{ end }} {{ .source }} · описи: завантажено {{ .fetched }} з {{ .missing }}{{ if ne .gave_up \\\"0\\\" }}, не вдалося {{ .gave_up }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}{{ if and .proxy_rounds (ne .proxy_rounds \\\"1\\\") }}, раундів проксі {{ .proxy_rounds }}{{ end }}{{ if .error }} · {{ .error }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_finished\\\" }}{{ if eq .result \\\"ok\\\" }}🏁 Синхронізація завершена успішно{{ else if eq .result \\\"partial\\\" }}⚠ Синхронізація завершена частково: джерел зі збоєм — {{ .sources_failed }}{{ else }}❌ Синхронізація не вдалася{{ if .error }}: {{ .error }}{{ end }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }}{{ else }}{{ __line__ }}{{ end }}\"",
           "legendFormat": "",
           "refId": "A",
           "queryType": "range",
@@ -2227,14 +1867,14 @@
       "type": "logs",
       "id": 22,
       "title": "Помилки та попередження",
-      "description": "Збої синхронізації та проксі-задач: джерело зупинилось, сайт пропущено через відсутність живих проксі, запуск не вдався.",
+      "description": "Збої синхронізації: джерело зупинилось, сайт пропущено (ProxyMate не дав проксі або недоступний), дозапит проксі не вдався, запуск не вдався.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
       },
       "gridPos": {
         "x": 0,
-        "y": 60,
+        "y": 50,
         "w": 24,
         "h": 8
       },
@@ -2244,7 +1884,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=\"rails\"} |~ \"(vacancy_sync|proxy)_\" | json | __error__=\"\" | level=~\"warn|error\" | line_format \"{{ if eq .event \\\"vacancy_sync_started\\\" }}▶ Старт синхронізації · джерела: {{ .sources }}{{ else if eq .event \\\"vacancy_sync_proxy_pool_ready\\\" }}{{ if eq .alive \\\"0\\\" }}⚠ {{ .source }}: жодного живого проксі з {{ .checked }} перевірених — джерело пропущено{{ else }}🔌 {{ .source }}: живих проксі {{ .alive }} з {{ .checked }} перевірених{{ end }}{{ else if eq .event \\\"vacancy_sync_listing_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅ {{ .source }} · список: {{ .vacancies }} вакансій на {{ .pages }} стор. · нових {{ .new_vacancies }}, видалено {{ .stale_deleted }}, у банку {{ .vacancies_total }}{{ else }}❌ {{ .source }} · список зупинився на {{ .pages }} стор.: {{ .error }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}, мертвих проксі {{ .dead_proxies }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_descriptions_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅{{ else }}❌{{ end }} {{ .source }} · описи: завантажено {{ .fetched }} з {{ .missing }}{{ if ne .gave_up \\\"0\\\" }}, не вдалося {{ .gave_up }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}{{ if .error }} · {{ .error }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_finished\\\" }}{{ if eq .result \\\"ok\\\" }}🏁 Синхронізація завершена успішно{{ else if eq .result \\\"partial\\\" }}⚠ Синхронізація завершена частково: джерел зі збоєм — {{ .sources_failed }}{{ else }}❌ Синхронізація не вдалася{{ if .error }}: {{ .error }}{{ end }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }}{{ else }}{{ __line__ }}{{ end }}\"",
+          "expr": "{job=\"rails\"} |~ \"vacancy_sync_\" | json | __error__=\"\" | level=~\"warn|error\" | line_format \"{{ if eq .event \\\"vacancy_sync_started\\\" }}▶ Старт синхронізації · джерела: {{ .sources }}{{ else if eq .event \\\"vacancy_sync_proxy_pool_ready\\\" }}{{ if eq .alive \\\"0\\\" }}⚠ {{ .source }}: ProxyMate не дав жодного проксі{{ if .error }} — {{ .error }}{{ end }} — джерело пропущено{{ else }}🔌 {{ .source }}: проксі від ProxyMate {{ .alive }}, з токеном Cloudflare {{ .with_clearance }}{{ end }}{{ else if eq .event \\\"vacancy_sync_proxy_refill_failed\\\" }}⚠ {{ .source }}: ProxyMate не відповів на дозапит проксі ({{ .failures }}-й раз поспіль, у пулі {{ .alive }}): {{ .error }}{{ else if eq .event \\\"vacancy_sync_proxy_mate_lookup_failed\\\" }}⚠ ProxyMate не віддав {{ .lookup }}: {{ .error }}{{ else if eq .event \\\"vacancy_sync_curl_impersonate_mismatch\\\" }}⚠ curl-impersonate: у нас {{ .release }}, у ProxyMate {{ .proxy_mate_release }} — просимо лише токени для {{ .targets }}{{ else if eq .event \\\"vacancy_sync_listing_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅ {{ .source }} · список: {{ .vacancies }} вакансій на {{ .pages }} стор. · нових {{ .new_vacancies }}, видалено {{ .stale_deleted }}, у банку {{ .vacancies_total }}{{ else }}❌ {{ .source }} · список зупинився на {{ .pages }} стор.: {{ .error }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}, мертвих проксі {{ .dead_proxies }}{{ if and .proxy_rounds (ne .proxy_rounds \\\"1\\\") }}, раундів проксі {{ .proxy_rounds }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_descriptions_finished\\\" }}{{ if eq .result \\\"ok\\\" }}✅{{ else }}❌{{ end }} {{ .source }} · описи: завантажено {{ .fetched }} з {{ .missing }}{{ if ne .gave_up \\\"0\\\" }}, не вдалося {{ .gave_up }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }} · запитів {{ .requests }}, невдалих {{ .failed_requests }}{{ if and .proxy_rounds (ne .proxy_rounds \\\"1\\\") }}, раундів проксі {{ .proxy_rounds }}{{ end }}{{ if .error }} · {{ .error }}{{ end }}{{ if .errors }} · {{ .errors }}{{ end }}{{ else if eq .event \\\"vacancy_sync_finished\\\" }}{{ if eq .result \\\"ok\\\" }}🏁 Синхронізація завершена успішно{{ else if eq .result \\\"partial\\\" }}⚠ Синхронізація завершена частково: джерел зі збоєм — {{ .sources_failed }}{{ else }}❌ Синхронізація не вдалася{{ if .error }}: {{ .error }}{{ end }}{{ end }} · {{ if lt (float64 .duration_s) 60.0 }}{{ printf \\\"%.0f\\\" (float64 .duration_s) }} с{{ else }}{{ printf \\\"%.1f\\\" (divf (float64 .duration_s) 60) }} хв{{ end }}{{ else }}{{ __line__ }}{{ end }}\"",
           "legendFormat": "",
           "refId": "A",
           "queryType": "range",

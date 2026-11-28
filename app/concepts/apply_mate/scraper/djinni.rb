@@ -3,15 +3,13 @@
 class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
   JOB_LIST_URL = 'https://djinni.co/jobs/'
 
-  # The real jobs listing (not the homepage) — what the totals widget links to and
-  # what proxy validation probes.
+  # The real jobs listing (not the homepage) — what the totals widget links to.
   def self.listing_url(_source)
     JOB_LIST_URL
   end
 
-  # No Cloudflare — rest briefly between bursts to keep listing throughput up.
-  def self.burst_cooldown
-    3
+  def self.proxy_site
+    'djinni'
   end
 
   def initialize(source, client)

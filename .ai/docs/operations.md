@@ -217,9 +217,9 @@ When a job delegates to an operation, summary logs about what the operation fetc
 ```ruby
 # ✅ in the operation
 def perform!(**)
-  proxies, meta = fetch_proxy_candidates_from_sources
-  Rails.logger.info "[FetchProxies] Parsed #{proxies.uniq { |p| [p[:host], p[:port]] }.size}/#{proxies.size} candidates ..."
-  self.model = [proxies, meta]
+  rows = fetch_rows_from_sources
+  log(event: 'things_fetched', fetched: rows.size, unique: rows.uniq { |r| r[:external_id] }.size)
+  self.model = rows
 end
 
 # ❌ in the job — the job shouldn't re-explain what the operation did
@@ -245,14 +245,14 @@ end
 ```
 
 Available colors: `:yellow` (default), `:green`, `:red`, `:cyan`.  
-The `[Tag]` prefix is the **full class name** (`self.class.name`) — e.g. `[Proxy::Operation::ValidateCandidates]`.  
+The `[Tag]` prefix is the **full class name** (`self.class.name`) — e.g. `[Vacancy::Operation::SyncVacancies]`.  
 **Do not inline `YELLOW`/`GREEN` constants or define a local `log` method** — always `include ApplyMate::Logging`.
 
 For anything a dashboard or alert should see, emit a **JSON event** instead of a colored line:
 
 ```ruby
-log(event: 'proxy_fetch_finished', candidates: 1200, inserted: 45, duration_s: 12.3)
-# → {"event":"proxy_fetch_finished","operation":"Proxy::Operation::FetchProxies","level":"info","candidates":1200,…}
+log(event: 'vacancy_sync_proxy_pool_ready', session_id: 1795309200323, source: 'Dou', alive: 412, with_clearance: 30)
+# → {"event":"vacancy_sync_proxy_pool_ready","operation":"Vacancy::Operation::SyncVacancies","level":"info","source":"Dou",…}
 ```
 
 `operation` and `level` are added automatically. Event names, fields, the Grafana dashboard and alerts built on them: `.ai/docs/observability.md`.
@@ -263,11 +263,11 @@ When a job has multiple distinct phases (fetch → validate → persist), each p
 
 ```ruby
 # ✅ job is 4 lines — each step is testable and renameable independently
-class Proxy::Job::FetchProxies < ApplicationJob
+class Thing::Job::Import < ApplicationJob
   def perform
-    candidates = Proxy::Operation::FetchCandidates.call.model
-    valid      = Proxy::Operation::ValidateCandidates.call(candidates: candidates).model
-    Proxy::Operation::PersistProxies.call(proxies: valid)
+    rows  = Thing::Operation::Fetch.call.model
+    valid = Thing::Operation::Validate.call(rows: rows).model
+    Thing::Operation::Persist.call(rows: valid)
   end
 end
 ```
@@ -275,12 +275,12 @@ end
 Operations called from jobs (not controllers) receive keyword params directly and skip authorization:
 
 ```ruby
-class Proxy::Operation::ValidateCandidates < ApplyMate::Operation::Base
+class Thing::Operation::Validate < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
-  def perform!(candidates:, **)   # params passed via .call(candidates: ...)
-    # no authorize! needed — called from a job, not a controller
-    self.model = validate(candidates)
+  def perform!(rows:, **)   # params passed via .call(rows: ...)
+    skip_authorize          # called from a job, not a controller
+    self.model = validate(rows)
   end
 end
 ```
@@ -290,10 +290,6 @@ end
 Add entries to `config/recurring.yml`:
 
 ```yaml
-fetch_proxies:
-  class: Proxy::Job::FetchProxies
-  schedule: every day at 1am
-
 sync_vacancies:
   class: Vacancy::Job::SyncVacancies
   schedule: every day at 5am

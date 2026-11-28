@@ -4,27 +4,20 @@ class ApplyMate::Scraper::Dou < ApplyMate::Scraper::Base
   VACANCIES_URL = 'https://jobs.dou.ua/vacancies/'
   XHR_URL       = 'https://jobs.dou.ua/vacancies/xhr-load/'
 
-  # Dou is behind Cloudflare; a Chrome TLS fingerprint (curl-impersonate) passes the
-  # challenge that OpenSSL-based AsyncHttp cannot. See .ai/docs/scrapers.md.
-  def self.http_client_class
-    ApplyMate::Client::ImpersonateHttp
-  end
-
   # The real vacancies listing (not the less-protected homepage) — what the totals
-  # widget links to and what proxy validation probes.
+  # widget links to.
   def self.listing_url(_source)
     VACANCIES_URL
+  end
+
+  def self.proxy_site
+    'dou'
   end
 
   # Dou's full description lives on each vacancy's detail page (fetch_description), so
   # the listing must not write it and the detail pass only runs for missing ones.
   def self.fetches_description?
     true
-  end
-
-  # Behind Cloudflare and rate-sensitive — rest a touch longer between bursts.
-  def self.burst_cooldown
-    5
   end
 
   def initialize(source, client)

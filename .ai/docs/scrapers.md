@@ -67,52 +67,73 @@ them (see `.ai/docs/sync_vacancies.md`).
 
 ## Building a scraper
 
-`SyncVacancies` instantiates the configured scraper with the client class the scraper declares (`Scraper.http_client_class`: `AsyncHttp` by default, `ImpersonateHttp` for Dou), one client per proxied request:
+`SyncVacancies` instantiates the configured scraper with the client class the scraper declares (`Scraper.http_client_class` — `ImpersonateHttp` for every source; no scraper overrides it), one client per proxied request:
 
 ```ruby
-scraper_class = source.scraper.constantize
-client        = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout:, connect_timeout:)
+scraper_class = source.scraper.constantize          # hoisted out of the worker loop
+client        = scraper_class.http_client_class.new(proxy: proxy.url, clearance: proxy.clearance, request_timeout:, connect_timeout:)
 scraper       = scraper_class.new(source, client)
 ```
 
-## Cloudflare-protected sites — ImpersonateHttp (TLS fingerprint, no browser)
+`proxy` is an `ApplyMate::Client::ProxyMate::Proxy` (`id`, `url`, `protocol`, `clearance`) handed out by ProxyMate for the scraper's `proxy_site`.
 
-Some sources (e.g. **Dou** = `jobs.dou.ua`) sit behind **Cloudflare**. A raw request
-(`AsyncHttp`) gets a **403 "Just a moment…"** page regardless of HTTP headers —
-masking `Accept`/`Sec-*` does not help (measured: 22 vs 20 of 120 proxies). The discriminator
-is the **TLS/JA3 fingerprint**: Ruby's OpenSSL handshake isn't Chrome's, so Cloudflare blocks it.
+## The client — ImpersonateHttp (browser TLS fingerprint, no browser)
 
-**`ApplyMate::Client::ImpersonateHttp`** solves this by shelling out to **curl-impersonate**
-(BoringSSL with Chrome's exact cipher/extension order + HTTP/2 settings). It passes the
-non-interactive Cloudflare challenge **without a browser, at HTTP speed**, and is a **drop-in
-for `AsyncHttp`** (same `Response`, `#get`/`#post`):
+Every source goes through **`ApplyMate::Client::ImpersonateHttp`**, which shells out to
+**curl-impersonate** (BoringSSL with a browser's exact cipher/extension order + HTTP/2
+settings). Two reasons:
+
+- **ProxyMate checks every proxy with curl-impersonate.** "Working for djinni" in ProxyMate
+  means "working through curl-impersonate with `chrome146`" — the same request is what the
+  sync makes, so ProxyMate's verdict holds for it, and every source can use proxies that come
+  with a Cloudflare token (`cloudflare: 'any'` + `impersonate_targets`, via the client's
+  predicates).
+- **Cloudflare** (e.g. **Dou** = `jobs.dou.ua`) answers an OpenSSL TLS/JA3 fingerprint with a
+  **403 "Just a moment…"** regardless of HTTP headers (measured: masking `Accept`/`Sec-*` gave
+  22 vs 20 of 120 proxies). curl-impersonate passes the non-interactive challenge **without a
+  browser, at HTTP speed**.
 
 ```ruby
 client  = ApplyMate::Client::ImpersonateHttp.new(proxy: proxy.url)
-scraper = ApplyMate::Scraper::Dou.new(source, client)   # ImpersonateHttp stands in for AsyncHttp
+scraper = ApplyMate::Scraper::Dou.new(source, client)
 scraper.fetch_listing(page: 1)                          # GET CSRF + POST xhr-load — both via curl-impersonate
 scraper.fetch_description(url)                           # GET detail page
 ```
 
 Measured (datacenter proxies that raw HTTP can't use): **~43%** become usable via the Chrome TLS
 fingerprint, and a usable proxy sustains **12–15/15** sequential requests (no quick ban). The
-remaining proxies split into a true JS-challenge minority and hard IP-blocks (1020) — see
-`.ai/docs/proxy.md`. A real headless browser also passes CF but yields only **~2
+remaining proxies split into a true JS-challenge minority and hard IP-blocks (1020). A real headless browser also passes CF but yields only **~2
 pages per proxy before a ban** and carries full Chrome overhead — so ImpersonateHttp is the
 primary path for Cloudflare-protected sources.
 
+**Fingerprint:** every request runs `curl-impersonate --impersonate <target> --compressed`.
+The target is `ImpersonateHttp::DEFAULT_IMPERSONATE` (`chrome146` — the one ProxyMate checks
+proxies with), or, for a proxy ProxyMate handed out with a Cloudflare clearance, the
+clearance's own `impersonate` (a Firefox target). With a clearance the client also sends its
+`User-Agent` and appends its `cf_clearance` cookie to the scraper's `Cookie` header (one header:
+`csrftoken=…; cf_clearance=…`) — Cloudflare binds the token to proxy IP + UA + fingerprint.
+Proxies: `socks5://` is sent as `socks5h://` (remote DNS); `http`, `socks4`, `socks4a`, `socks5h`
+pass through (curl speaks all of them).
+
 **Install:** the curl-impersonate binary is arch-specific and NOT committed. Run
-`bin/install-curl-impersonate` once per host (downloads into `vendor/curl-impersonate/`, which is
-gitignored). Override the binary path with `CURL_IMPERSONATE_BIN` (e.g. a `curl_chrome136`
-wrapper already on the host).
+`bin/install-curl-impersonate` once per host (downloads the release pinned as the script's
+`CURL_IMPERSONATE_VERSION` default, v2.3.3, into `vendor/curl-impersonate/`, which is gitignored;
+exits non-zero unless `--impersonate chrome146` runs). `ImpersonateHttp::RELEASE` reads that pin
+from the script — the one place it lives. At run start the sync compares it with ProxyMate's
+`GET /api/v1/meta` `curl_impersonate.release`: equal → it asks ProxyMate for tokens bound to any
+of ProxyMate's `targets`; different (or meta unavailable) → only `DEFAULT_IMPERSONATE`, with a
+`vacancy_sync_curl_impersonate_mismatch` warning. Override the path with `CURL_IMPERSONATE_BIN`
+(the `curl-impersonate` binary itself, not a `curl_chrome*` wrapper). A binary that cannot start
+raises `ImpersonateHttp::BinaryError` — never a `DeadProxyError`, so a broken host cannot burn
+the proxy pool.
 
 **Concurrency:** `ImpersonateHttp` shells out via `Open3`, but the `async` reactor hooks
 `process_wait`, so a fiber **yields** while its curl subprocess runs — 8 concurrent requests
-measured 0.07s vs 0.46s sequential. So it cooperates with the existing **50-fiber** model in
-`SyncVacancies`; no thread pool is needed. A source selects its client via
-`Scraper.http_client_class` (Dou → `ImpersonateHttp`, default → `AsyncHttp`); both share the
-`(proxy:, request_timeout:, connect_timeout:)` constructor, so the pool/workers build either one
-interchangeably.
+measured 0.07s vs 0.46s sequential; no thread pool is needed. The number of curl subprocesses
+is capped process-wide in the client: `ImpersonateHttp::MAX_PROCESSES` (ENV
+`CURL_IMPERSONATE_MAX_PROCESSES`, default 64, read in `impersonate_http.rb`) — every source and
+phase shares it; the sync's `WORKERS_PER_SOURCE` / `DESCRIPTION_WORKERS` (32 each, two sources at
+once) fill it exactly, and any extra fiber waits for a slot (see `.ai/docs/async.md`).
 
 ## SyncVacancies job dispatch
 
@@ -137,25 +158,34 @@ end
 1. Create `app/concepts/apply_mate/scraper/my_site.rb` inheriting `ApplyMate::Scraper::Base`
 2. Add `'ApplyMate::Scraper::MySite'` to `Source::SCRAPERS` in `app/models/source.rb` (the admin source form select reads this constant)
 3. Create the `Source` row with `scraper: 'ApplyMate::Scraper::MySite'`
-4. Override class methods as needed: `listing_url`, `http_client_class`, `fetches_description?`, `burst_cooldown`
+4. Declare `proxy_site` (the ProxyMate site slug — required) and override as needed: `listing_url`, `fetches_description?` (`http_client_class` is `ImpersonateHttp` for everyone)
 
 See `.ai/docs/architecture.md`.
 
-## Client API (`AsyncHttp` / `ImpersonateHttp`)
+## Client API (`ImpersonateHttp`)
 
-Both share the constructor `(proxy: nil, request_timeout:, connect_timeout:)` and the same methods. Requests fail fast — there is no internal retrying. Both return `ApplyMate::Client::Response` (`.body`, `.headers`, `.status`, `.final_url`).
+Constructor `(proxy: nil, request_timeout:, connect_timeout:, clearance: nil)`, class predicates `supported_proxy_protocols` (`http socks4 socks4a socks5 socks5h`) and `supports_cloudflare_clearance?` (`true`) — the sync pool turns them into its ProxyMate request. Requests fail fast — there is no internal retrying. Returns `ImpersonateHttp::Response` (`.body`, `.headers`, `.status`, `.final_url`); a failed curl raises `ImpersonateHttp::RequestError` (message: `curl-impersonate failed (exit N): <curl's errormsg>`).
 
 ```ruby
-client = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url)
+client = ApplyMate::Client::ImpersonateHttp.new(proxy: proxy.url, clearance: proxy.clearance)
 
 response = client.get(url)
 response = client.get(url, headers: { 'Cookie' => '...' })
 response = client.post(url, body: URI.encode_www_form(count: 0), headers: xhr_headers)
 ```
 
-Redirects are followed by default (`MAX_REDIRECTS = 5`); compare `response.final_url` with the requested URL to detect a redirect (Djinni uses this to detect the last page). Inside a scraper always wrap calls in `via_proxy { ... }` so transport errors, `nil` responses and `502/503/504` become `DeadProxyError`.
+Redirects are always followed (`curl -L`); `response.final_url` is curl's `url_effective`, so compare it with the requested URL to detect a redirect (Djinni's last page redirects back to `/jobs/`). Inside a scraper always wrap calls in `via_proxy { ... }`: transport errors, `PROXY_DEAD_STATUSES` (`429 502 503 504`) and a Cloudflare block/challenge page at any non-200 status become `DeadProxyError`.
 
-`Response` also has `cloudflare_challenge?` and `alive_or_cf_challenge?` (used by proxy validation).
+## Dead proxies — `DeadProxyError`
+
+`DeadProxyError` is a plain `StandardError`; its message is a short reason. `via_proxy` raises it
+for a transport failure (`transport failure (<error class>: <curl's message>)`), a
+`PROXY_DEAD_STATUSES` reply (`HTTP 429`) and a Cloudflare block/challenge page at a non-200
+status (`HTTP 403 Cloudflare`; `cloudflare_page?` — `<title>Just a moment`, `_cf_chl_opt`,
+`cf-chl`, `<title>Attention Required! | Cloudflare` / `Access denied`). A scraper raises it
+itself when a page gives the proxy away — `raise DeadProxyError, 'empty job list (proxy
+rate-limited)'` (empty list, non-JSON, no CSRF cookie). The sync only counts it (`dead_proxies`)
+and drops the proxy for the round; nothing is reported to ProxyMate.
 
 ## CSRF session init pattern (DOU-style XHR scrapers)
 

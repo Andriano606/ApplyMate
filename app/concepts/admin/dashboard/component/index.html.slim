@@ -18,12 +18,6 @@
       description: I18n.t('admin.dashboard.index.sources_description'),
       turbo: false)
     = icon(:globe_alt, size: 6, class: 'text-green-600')
-  = dashboard_card(path: admin_proxies_path,
-      icon_bg: 'bg-purple-100',
-      title: I18n.t('admin.dashboard.index.proxies'),
-      description: I18n.t('admin.dashboard.index.proxies_description'),
-      turbo: false)
-    = icon(:lock_closed, size: 6, class: 'text-purple-600')
   = dashboard_card(path: ENV.fetch('GRAFANA_URL', 'http://localhost:3001'),
       icon_bg: 'bg-orange-50',
       title: I18n.t('admin.dashboard.index.grafana'),
@@ -43,6 +37,12 @@
       description: I18n.t('admin.dashboard.index.mcp_description'),
       turbo: false)
     = icon(:sparkles, size: 6, class: 'text-rose-600')
+  = dashboard_card(path: admin_proxy_mate_setting_path,
+      icon_bg: 'bg-cyan-100',
+      title: I18n.t('admin.dashboard.index.proxy_mate'),
+      description: I18n.t('admin.dashboard.index.proxy_mate_description'),
+      turbo: false)
+    = icon(:lock_closed, size: 6, class: 'text-cyan-600')
   = dashboard_card(path: '/admin/api-docs/index.html',
       icon_bg: 'bg-teal-100',
       title: I18n.t('admin.dashboard.index.api_docs'),

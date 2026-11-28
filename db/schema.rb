@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_23_100004) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_110001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -43,12 +43,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100004) do
   end
 
   create_table "api_tokens", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "last_used_at"
-    t.string "name"
-    t.string "token", null: false
-    t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.string "token", null: false
+    t.string "name"
+    t.datetime "last_used_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.boolean "personal", default: false, null: false
     t.index ["token"], name: "index_api_tokens_on_token", unique: true
     t.index ["user_id"], name: "index_api_tokens_on_user_id"
@@ -87,45 +87,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100004) do
     t.check_constraint "rating >= 1 AND rating <= 10", name: "feedbacks_rating_range"
   end
 
-  create_table "proxies", force: :cascade do |t|
+  create_table "proxy_mate_settings", force: :cascade do |t|
+    t.boolean "singleton", default: true, null: false
+    t.string "url"
+    t.text "api_key"
     t.datetime "created_at", null: false
-    t.integer "fail_count", default: 0, null: false
-    t.datetime "failed_at"
-    t.string "host", null: false
-    t.datetime "last_used_at"
-    t.integer "port", null: false
-    t.string "protocol", default: "http", null: false
-    t.float "reliability", default: 1.0, null: false
-    t.integer "success_count", default: 0, null: false
     t.datetime "updated_at", null: false
-    t.index ["failed_at"], name: "index_proxies_on_failed_at"
-    t.index ["host", "port", "protocol"], name: "index_proxies_on_host_and_port_and_protocol", unique: true
-    t.index ["last_used_at"], name: "index_proxies_on_last_used_at"
-    t.index ["reliability"], name: "index_proxies_on_reliability"
-  end
-
-  create_table "proxy_source_stats", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.integer "fail_count", default: 0, null: false
-    t.datetime "failed_at"
-    t.bigint "proxy_id", null: false
-    t.float "reliability", default: 1.0, null: false
-    t.bigint "source_id", null: false
-    t.integer "success_count", default: 0, null: false
-    t.datetime "updated_at", null: false
-    t.index ["proxy_id", "source_id"], name: "index_proxy_source_stats_on_proxy_id_and_source_id", unique: true
-    t.index ["proxy_id"], name: "index_proxy_source_stats_on_proxy_id"
-    t.index ["source_id", "failed_at"], name: "index_proxy_source_stats_on_source_id_and_failed_at"
-    t.index ["source_id", "reliability"], name: "index_proxy_source_stats_on_source_id_and_reliability"
-    t.index ["source_id"], name: "index_proxy_source_stats_on_source_id"
+    t.index ["singleton"], name: "index_proxy_mate_settings_on_singleton", unique: true
+    t.check_constraint "singleton", name: "proxy_mate_settings_singleton"
   end
 
   create_table "saved_filters", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "name", null: false
-    t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.string "name", null: false
     t.jsonb "vacancy_search", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["user_id", "name"], name: "index_saved_filters_on_user_id_and_name", unique: true
   end
 
@@ -275,21 +252,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100004) do
     t.string "base_url", null: false
     t.datetime "created_at", null: false
     t.string "name", null: false
-    t.string "scraper"
     t.datetime "updated_at", null: false
+    t.string "scraper"
   end
 
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
     t.string "avatar_url"
     t.datetime "created_at", null: false
-    t.bigint "default_saved_filter_id"
     t.string "email", null: false
     t.string "middle_name"
     t.string "name", null: false
     t.string "provider", null: false
     t.string "uid", null: false
     t.datetime "updated_at", null: false
+    t.bigint "default_saved_filter_id"
     t.index ["default_saved_filter_id"], name: "index_users_on_default_saved_filter_id"
     t.index ["email"], name: "index_users_on_email"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
@@ -300,12 +277,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100004) do
     t.string "company_name"
     t.datetime "created_at", null: false
     t.text "description"
-    t.text "description_html"
     t.string "external_id"
     t.bigint "source_id", null: false
     t.string "title"
     t.datetime "updated_at", null: false
     t.string "url"
+    t.text "description_html"
     t.index ["source_id", "external_id"], name: "index_vacancies_on_source_id_and_external_id", unique: true
     t.index ["source_id", "id"], name: "index_vacancies_pending_description_html", where: "((description_html IS NULL) OR (description_html = ''::text))"
     t.index ["source_id"], name: "index_vacancies_on_source_id"
@@ -319,8 +296,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_100004) do
   add_foreign_key "feedback_thread_reads", "feedbacks"
   add_foreign_key "feedback_thread_reads", "users"
   add_foreign_key "feedbacks", "users"
-  add_foreign_key "proxy_source_stats", "proxies"
-  add_foreign_key "proxy_source_stats", "sources"
   add_foreign_key "saved_filters", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

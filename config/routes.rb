@@ -22,10 +22,10 @@ Rails.application.routes.draw do
     root 'dashboard#index'
     resources :users, only: [ :index ]
     resource :impersonation, only: [ :create, :destroy ]
-    resources :proxies, only: [ :index, :show ]
     resources :sources, only: [ :new, :create, :index, :edit, :update, :destroy ]
     resources :api_tokens, only: [ :index, :new, :create, :destroy ]
     resource :mcp, only: [ :show ], controller: 'mcp'
+    resource :proxy_mate_setting, only: [ :show, :update ], path: 'proxy_mate'
     mount MissionControl::Jobs::Engine, at: '/jobs'
 
     mount Rswag::Api::Engine => '/api-docs'

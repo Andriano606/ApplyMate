@@ -55,8 +55,8 @@ en:
         jobs_description: Monitor background vacancy
         mcp: MCP server
         mcp_description: Connect Claude to the vacancy bank
-        proxies: Проксі
-        proxies_description: Список валідних проксі-серверів
+        proxy_mate: ProxyMate
+        proxy_mate_description: Address and API key of the proxy service
         sources: Sources
         sources_description: Sources
         title: Admin dashboard
@@ -84,26 +84,33 @@ en:
         title: MCP server
         tools_title: Available tools
         unnamed_token: Token from %{created_at}
-    proxy:
-      index:
-        empty: Проксі не знайдено
-        stats:
-          dead: dead
-          flaky: flaky
-          untested: untested
-          working: working
-        table:
-          actions: Дії
-          fail_count: Помилки
-          failed_at: Остання помилка
-          ratio: Надійність
-          source: Джерело
-          success_count: Успіхи
-          url: URL
-        title: Проксі
+    proxy_mate_setting:
+      errors:
+        invalid_url: Enter an address starting with http:// or https://
       show:
-        copy: Скопіювати команду
-        title: 'curl: %{url}'
+        api_key: API key
+        api_key_placeholder: Paste a new key to replace the saved one
+        intro: ProxyMate is a separate service the vacancy sync takes its proxies
+          from. Values saved here take precedence over the PROXY_MATE_URL and PROXY_MATE_API_KEY
+          environment variables.
+        key_missing: No key saved (the environment variable is used if set).
+        key_saved: 'Saved key: %{preview}. Leave the field blank to keep it.'
+        submit: Save
+        title: ProxyMate
+        url: Address (URL)
+        url_hint: For example https://proxymate.example.com
+      status:
+        connected: Connection works
+        no_sites: ProxyMate answered but has no sites.
+        not_configured: ProxyMate is not configured — enter the address and API key.
+        rejected: 'ProxyMate rejected the request: %{detail}'
+        title: Connection status
+        unauthorized: ProxyMate did not accept the API key (unauthorized).
+        unreachable: 'ProxyMate is unreachable: %{detail}'
+        with_clearance: 'with Cloudflare token: %{count}'
+        working: 'Working proxies: %{count}'
+      update:
+        success: ProxyMate settings saved
     source:
       create:
         success: Source created

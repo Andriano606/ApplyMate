@@ -99,4 +99,4 @@ rows = rows.uniq { |r| [r[:source_id], r[:external_id]] }
 Vacancy.upsert_all(rows, unique_by: %i[source_id external_id], update_only: %i[title url])
 ```
 
-Root cause is usually upstream dedup using a different column set than the DB constraint. Note the unique index on `proxies` is `(host, port, protocol)` (`Proxy::Operation::PersistProxies` uses `insert_all`, which skips conflicts instead of raising this error).
+Root cause is usually upstream dedup using a different column set than the DB constraint.

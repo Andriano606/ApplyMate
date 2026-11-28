@@ -20,8 +20,8 @@ groups:
 
       # The latest run did not finish cleanly (a source failed or was skipped, or the
       # run itself raised) — some vacancies are stale. Keyed on the latest run's
-      # `result` (not on `sources_failed`, which stays 0 when e.g. the final proxy-stat
-      # flush raises); `keep failed` drops the per-deploy `container` label so
+      # `result` (not on `sources_failed`, which stays 0 when the run itself raises, e.g.
+      # NoProxiesError because ProxyMate gave no source a proxy); `keep failed` drops the per-deploy `container` label so
       # last_over_time sees one series and resolves as soon as a clean run lands.
       # The reason is in the "Помилки та попередження" panel of the sync dashboard.
       - uid: applymate-sync-failed

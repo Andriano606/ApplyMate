@@ -3,12 +3,16 @@
 class ApplyMate::Scraper::Base
   include ApplyMate::Logging
 
-  # Raised when the proxy behind the HTTP client is unusable. The sync pipeline
-  # rescues this to drop the proxy and retry the same work on another IP.
-  class DeadProxyError < StandardError; end
+  # Raised when the proxy behind the HTTP client is unusable. The sync pipeline rescues
+  # this to drop the proxy from the run's pool and retry the same work on another IP. The
+  # message is a short reason ("HTTP 403 Cloudflare", "empty job list (proxy rate-limited)",
+  # curl's error text).
+  DeadProxyError = Class.new(StandardError)
 
-  # Upstream/proxy statuses that mean "this IP can't be used right now".
-  PROXY_DEAD_STATUSES = [ 502, 503, 504 ].freeze
+  # Statuses that mean "this IP can't be used right now": rate-limited, or a gateway the
+  # proxy could not get through. A Cloudflare block/challenge page means the same at any
+  # status (see #via_proxy).
+  PROXY_DEAD_STATUSES = [ 429, 502, 503, 504 ].freeze
 
   # Tags that carry no readable content (or execute code) — dropped from the
   # description HTML before it is stored. Everything else is kept verbatim so the
@@ -21,28 +25,26 @@ class ApplyMate::Scraper::Base
   NON_CONTENT_ATTRIBUTE_PREFIXES = %w[on data-].freeze
   NON_CONTENT_ATTRIBUTES         = %w[class style].freeze
 
-  # HTTP client the sync pipeline builds for this source. Default is the fast
-  # pure-Ruby AsyncHttp; Cloudflare-protected sources override this to a client
-  # that passes the TLS-fingerprint check (see ApplyMate::Client::ImpersonateHttp).
-  # Both share the (proxy:, request_timeout:, connect_timeout:) constructor.
+  # HTTP client the sync pipeline builds for this source: curl-impersonate, the tool
+  # ProxyMate checks proxies with (ApplyMate::Client::ImpersonateHttp). A client class takes
+  # the (proxy:, request_timeout:, connect_timeout:, clearance:) constructor and answers the
+  # `supported_proxy_protocols` / `supports_cloudflare_clearance?` predicates the sync pool
+  # turns into its ProxyMate request.
   def self.http_client_class
-    ApplyMate::Client::AsyncHttp
+    ApplyMate::Client::ImpersonateHttp
+  end
+
+  # ProxyMate site slug (GET /api/v1/sites) whose checked proxies the sync pool asks for —
+  # ProxyMate checks every proxy on every site separately, so the slug picks the right list.
+  def self.proxy_site
+    raise NotImplementedError, "#{name} must declare its ProxyMate site (self.proxy_site)"
   end
 
   # Public URL of the source's vacancy listing — the page a person opens to browse
   # its jobs. Override with the real listing endpoint; the default is the homepage.
-  # Used by the totals widget (each per-source pill links here) and, below, as the
-  # proxy-validation target.
+  # Used by the totals widget (each per-source pill links here).
   def self.listing_url(source)
     source.base_url.to_s
-  end
-
-  # URL the proxy validator (and the sync pool's live re-check) probes to decide a
-  # proxy is usable for this source. Delegates to `listing_url` so that "working"
-  # means the proxy actually reaches the page we scrape, not just the
-  # (less-protected) homepage.
-  def self.validation_url(source)
-    listing_url(source)
   end
 
   # Does this source fetch the full description from a per-vacancy detail page in the
@@ -51,13 +53,6 @@ class ApplyMate::Scraper::Base
   # it — and the detail pass only runs for vacancies that don't have one yet.
   def self.fetches_description?
     false
-  end
-
-  # Seconds a proxy rests after a burst of requests to this source (sync ProxyPool).
-  # Override per source: Cloudflare-protected sites are rate-sensitive (a short cooldown
-  # triggers more blocks → proxy churn → slower), CF-free sites just want throughput.
-  def self.burst_cooldown
-    5
   end
 
   # Plain-text projection of a description's HTML. `description_html` is what the
@@ -80,25 +75,35 @@ class ApplyMate::Scraper::Base
 
   private
 
-  # Runs an HTTP client call made under proxy rotation and normalises every
-  # failure into DeadProxyError so the sync pipeline drops the proxy and retries
-  # on another IP. The client itself raises raw transport errors (Errno::*,
-  # SSLError, Async::TimeoutError, …) and returns nil / a 5xx Response for an
-  # unusable reply — all of which mean this proxy can't be used here. Without
-  # this, a failed request would look like an empty page and the pipeline would
-  # mistake it for the end of the listing.
+  # Runs an HTTP client call made under proxy rotation and turns every proxy-level
+  # failure into DeadProxyError so the sync pipeline drops the proxy and retries on
+  # another IP: a transport error (curl failed — refused, timeout, tunnel, TLS…), a
+  # PROXY_DEAD_STATUSES reply, or a Cloudflare block/challenge page. Without this, a
+  # failed request would look like an empty page and the pipeline would mistake it for
+  # the end of the listing. A curl binary that cannot start is the host's fault, not the
+  # proxy's — it is let through so it never burns the pool.
   def via_proxy
     response =
       begin
         yield
+      rescue ApplyMate::Client::ImpersonateHttp::BinaryError
+        raise
       rescue StandardError => e
         raise DeadProxyError, "transport failure (#{e.class}: #{e.message})"
       end
 
-    raise DeadProxyError, 'no response (proxy failed)' if response.nil?
-    raise DeadProxyError, "HTTP #{response.status} (proxy failed)" if PROXY_DEAD_STATUSES.include?(response.status)
+    status     = response.status
+    cloudflare = status != 200 && cloudflare_page?(response.body.to_s)
+    raise DeadProxyError, "HTTP #{status}#{' Cloudflare' if cloudflare}" if cloudflare || PROXY_DEAD_STATUSES.include?(status)
 
     response
+  end
+
+  # A Cloudflare block ("Attention Required! | Cloudflare", "Access denied") or challenge
+  # ("Just a moment…") page.
+  def cloudflare_page?(body)
+    body.include?('<title>Just a moment') || body.include?('_cf_chl_opt') || body.include?('cf-chl') ||
+      body.match?(%r{<title>\s*(Attention Required! \| Cloudflare|Access denied)}i)
   end
 
   def full_url(path)

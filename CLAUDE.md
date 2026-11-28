@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # ApplyMate
 
-Rails 8 + Hotwire (Stimulus + Turbo) **vacancy bank**. Its single job is to keep the list of live vacancies from several job boards (DOU, Djinni, …) up to date — quickly and efficiently, through a pool of free proxies — and let users search and filter them via Elasticsearch.
+Rails 8 + Hotwire (Stimulus + Turbo) **vacancy bank**. Its single job is to keep the list of live vacancies from several job boards (DOU, Djinni, …) up to date — quickly and efficiently, through free proxies taken from the separate ProxyMate service — and let users search and filter them via Elasticsearch.
 
-The core is two background pipelines: `Proxy::Operation::FetchProxies` (collects the proxy pool) and `Vacancy::Operation::SyncVacancies` (scrapes every source through that pool). The bank is also exposed to Claude as an MCP server at `/mcp` (search and read vacancies, create/edit/delete the user's saved filters, publish the user's feedback; API-token auth — each user gets their own token from the *Connect Claude (MCP)* modal). Guests see a short explainer banner with a Google sign-in button on the home page (`Home::Component::GuestBanner`). Users review the service on the public `/feedbacks` page (one editable feedback per user, rating 1–10, with a reply thread between admins and the author). There is no auto-apply, no AI integration, no user/source profiles, no prompts and no CV generation — they were removed on purpose; do not reintroduce them.
+The core is the background pipeline `Vacancy::Operation::SyncVacancies`, which scrapes every source through an in-memory proxy pool filled from the ProxyMate API (`ApplyMate::Client::ProxyMate`; URL + API key are pasted by an admin on `/admin/proxy_mate` and stored encrypted in the singleton `ProxyMateSetting`, falling back to ENV `PROXY_MATE_URL` / `PROXY_MATE_API_KEY` for dev). ApplyMate no longer collects or validates proxies itself — ProxyMate does; do not reintroduce a proxy table or validator here. The bank is also exposed to Claude as an MCP server at `/mcp` (search and read vacancies, create/edit/delete the user's saved filters, publish the user's feedback; API-token auth — each user gets their own token from the *Connect Claude (MCP)* modal). Guests see a short explainer banner with a Google sign-in button on the home page (`Home::Component::GuestBanner`). Users review the service on the public `/feedbacks` page (one editable feedback per user, rating 1–10, with a reply thread between admins and the author). There is no auto-apply, no AI integration, no user/source profiles, no prompts and no CV generation — they were removed on purpose; do not reintroduce them.
 
 ## Essential Commands
 
@@ -71,7 +71,7 @@ Apply these to ALL new and modified code. They are distilled from real review fi
 
 ### Concurrency (fibers, jobs, shared state)
 - **Every loop must have a termination path.** For any retry/refill/polling loop, answer explicitly: "what makes this stop when the world stays broken?" Unbounded retries against a deterministic candidate set = livelock.
-- **Counters shared by concurrent writers are incremented SQL-side** (`ProxySourceStat.apply_deltas!` pattern: `col = col + EXCLUDED.col`), never read-modify-write from Ruby. Any `SELECT → compute → upsert_all` across a fiber-suspension point loses the other writer's data.
+- **Counters shared by concurrent writers are incremented SQL-side** (`INSERT … ON CONFLICT DO UPDATE SET col = col + EXCLUDED.col`), never read-modify-write from Ruby. Any `SELECT → compute → upsert_all` across a fiber-suspension point loses the other writer's data.
 - **Buffered work survives failure.** Swap buffers yield-free before I/O, restore them on error, and flush before raising — a `raise` that precedes a `flush` throws away completed work. Check every early-`raise` against pending buffers.
 - **`limits_concurrency` always sets `duration:`** sized to the real runtime (Solid Queue's default window is 3 minutes; long jobs need hours). Any in-memory invariant ("one run at a time") must name the mechanism that enforces it and that mechanism must actually hold for the full run.
 - **Bound all fan-out.** Fibers, subprocesses (curl-impersonate forks), and DB connections get explicit semaphores/limits sized for the production host (4-core Raspberry Pi 5). A documented cap must exist in code, not only in docs.
@@ -102,7 +102,7 @@ Apply these to ALL new and modified code. They are distilled from real review fi
 | `simple_form` + `slim-rails` | Forms in `.html.slim` templates |
 | `dry-matcher` | `Matcher::MatcherWithDefaults` used by Endpoint for success/invalid dispatch |
 | `solid_queue` + `solid_cable` + `solid_cache` | Background jobs, ActionCable, caching |
-| `async` + `async-http` | Fiber concurrency for the sync/proxy pipelines (`ApplyMate::Client::AsyncHttp`) |
+| `async` | Fiber concurrency for the vacancy sync; HTTP goes through curl-impersonate (`ApplyMate::Client::ImpersonateHttp`) |
 | `will_paginate` | Pagination; operations return `WillPaginate::Collection` |
 | `mcp` | Official MCP SDK; `/mcp` server for Claude (`Mcp::Tool::*` → `Mcp::Operation::*`) |
 
@@ -126,12 +126,10 @@ All controllers registered in `app/javascript/controllers/index.ts`. Notable one
 - `.ai/docs/view_component.md` — component decision tree (check helper first, shared vs resource-scoped), base class features, `before_render` / `current_user` pitfalls, broadcast-safe sentinel pattern.
 - `.ai/docs/turbo_handler.md` — TurboHandler class API, user-scoped broadcasts (`[user, record]` channels), `ApplicationController.renderer` limitations, how to pass user context to components in broadcasts.
 - `.ai/docs/architecture.md` — Module boundary table (Client/Scraper/Operation), enforced rules, how to add a new job board end-to-end. **Read before modifying any pipeline module.**
-- `.ai/docs/scrapers.md` — Scraper base interface, vacancy struct shape, HTTP client API (`AsyncHttp` / `ImpersonateHttp`), CSRF session init pattern, graceful termination, adding a new scraper. **Read before adding or modifying scrapers.**
-- `.ai/docs/async.md` — Async fiber pattern for jobs, `AsyncHttp` client, `Protocol::HTTP::Headers` API gotchas, `ErrorHandler` transport compatibility. **Read before adding concurrency to a job or touching `ApplyMate::Client::AsyncHttp`.**
+- `.ai/docs/scrapers.md` — Scraper base interface, vacancy struct shape, HTTP client API (`ImpersonateHttp`), CSRF session init pattern, graceful termination, adding a new scraper. **Read before adding or modifying scrapers.**
+- `.ai/docs/async.md` — Async fiber pattern for jobs, how blocking I/O (curl-impersonate subprocesses, Net::HTTP) behaves under the fiber scheduler, the curl process cap. **Read before adding concurrency to a job or touching `ApplyMate::Client::ImpersonateHttp`.**
 - `.ai/docs/models_and_db.md` — nullable FK patterns, inverse associations for multiple FKs to the same table, uniqueness errors on `:base`.
 - `.ai/docs/ruby_style.md` — project Ruby style rules (no endless methods, etc.).
-- `.ai/docs/proxy.md` — proxy model fail tracking (`increment_fail!` / `reset_fail!`), `https`→`http` normalization gotcha, 2xx/3xx reachability rule.
-- `.ai/docs/fetch_proxies.md` — `Proxy::Operation::FetchProxies` pipeline: bounded fetch streamed into batched persist (no validation), why every limit exists (the run used to OOM the Pi), per-list sampling, stop conditions, catalog URL recursion caps, protocol inference, persist insert semantics, why proxies are never pruned. **Read before modifying `Proxy::Operation::FetchProxies`, `Proxy::Job::FetchProxies`, `Proxy::Operation::FetchCandidates`, or `Proxy::Operation::PersistProxies`.**
 - `.ai/docs/mcp.md` — MCP server at `/mcp`: stateless Streamable HTTP, API-token auth, tool → operation layering, how `search_vacancies` composes the ES query, adding a tool, connecting Claude. **Read before adding or changing an MCP tool.**
 - `.ai/docs/feedback.md` — the `/feedbacks` page, `Feedback` and `FeedbackReply`: one per user, rating 1–10, sentiment ranges, `posted_via`, who may reply in threads, how the MCP tools reuse the web operations.
 - `.ai/docs/observability.md` — JSON log events (`ApplyMate::Logging`), the Grafana dashboards «Синхронізація вакансій» (with its alerts) and «Використання MCP»: event/field catalogue, LogQL conventions, how to deploy dashboard changes. **Read before adding/renaming a logged event field or editing the dashboard.**
@@ -147,7 +145,7 @@ Agent definitions live in `.claude/agents/`. Each one pins its own model and eff
 | Design for a multi-layer, pipeline, schema or state-machine change | `planner` | fable / high |
 | Operations, form objects, components, turbo handlers, jobs, policies, migrations | `concept-builder` | sonnet / medium |
 | Slim, Tailwind, simple_form, Stimulus/TS, Turbo frames | `frontend-builder` | sonnet / medium |
-| Scrapers, Client::AsyncHttp/ImpersonateHttp, vacancy sync, proxies, fibers | `pipeline-engineer` | opus / high |
+| Scrapers, Client::ImpersonateHttp/ProxyMate, vacancy sync, proxy pool, fibers | `pipeline-engineer` | opus / high |
 | RSpec, Cucumber, factories | `spec-writer` | sonnet / medium |
 | Just run the checks and report what is red | `checks-runner` | haiku / low |
 | Locale keys, i18n-tasks failures | `i18n-keeper` | haiku / low |

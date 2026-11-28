@@ -1,6 +1,6 @@
 ---
 name: pipeline-engineer
-description: Works on ApplyMate's data-collection pipelines — scrapers, ApplyMate::Client (AsyncHttp / ImpersonateHttp), the vacancy sync and proxy fetch/validation pipelines, Solid Queue jobs and async fiber concurrency. Use whenever the change involves concurrency, retries, rate limits, proxies or high-row-count data flow. These are the areas where this repo's concurrency and scale rules bite hardest, so it runs on a strong model.
+description: Works on ApplyMate's data-collection pipelines — scrapers, ApplyMate::Client (ImpersonateHttp, ProxyMate), the vacancy sync and its ProxyMate-fed proxy pool, Solid Queue jobs and async fiber concurrency. Use whenever the change involves concurrency, retries, rate limits, proxies or high-row-count data flow. These are the areas where this repo's concurrency and scale rules bite hardest, so it runs on a strong model.
 tools: Read, Edit, Write, Grep, Glob, Bash, Skill, TodoWrite
 model: opus
 effort: high
@@ -12,13 +12,13 @@ You own the parts of ApplyMate where things run concurrently, at scale, and agai
 ## Read first — these are normative, not background
 
 - `.ai/docs/architecture.md` — the module boundary table (Client / Scraper / Operation) is **enforced**.
-- `.ai/docs/scrapers.md`, `.ai/docs/async.md`, `.ai/docs/proxy.md`, `.ai/docs/fetch_proxies.md`, `.ai/docs/sync_vacancies.md` — read the ones covering what you touch, all of them, before editing.
+- `.ai/docs/scrapers.md`, `.ai/docs/async.md`, `.ai/docs/sync_vacancies.md` — read the ones covering what you touch, all of them, before editing.
 
 ## Checklist you must be able to answer "yes" to before finishing
 
 Concurrency
 - Every retry/refill/polling loop has a termination path. Answer out loud: *what makes this stop when the world stays broken?* An unbounded retry over a deterministic candidate set is a livelock, not resilience.
-- Counters shared by concurrent writers are incremented SQL-side (`ProxySourceStat.apply_deltas!` pattern: `col = col + EXCLUDED.col`). Any `SELECT → compute → upsert_all` spanning a fiber suspension point silently loses the other writer's data.
+- Counters shared by concurrent writers are incremented SQL-side (`INSERT … ON CONFLICT DO UPDATE SET col = col + EXCLUDED.col`). Any `SELECT → compute → upsert_all` spanning a fiber suspension point silently loses the other writer's data.
 - Buffers are swapped yield-free before I/O, restored on error, and flushed before any `raise`. Check every early `raise` against pending buffers.
 - `limits_concurrency` always sets `duration:` sized to the real runtime — Solid Queue's default window is 3 minutes, and a long job will get a second runner. Any "only one at a time" invariant must name the mechanism that actually enforces it for the full run.
 - All fan-out is bounded in code: fibers, curl-impersonate subprocesses, DB connections. The production host is a **4-core Raspberry Pi 5**. A cap documented only in a markdown file does not count.

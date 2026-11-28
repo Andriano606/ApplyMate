@@ -1,0 +1,42 @@
+{
+  "site": { "id": 2, "slug": "dou", "name": "DOU", "url": "https://jobs.dou.ua/vacancies/" },
+  "count": 3,
+  "limit": 1000,
+  "order": "stable",
+  "available": 41,
+  "remaining": 38,
+  "session_id": "applymate-1795309200323-2",
+  "fields": "minimal",
+  "next_cursor": "eyJvIjoic3RhYmxlIn0",
+  "generated_at": "2026-11-28T05:33:29+02:00",
+  "proxies": [
+    {
+      "id": 18485,
+      "url": "socks4://88.245.138.87:1080",
+      "protocol": "socks4",
+      "needs_cloudflare_token": false,
+      "cloudflare": null,
+      "stability": { "score": 21 }
+    },
+    {
+      "id": 18476,
+      "url": "http://85.117.61.108:8080",
+      "protocol": "http",
+      "needs_cloudflare_token": false,
+      "cloudflare": null,
+      "stability": { "score": 38 }
+    },
+    {
+      "id": 20311,
+      "url": "socks5h://203.0.113.7:1080",
+      "protocol": "socks5",
+      "needs_cloudflare_token": true,
+      "cloudflare": {
+        "cookie": "cf_clearance=Zq8xV1.example-token-1764300040-1.2.1.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+        "impersonate": "firefox147"
+      },
+      "stability": { "score": 70 }
+    }
+  ]
+}

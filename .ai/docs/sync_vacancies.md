@@ -2,66 +2,97 @@
 
 Операція повної синхронізації вакансій із зовнішніх джерел. Запускається через `Vacancy::Job::SyncVacancies` (SolidQueue).
 
-> **Один запуск за раз.** Джоба має `limits_concurrency to: 1` — in-memory пул проксі (див. нижче) володіє правилом «1 проксі раз на 5с» у пам'яті, а не в БД, тож два паралельні запуски ділили б проксі частіше за кулдаун.
+> **Один запуск за раз.** Джоба має `limits_concurrency to: 1, duration: 12.hours` — ліміт використань проксі (`MAX_USES` / `USE_INTERVAL`, див. нижче) живе в RAM одного запуску, а сесії ProxyMate в кожного запуску свої: другий паралельний запуск отримав би ті самі проксі у своїх сесіях і використовував би їх понад ліміт першого.
 
-> **Дані живуть у RAM; БД чіпається лише за двома тригерами:** (1) пул проксі порожній → дотягнути пачку (`ProxyPool#refill`); (2) RAM-буфер вакансій досяг `VACANCY_BUFFER_LIMIT` → bulk-flush у БД + очищення буфера (`VacancyBuffer#maybe_flush`), плюс фінальний flush у кінці кожного джерела. Увесь доступ до БД іде через `DbGateway` → щонайбільше `DB_CONCURRENCY` фізичних з'єднань на весь джоб.
+> **Дані живуть у RAM.** Пул проксі БД не чіпає зовсім (проксі — з ProxyMate). БД чіпають лише вакансії: RAM-буфер досяг `VACANCY_BUFFER_LIMIT` → bulk-flush (`VacancyBuffer#maybe_flush`), фінальний flush у кінці джерела, курсор і bulk-UPDATE Phase 2, лічильники/чистка. Увесь доступ до БД іде через `DbGateway` → щонайбільше `DB_CONCURRENCY` фізичних з'єднань на весь джоб.
 
 ## Константи
 
 | Константа | Значення | Роль |
 |-----------|----------|------|
-| `WORKERS_PER_SOURCE` | 100 | Файберів-воркерів на джерело у Phase 1 (лістинг) |
-| `DESCRIPTION_WORKERS` | 140 | Файберів-воркерів на джерело у Phase 2 (описи) — фаза суто HTTP-очікування, масштабується ширше |
+| `WORKERS_PER_SOURCE` | 32 | Файберів-воркерів на джерело у Phase 1 (лістинг) |
+| `DESCRIPTION_WORKERS` | 32 | Файберів-воркерів на джерело у Phase 2 (описи). Два джерела одночасно × 32 = `ImpersonateHttp::MAX_PROCESSES` (64 curl-процеси на Pi); більше файберів лише чекали б слот curl, а темп і так задає пул (проксі — раз на `USE_INTERVAL`) |
 | `MAX_PAGES` | 2000 | Верхня межа черги сторінок |
 | `LAST_PAGE_CONFIRMATIONS` | 50 | Скільки разів сторінка має повернути порожній результат, щоб вважатись останньою |
 | `VACANCY_FETCH_BATCH` | 1000 | Розмір пачки вакансій, що тягнуться з БД у Phase 2 |
 | `VACANCY_BUFFER_LIMIT` | 1000 | Скільки скрапнутих вакансій тримається в RAM перед bulk-flush у БД (Phase 1) |
 | `DB_CONCURRENCY` | 5 | Макс. одночасних DB-операцій (== фізичних конектів) у `DbGateway` |
-| `HTTP_REQUEST_TIMEOUT` | 6 | request-таймаут клієнта для sync (агресивний — швидко відсіює мертві проксі) |
-| `HTTP_CONNECT_TIMEOUT` | 3 | TCP-connect таймаут клієнта для sync |
+| `MAX_VACANCY_RETRIES` | 20 | Скільки порожніх відповідей опису до відмови від вакансії (Phase 2) |
+| `HTTP_REQUEST_TIMEOUT` | 25 | Загальний таймаут запиту (curl `--max-time`), з'єднання з проксі входить у нього |
+| `HTTP_CONNECT_TIMEOUT` | 10 | Таймаут з'єднання з проксі (curl `--connect-timeout`; 3 с вбивав повільні, але живі проксі). Входить у `HTTP_REQUEST_TIMEOUT` (curl `--max-time`) |
 
-`ProxyPool` (вкладений приватний клас):
+`ProxyPool` (вкладений клас):
 
 | Константа | Значення | Роль |
 |-----------|----------|------|
-| `BURST_LIMIT` | 15 | Скільки запитів проксі робить поспіль перед відпочинком |
-| `Scraper.burst_cooldown` | 10 | Секунд відпочинку проксі після burst-серії (не константа операції — метод скрейпера) |
-| `MIN_LIVE` | 10 | Поріг живих проксі, нижче якого запускається refill |
-| `BATCH_SIZE` | 1500 | Скільки перевірених (`proxy_source_stats.success_count > 0`) проксі тягнеться за один load/refill |
-| `DISCOVERY_BATCH` | 300 | Скільки нетестованих проксі тягнеться, щоб bootstrap-нути пул без жодної перевіреної |
-| `VALIDATION_CONCURRENCY` | 250 | Паралельних live-проб (`AsyncHttp`) при seed/refill |
-| `REFILL_INTERVAL` | 5 | Мінімум секунд між refill-ами, коли пул малий (захист від частих запитів у БД) |
+| `MAX_USES` | 10 | Скільки запитів (невдалі теж) один проксі робить на сайт за **раунд**; далі — «на пенсії» до наступного раунду |
+| `USE_INTERVAL` | 60 | Мінімум секунд між двома використаннями одного проксі на сайті (від кінця попереднього) |
+| `MIN_READY` | 10 | Скільки проксі мають бути готові **зараз**, інакше `acquire` запускає refill |
+| `SEED_BATCH` | 1000 (`ProxyMate::MAX_LIMIT`) | Скільки проксі просимо в ProxyMate на старті |
+| `REFILL_BATCH` | 300 | Скільки проксі просимо за один refill |
+| `ORDER` | `'stable'` | Порядок ProxyMate: найвищий stability score першим |
+| `REFILL_INTERVAL` | 5 | Мінімум секунд між refill-ами (стартове значення backoff) |
+| `MAX_REFILL_INTERVAL` | 60 | Стеля backoff, поки ProxyMate не дає нового / падає |
+| `MAX_REFILL_FAILURES` | 3 | Скільки refill-ів поспіль, що нічого не додали (помилки теж), поки пул **порожній**, — і раунд закінчується (раніше — при `remaining: 0`) |
+| `MAX_EMPTY_ROUNDS` | 2 | Скільки раундів **поспіль** без жодного успішного використання — і пул вичерпано (`NoProxiesError`) |
 
 ---
 
-## In-memory пул проксі (`ProxyPool`)
+## In-memory пул проксі (`ProxyPool`) і ProxyMate
 
-Замість `Proxy.transaction { FOR UPDATE SKIP LOCKED }` на **кожен** запит, проксі завантажуються в пам'ять **пачками** і ротуються там. Один екземпляр `ProxyPool` створюється в `perform!` і спільний для обох фаз і всіх джерел.
+Проксі бере окремий сервіс **ProxyMate** (`ApplyMate::Client::ProxyMate`, JSON API, конфіг читається один раз на клієнт: спершу збережений `ProxyMateSetting` (singleton-рядок, `api_key` шифрується Active Record encryption; адмін вставляє URL і ключ на сторінці `/admin/proxy_mate`, де під формою видно стан з'єднання — `GET /api/v1/sites` → кількість робочих проксі по сайтах), інакше ENV `PROXY_MATE_URL` / `PROXY_MATE_API_KEY` (для dev); credentials більше не читаються). ProxyMate сам збирає проксі, перевіряє кожен на кожному сайті через curl-impersonate, рахує stability і добуває Cloudflare `cf_clearance`. **ApplyMate не має жодного збереженого стану проксі**: ні таблиць, ні валідації — пул живе лише в RAM одного запуску. ProxyMate нічого не повідомляється: проксі, що не впорався, просто виходить з пулу до наступного раунду.
 
-### Ротація
+### Старт запуску: meta
 
-- `acquire` — повертає `Proxy`, у якого `available_at <= now` і `!in_use`, без запиту в БД. Виставляє `in_use = true`. Якщо нічого вільного зараз — повертає `nil` (воркер чекає `sleep(0.2)` і ретраїть).
-- `release(proxy, status:)`:
-  - `:success` — буферизує +1 до лічильника успіхів; рахує запит у burst (відпочинок лише після `BURST_LIMIT`);
-  - `:keep` — порожня сторінка / транзієнтна помилка: рахує запит у burst, без статистики;
-  - `:dead` (`DeadProxyError`) — **видаляє** проксі з ротації (in-memory) і буферизує +1 до лічильника фейлів.
-- `exhausted?` — `@drained && @entries.empty?`: проксі скінчились і в БД, і в пам'яті → воркер виставляє `stop[0]`.
+`perform!` до будь-якого пулу (поза реактором) робить `GET /api/v1/meta` → `curl_impersonate.release` / `targets`. Якщо release == `ImpersonateHttp::RELEASE` (пін із `bin/install-curl-impersonate`) — `impersonate_targets` = targets ProxyMate; інакше `vacancy_sync_curl_impersonate_mismatch` і лише `[DEFAULT_IMPERSONATE]` (`chrome146`). Meta не вдалась → `vacancy_sync_proxy_mate_lookup_failed lookup: meta`, теж лише `chrome146`; синк це не зупиняє.
 
-Burst-модель кулдауну: проксі лишається одразу доступним (`available_at = now`), поки не зробить `BURST_LIMIT` (15) запитів, тоді відпочиває `now + BURST_COOLDOWN` (10с). Заміри: проксі витримує ~15 запитів через `ImpersonateHttp` проти Cloudflare, тоді його варто відпустити «відпочити». Лічильник `burst` — у `Entry`. Без запису `last_used_at` у БД на кожен запит.
+### Запит до ProxyMate
 
-### Refill і flush
+Один `ProxyPool` на джерело (`@pools[source.id]`), спільний для обох фаз цього джерела. Запит формують методи класів, а не рядки у воркері:
 
-`acquire` тригерить `refill`, коли `@entries` порожній **або** `live < MIN_LIVE` (не частіше за `REFILL_INTERVAL`). `refill` (під прапором `@refilling`, щоб лише один файбер тягнув):
+```ruby
+site:                scraper_class.proxy_site                    # 'djinni' / 'dou'
+protocols:           client_class.supported_proxy_protocols      # http socks4 socks4a socks5 socks5h
+cloudflare:          client_class.supports_cloudflare_clearance? ? 'any' : 'without'   # ImpersonateHttp → any
+impersonate_targets: (лише якщо supports_cloudflare_clearance?) див. вище
+session_id:          "applymate-#{session_id}-#{source.id}"      # ProxyApi::Session::ID_FORMAT /\A[\w.:-]{1,100}\z/
+order:               'stable'
+fields:              'minimal'                                    # додає сам клієнт
+```
 
-1. **flush** буферів (`flush_pending`): один `ProxySourceStat.apply_deltas!(rows)`. Рядки несуть **інкременти**, не абсолютні значення — лічильники додаються на боці SQL (`success_count = proxy_source_stats.success_count + EXCLUDED.success_count`), бо ті самі рядки паралельно пише `Proxy::Operation::Validate`, і read-modify-write губив чужі інкременти. Буфери відчіплюються yield-free swap-ом перед записом і повертаються назад, якщо upsert впав. **Видалення ненадійних проксі тут НЕ робиться** — це винесено в окрему джобу;
-2. дотягує кандидатів (`candidate_proxies`): проксі, що працюють **для цього джерела** — join на `proxy_source_stats` з `success_count > 0`, сорт за індексованими `proxy_source_stats.reliability, success_count`, `LIMIT BATCH_SIZE`. Якщо перевірених для джерела ще нема — bootstrap-гілка тягне нетестовані через `NOT EXISTS` anti-join (`LIMIT DISCOVERY_BATCH`); `NOT IN (subquery)` тут робив seq scan по ~1M рядків. Усі оглянуті кандидати (живі й мертві) йдуть у `@known_ids`, інакше refill вічно перевибирав би той самий мертвий список;
-3. якщо нічого не дотягнулось і пул порожній → `@drained = true`.
+(`client_class = scraper_class.http_client_class` — для всіх джерел `ImpersonateHttp`.) Завжди `POST /api/v1/sites/:slug/proxies/batch`. **Сесія** (`proxy_session`, одна на запуск і джерело): у межах сесії ProxyMate ніколи не дає той самий проксі вдруге — повтори дає лише сам пул, у наступному раунді. Відповідь — `Batch(proxies, available, remaining)`; `remaining` = скільки ще дозволяють фільтри й сесія після цієї пачки.
 
-`flush!` викликається один раз у `ensure` блоці `perform!` — допише всі залишкові лічильники одним upsert-ом.
+Записи пулу — `ApplyMate::Client::ProxyMate::Proxy` (`Data`: `id`, `url`, `protocol`, `clearance`), де `clearance` — `Clearance(cookie, user_agent, impersonate)` або `nil`. Воркер передає `clearance` у клієнт (`build_scraper`): `ImpersonateHttp` тоді бере `--impersonate` цього токена, його `User-Agent` і дописує cookie.
 
-> **Видалення проксі — окремою джобою (TODO).** Раніше `increment_fail!` робив `destroy`, коли проксі перевищував `MAX_FAIL_RATIO`/`MAX_FAIL_COUNTER`. Тепер flush лише інкрементує `fail_count`/`failed_at`; фактичне прибирання ненадійних проксі має робити окрема джоба за тими ж порогами. Модельний `increment_fail!` (з логікою `destroy`) лишається для іншого коду/тестів, але цей пайплайн його більше не викликає.
+### Seed
 
-`increment_succeeded!` приймає необов'язковий аргумент-лічильник (`by = 1`), щоб флашити агреговані успіхи одним апдейтом на проксі.
+`seed_pool` → `ProxyPool#seed!` (поза реактором, до `Async`): `SEED_BATCH` проксі. Помилка ProxyMate (`ConfigurationError` — не налаштовано, `RequestError` — недоступний/таймаут/не-JSON/нема `remaining`, `ResponseError` — 401/404/422) ловиться тут: подія `vacancy_sync_proxy_pool_ready` з `level: error` і `error_class`/`error`, джерело пропускається. Порожня відповідь → `alive: 0`, `level: warn`, теж пропуск. Усі пропущені → `NoProxiesError` з `perform!` → `vacancy_sync_finished result: failed`. Це не crash loop: джоба не має `retry_on`, наступна спроба — за розкладом.
+
+### Ротація і ліміт використань
+
+Стан: `@by_id` (живі записи — вільні й зайняті), `@idle` (вільні, відсортовані за `available_at`, вставка `bsearch` — серед рівних `available_at` новий стає після наявних), `@known` (усі проксі, які запуск мав, — для раундів), `@uses` (на id проксі, **за раунд**), `@last_used_at` (на id, **за весь запуск**).
+
+- `acquire` — перший з `@idle`, якщо його `available_at <= now`, інакше `nil` (воркер `sleep(0.2)` і ретраїть). O(1) + O(log n) на `ready_count`.
+- `release(proxy)` — одне використання закінчилось: `uses += 1`; на `MAX_USES` — проксі **на пенсії** до наступного раунду (виходить з пулу, `retired_proxies`); інакше `available_at = кінець використання + USE_INTERVAL`. Без `ok:` — **успішне** використання раунду (сторінка, порожня відповідь, опис); `release(proxy, ok: false)` — ні: його кличуть гілки `rescue StandardError` і `BinaryError` воркерів і гілка лістингу «порожньо нижче вже зіскрейпленої сторінки» (сторінка лише повертається в чергу без ліміту — інакше сторінка, що вперто приходить порожньою, крутила б раунди вічно).
+- `drop(proxy)` — `DeadProxyError`: використання теж рахується (не успішне), проксі виходить з пулу до наступного раунду.
+- Проксі, якого ProxyMate видав би знову, приймається, лише якщо в нього лишились використання цього раунду, і чекає `last_used_at + USE_INTERVAL`.
+- Dou: один `acquire` лістингу — два HTTP-запити (GET CSRF + POST xhr) на тому ж проксі; рахується як одне використання.
+- `exhausted?` — `@drained && @by_id.empty?` → воркер виставляє `stop[0]`.
+
+Пропускна здатність: кожен проксі — щонайбільше один запит на хвилину на сайт і `MAX_USES` за раунд. Стабільний розмір пулу ≈ (запитів/с) × `USE_INTERVAL`.
+
+### Refill, раунди і завершення
+
+`acquire` викликає `refill`, коли готових **зараз** проксі менше `MIN_READY`, не частіше за `@refill_interval` і лише одним файбером (`@refilling`; запит до ProxyMate через `Net::HTTP` yield-иться реактору, решта файберів ротують що лишилось). `refill` просить `REFILL_BATCH` у тій самій сесії.
+
+- Refill додав нове → `@refill_interval = REFILL_INTERVAL`.
+- Нічого не додав (порожня пачка або лише проксі, вже використані цього раунду `MAX_USES` разів) чи помилка → інтервал подвоюється до `MAX_REFILL_INTERVAL`; помилка пише `vacancy_sync_proxy_refill_failed`.
+
+**Кінець раунду:** пул **порожній** і refill нічого не додав при `remaining: 0` (сесія вже мала все, що ProxyMate може дати) **або** `MAX_REFILL_FAILURES` refill-ів поспіль нічого не додали чи впали, поки пул порожній. Поки в пулі є проксі, що лише вичікують `USE_INTERVAL`, раунд не закінчується. Новий раунд (`next_round`, `vacancy_sync_proxy_round_started`): `@uses` скидається, і **всі** проксі з `@known` — мертві (`drop`) і «на пенсії» — повертаються в пул, відсортовані за `last_used_at` (найдавніше використаний — першим, рівні — у порядку, в якому запуск їх отримав) з `available_at = max(last_used_at + USE_INTERVAL, now)`: ця величина не спадає вздовж такого порядку, а `enqueue` тримає порядок серед рівних, тож `@idle` видає найдавніше використаний першим і кожного — не раніше `USE_INTERVAL` від його останнього використання. Refill-и йдуть далі як були: нове від ProxyMate додається до пулу.
+
+**Що зупиняє джерело, коли світ лишається зламаним:** кожен раунд рахує успішні використання (`release` без `ok: false`). `MAX_EMPTY_ROUNDS` (2) раунди **поспіль** без жодного — або seed без жодного проксі — → `@drained` → `exhausted?` → `stop[0]` → фаза кидає `NoProxiesError`. Чому скінченно: успіхів за запуск скінченно (кожен — сторінка з даними, підтвердження кінця списку (≤ `LAST_PAGE_CONFIRMATIONS` на сторінку, сторінок ≤ `MAX_PAGES`), отриманий опис або порожня відповідь опису (≤ `MAX_VACANCY_RETRIES` на вакансію)), тож після останнього успіху минає щонайбільше `MAX_EMPTY_ROUNDS` раундів; а раунд скінченний — кожен проксі дає йому ≤ `MAX_USES` використань, а сесія не повторює проксі. Гарячого циклу немає: між refill-ами щонайменше `REFILL_INTERVAL`, з backoff.
+
+**Радіус ураження аномалії сайту** (змінений селектор → кожна сторінка `DeadProxyError`): пул вигорає лише в RAM цього запуску (у ProxyMate нічого не потрапляє); кожен проксі — щонайбільше по одному запиту в кожному з `MAX_EMPTY_ROUNDS` раундів, і джерело зупиняється з `NoProxiesError` — без чистки застарілих вакансій.
 
 ---
 
@@ -81,7 +112,7 @@ class DbGateway
 end
 ```
 
-Один екземпляр створюється в `perform!` і передається в `ProxyPool.new(@db)`; операційний і ProxyPool-івський `with_db` делегують у `@db.call`. У критичній секції одночасно щонайбільше `DB_CONCURRENCY` файберів → пул відкриває щонайбільше стільки фізичних конектів. Пул (а не строго 1) потрібен, щоб **повільний refill проксі не блокував** швидкі читання/per-batch записи. Безпечно: джоба йде в окремому worker-процесі (не Puma), далеко під лімітом Postgres.
+Один екземпляр створюється в `perform!` і передається в `VacancyBuffer.new(@db, source)`; операційний `with_db` делегує в `@db.call`. У критичній секції одночасно щонайбільше `DB_CONCURRENCY` файберів → пул відкриває щонайбільше стільки фізичних конектів. Пул (а не строго 1) потрібен, щоб **повільний flush вакансій не блокував** швидкі читання/per-batch записи. Безпечно: джоба йде в окремому worker-процесі (не Puma), далеко під лімітом Postgres.
 
 **Семафор не реентрантний.** Правила, щоб уникнути deadlock:
 - жоден `with_db`-блок не містить вкладений `with_db`;
@@ -96,7 +127,7 @@ end
 
 - `add(structs)` — `@buf.concat(structs)` (плейн `Array`: файбери однопотокові, `concat` не має точок yield).
 - `maybe_flush` — `flush`, якщо `@buf.size >= VACANCY_BUFFER_LIMIT`.
-- `flush` — yield-free swap `batch = @buf; @buf = []`, тоді `@db.call { persist(batch) }`. `@flushing` (дзеркало `@refilling` у ProxyPool) гарантує, що флашить лише один файбер, поки інші скрапають далі; appends, що приходять під час (yield-ливого) `persist`, потрапляють у новий `@buf` — нічого не губиться.
+- `flush` — yield-free swap `batch = @buf; @buf = []`, тоді `@db.call { persist(batch) }`. `@flushing` (як `@refilling` у ProxyPool) гарантує, що флашить лише один файбер, поки інші скрапають далі; appends, що приходять під час (yield-ливого) `persist`, потрапляють у новий `@buf` — нічого не губиться.
 - `persist` — `Vacancy.upsert_all(... unique_by: [:source_id, :external_id], update_only: [...])` + `Vacancy.where(...).import` (це перенесений сюди колишній `sync_vacancies_batch`).
 
 У `scrape_pages` гілка успішної сторінки: `buffer.add(listing)` → `external_ids.concat(...)` → `buffer.maybe_flush`. `external_ids` (лише рядки, мало пам'яті) накопичується окремо для `clean_old_vacancies`.
@@ -118,7 +149,7 @@ Phase 2: fetch_description — fetch description URLs → buffer {id,description
 
 Phase 2 запускається **лише для джерел з `Scraper.fetches_description?` == `true`** (Dou). У Djinni опис уже є в лістингу — детальних сторінок відвідувати нічого.
 
-Збій одного джерела не зупиняє інші: `sync_source_pipeline` ловить помилку фази (вона вже записана в підсумкову подію фази) і просто не додає джерело до `@synced`. Джерело без жодного живого проксі на старті (`seed_pool` → `pool.size.zero?`) пропускається; `NoProxiesError` летить з `perform!` лише коли пропущено всі. `perform!` назовні не кидає помилку джерела — результат запуску видно в події `vacancy_sync_finished` (`result: ok | partial | failed`).
+Збій одного джерела не зупиняє інші: `sync_source_pipeline` ловить помилку фази (вона вже записана в підсумкову подію фази) і просто не додає джерело до `@synced`. Джерело, для якого ProxyMate не дав жодного проксі або запит до нього впав (`seed_pool`), пропускається; `NoProxiesError` летить з `perform!` лише коли пропущено всі. `perform!` назовні не кидає помилку джерела — результат запуску видно в події `vacancy_sync_finished` (`result: ok | partial | failed`).
 
 ---
 
@@ -160,11 +191,11 @@ end
 
 | # | Умова | Причина |
 |---|-------|---------|
-| 1 | `stop[0]` є `true` | Глобальний stop-сигнал: воркер отримав `nil` від пулу і `@proxy_pool.exhausted?` |
+| 1 | `stop[0]` є `true` | Глобальний stop-сигнал: воркер отримав `nil` від пулу і `pool.exhausted?` |
 | 2 | `pages_queue.shift` повернув `nil` | Черга вичерпана: всі сторінки 1..2000 вже розібрані |
 | 3 | `last_page[:boundary]` встановлений і `page >= last_page[:boundary]` | Підтверджено кінець списку; сторінки після межі не мають сенсу |
 
-Додатково на кожній ітерації: якщо `@proxy_pool.acquire` повернув `nil` і `@proxy_pool.exhausted?` → `stop[0] = true` + `break`. Якщо пул просто зайнятий (всі проксі на кулдауні / у роботі) → `sleep(0.2)` + `next` (файбер чекає, поки звільниться проксі).
+Додатково на кожній ітерації: якщо `pool.acquire` повернув `nil` і `pool.exhausted?` → `stop[0] = true` + `break`. Якщо пул просто зайнятий (всі проксі на кулдауні / у роботі) → `sleep(0.2)` + `next` (файбер чекає, поки звільниться проксі).
 
 ### `fetch_description_worker` воркер
 
@@ -221,17 +252,18 @@ last_page[:boundary] = [last_page[:boundary], page].compact.min
 ## Обробка помилок у воркерах
 
 ```
-DeadProxyError  → stats.dead!       → pool.release(proxy, status: :dead) → proxy = nil → page/vacancy back to queue → retry
-StandardError   → stats.error!(e)   → pool.release(proxy, status: :keep) → proxy = nil → page/vacancy back to queue → retry
+DeadProxyError  → stats.dead!      → pool.drop(proxy)             → proxy = nil → page/vacancy back to queue → retry
+BinaryError     → pool.release(proxy, ok: false) → page/vacancy back to queue → raise (curl не запускається — ретраї лише спалили б пул)
+StandardError   → stats.error!(e)  → pool.release(proxy, ok: false) → proxy = nil → page/vacancy back to queue → retry
 ```
 
 Помилки не логуються по одній (на поганому пулі це тисячі рядків) — `RequestStats` фази рахує їх за класом і віддає в підсумковій події три найчастіші з першим повідомленням (`errors`), разом з `requests`, `empty_responses`, `dead_proxies`, `failed_requests`.
 
-`:dead` прибирає проксі з ротації і буферизує `increment_fail!` (фактичний запис у БД — під час наступного `refill` або фінального `flush!`). `:keep` лише ставить проксі на кулдаун, без зміни статистики.
+Кожен `acquire` закінчується рівно одним `release` або `drop` — обидва рахують використання; успішним для раунду є лише `release` без `ok: false` (див. «Ротація»).
 
-`retry` **не запускає** `ensure` — тому `proxy = nil` перед `retry` критичний: `ensure` (який робить `release(..., status: :keep)`) бачить `nil` і пропускає подвійний release. Успішна гілка робить `release(..., status: :success)` і теж виставляє `proxy = nil`.
+`retry` **не запускає** `ensure` — тому `proxy = nil` перед `retry` критичний: `ensure` (який робить `release(proxy)`) бачить `nil` і пропускає подвійний release. Успішна гілка нічого не звільняє сама — це робить `ensure`.
 
-`stop[0] = true` при вичерпаному пулі (`@proxy_pool.exhausted?`) → після `barrier.wait` операція кидає `NoProxiesError`.
+`stop[0] = true` при вичерпаному пулі (`pool.exhausted?`) → після `barrier.wait` операція кидає `NoProxiesError`.
 
 ---
 
@@ -317,7 +349,7 @@ last_page[:counts].delete_if { |p, _| p < page }
 | Структура | Тип | Причина |
 |-----------|-----|---------|
 | `pages_queue` / `vacancies_queue` | `Array` | Файбери однопотокові — гонок немає |
-| `@proxy_pool` | `ProxyPool` | Спільний пул проксі; стан (`@entries`, буфери) — звичайні колекції, бо файбери однопотокові |
+| `@pools[source.id]` | `ProxyPool` | Пул проксі джерела; стан (`@by_id`, `@idle`, `@known`, `@uses`, `@last_used_at`, лічильники раунду) — звичайні колекції, бо файбери однопотокові |
 | `@db` | `DbGateway` | Семафор(`DB_CONCURRENCY`) обмежує доступ до БД → невеликий пул конектів |
 | `buffer` | `VacancyBuffer` | Per-source RAM-буфер скрапнутих вакансій; плейн `Array` + `@flushing`, бо файбери однопотокові |
 | `external_ids` (Phase 1) / `updates` (Phase 2) | `Concurrent::Array` | `concat` / `<<` від N воркерів |
@@ -330,4 +362,4 @@ last_page[:counts].delete_if { |p, _| p < page }
 
 ## Логування
 
-Операція пише JSON-події для Grafana/Loki: `vacancy_sync_started` → `vacancy_sync_proxy_pool_ready` (на джерело) → `vacancy_sync_listing_finished` / `vacancy_sync_descriptions_finished` (на джерело і фазу, через `log_phase` — також коли фаза впала) → `vacancy_sync_finished` (завжди, з `result`). Усі несуть `session_id`. Поля кожної події, дашборд і алерти — у `.ai/docs/observability.md`; змінюючи поле, оновлюйте й дашборд.
+Операція пише JSON-події для Grafana/Loki: `vacancy_sync_started` → (`vacancy_sync_proxy_mate_lookup_failed` / `vacancy_sync_curl_impersonate_mismatch` — warn на старті) → `vacancy_sync_proxy_pool_ready` (на джерело; `vacancy_sync_proxy_refill_failed` — коли дозапит у ProxyMate впав, `vacancy_sync_proxy_round_started` — коли пул пішов на новий раунд) → `vacancy_sync_listing_finished` / `vacancy_sync_descriptions_finished` (на джерело і фазу, через `log_phase` — також коли фаза впала) → `vacancy_sync_finished` (завжди, з `result`). Усі несуть `session_id`. Поля кожної події, дашборд і алерти — у `.ai/docs/observability.md`; змінюючи поле, оновлюйте й дашборд.

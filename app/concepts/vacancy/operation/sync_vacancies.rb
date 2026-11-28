@@ -3,22 +3,24 @@
 require 'async'
 require 'async/barrier'
 require 'async/semaphore'
-require 'kernel/sync'
 
 class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   include ApplyMate::Logging
 
   NoProxiesError = Class.new(StandardError)
 
-  WORKERS_PER_SOURCE      = 100
-  DESCRIPTION_WORKERS     = 140   # bounded by live-proxy count × burst throughput
+  # 32 fibers per phase and source: two sources at once fill ImpersonateHttp::MAX_PROCESSES
+  # (64 curl subprocesses on the Pi) exactly. More would only queue for a curl slot — and
+  # with MAX_USES / USE_INTERVAL a proxy serves one request a minute, so the pool, not the
+  # fiber count, sets the pace.
+  WORKERS_PER_SOURCE      = 32
+  DESCRIPTION_WORKERS     = 32
   MAX_PAGES               = 2000
   LAST_PAGE_CONFIRMATIONS = 50
   MAX_VACANCY_RETRIES     = 20
   VACANCY_FETCH_BATCH     = 1000
   VACANCY_BUFFER_LIMIT    = 1000
 
-  # Constant SQL for bulk_update_descriptions — the batch arrives as three array binds.
   BULK_UPDATE_DESCRIPTIONS_SQL = <<~SQL.squish
     UPDATE vacancies AS v
     SET description = d.description, description_html = d.description_html
@@ -28,36 +30,9 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   DB_CONCURRENCY          = 5     # max concurrent DB ops (== physical connections) in the run
 
-  # Timeouts for sync. Not too aggressive: of ~964k proxies only a few hundred ever
-  # work, and they are often slow-but-alive — a 3s connect killed them. Fail dead
-  # proxies in reasonable time without dropping the scarce good ones.
-  HTTP_REQUEST_TIMEOUT    = 10
-  HTTP_CONNECT_TIMEOUT    = 5
+  HTTP_REQUEST_TIMEOUT    = 25    # whole request (curl --max-time), HTTP_CONNECT_TIMEOUT included
+  HTTP_CONNECT_TIMEOUT    = 10
 
-  # Pre-flight proxy validation. Of the few hundred ever-proven proxies, only a few
-  # dozen are alive at any moment; culling the dead ones DURING scraping is what
-  # wastes the run. So probe the proven proxies once at startup (~seconds) and seed
-  # the pool with only the live ones — almost every later acquire then hits a worker.
-  VALIDATE_PROVEN_ON_START = true
-  VALIDATION_CONCURRENCY   = 250  # concurrent live-probes (fast AsyncHttp) when seeding/refilling
-
-  # Bounds DB access in the run to a small pool of connections.
-  #
-  # Under `IsolatedExecutionState.isolation_level = :fiber`, the `pg` gem yields
-  # while waiting on Postgres, so N fibers running queries concurrently each hold
-  # their own connection — which is what previously forced a 300-connection pool
-  # and exhausted Postgres' 100-slot server limit.
-  #
-  # `Async::Semaphore.new(DB_CONCURRENCY)` caps concurrent DB ops at a handful, so
-  # the pool opens at most that many physical connections. A small pool (not 1) lets
-  # a slow proxy `refill` run without blocking quick reads / per-batch upserts.
-  # Safe: this runs in the Solid Queue worker process (separate from Puma), well
-  # under Postgres' connection limit.
-  #
-  # Non-reentrant: no `with_db` block may nest another `with_db` or run a scraper
-  # HTTP request (those stay outside the gateway). ES `.import` (a SELECT on the
-  # already-held connection + an HTTP bulk to Elasticsearch) does not re-enter the
-  # semaphore, so it is safe.
   class DbGateway
     def initialize
       @semaphore = Async::Semaphore.new(DB_CONCURRENCY)
@@ -70,9 +45,6 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     end
   end
 
-  # Request outcome counters for one (source, phase), reported in that phase's summary
-  # event. Shared by the phase's worker fibers; every increment is a plain Ruby op with
-  # no suspension point inside it, so fibers need no lock.
   class RequestStats
     ERRORS_IN_SUMMARY = 3
 
@@ -114,115 +86,153 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
     private
 
-    # "Class×count (first message); …" for the most frequent error classes, nil if none.
     def top_errors
       @errors.max_by(ERRORS_IN_SUMMARY) { |_, count| count }
-             .map { |name, count| "#{name}×#{count} (#{@messages[name]})" }
-             .join('; ')
-             .presence
+             .map { |name, count| "#{name}×#{count} (#{@messages[name]})" }.join('; ').presence
     end
   end
 
-  # In-memory rotating proxy pool shared by every fiber in both phases.
+  # The proxies of one source for one run, in RAM. ProxyMate hands them out in one session
+  # per run and source (`proxy_session`) and never gives the session the same proxy twice.
+  # Nothing is reported back to ProxyMate.
   #
-  # Replaces the previous per-request `Proxy.transaction { FOR UPDATE SKIP LOCKED }`
-  # acquisition: proxies are loaded from the DB in batches, rotated entirely in
-  # memory (respecting the same "one proxy at most once per 5s" rule via an
-  # in-memory cooldown), and the DB is touched only to refill the pool and to
-  # flush buffered success/fail counters in a single bulk upsert.
+  # Use limit: within one round each proxy serves at most MAX_USES requests (failed ones
+  # included) with at least USE_INTERVAL seconds between two of them; then it is retired for
+  # the round. A proxy that fails as a proxy (DeadProxyError) leaves the pool for the round.
   #
-  # Fibers are single-threaded (Async), so the bookkeeping needs no mutex; the only
-  # suspension points are the DB calls inside `refill`/`flush!`, guarded by
-  # `@refilling` so a single fiber performs the reload while the others keep going.
+  # Refill: when fewer than MIN_READY proxies are ready now, at most every @refill_interval
+  # (REFILL_INTERVAL, doubled up to MAX_REFILL_INTERVAL after a refill that added nothing),
+  # one fiber at a time.
   #
-  # Assumes a single SyncVacancies run at a time (enforced by the job's
-  # `limits_concurrency`) — the pool, not the DB, owns the cooldown rule.
+  # Rounds: the pool is EMPTY and ProxyMate has nothing new — a refill added no proxy while
+  # ProxyMate said `remaining: 0`, or MAX_REFILL_FAILURES refills in a row added none / failed —
+  # so the round ends and the next one starts: every proxy the run has had, dead and retired
+  # alike, comes back with MAX_USES fresh uses, least recently used first, each still waiting out
+  # USE_INTERVAL from its last use. Refills go on as before; whatever new ProxyMate gives joins.
+  #
+  # Termination — what stops the source when the world stays broken: each round counts its
+  # successful uses (`release(proxy)` with ok: true — the request ended without DeadProxyError
+  # or an unexpected error; an empty answer counts). MAX_EMPTY_ROUNDS rounds in a row without
+  # one, or a seed that brought no proxy at all → @drained → exhausted? → the workers stop and
+  # the phase raises NoProxiesError. A run's successes are finite (each one scrapes a page,
+  # confirms an end of the listing — at most LAST_PAGE_CONFIRMATIONS per page — or fetches /
+  # gives up on a description — at most MAX_VACANCY_RETRIES each; a false empty page the worker
+  # only requeues is not a success), so after the last one at most MAX_EMPTY_ROUNDS rounds run.
+  # A round itself is finite: each proxy gives it ≤ MAX_USES uses and the session never repeats one.
   class ProxyPool
-    Entry = Struct.new(:proxy, :available_at, :in_use, :burst)
+    include ApplyMate::Logging
 
-    # Burst model (per-site, since each Source has its OWN pool): a proxy serves
-    # BURST_LIMIT requests back-to-back, then rests `Scraper.burst_cooldown` seconds
-    # before it may be acquired again. The cooldown is a per-scraper property —
-    # Cloudflare-protected Dou rests longer than the CF-free Djinni.
-    BURST_LIMIT     = 15
-    MIN_LIVE        = 10    # refill only when the pool is nearly empty
-    BATCH_SIZE      = 1500  # max proven proxies pulled per load (validation budget)
-    DISCOVERY_BATCH = 300   # untested proxies pulled only to bootstrap a pool with no proven ones
-    REFILL_INTERVAL = 5     # min seconds between DB refills when the pool is small
+    Entry = Struct.new(:proxy, :available_at, :in_use)
 
-    def initialize(db, source)
-      @db            = db
-      @source        = source
-      @burst_cooldown = source.scraper.constantize.burst_cooldown
-      @validation_url = source.scraper.constantize.validation_url(source)
-      @entries       = []
-      @by_id         = {}
-      @known_ids     = Set.new
-      @pending_fail  = []
-      @pending_succ  = Hash.new(0)
-      @dropped       = 0
-      @refilling     = false
-      @drained       = false
-      @last_refill_at = 0.0
-      @checked        = 0
-      seed_initial
+    MAX_USES            = 10   # requests per proxy per site in one round
+    USE_INTERVAL        = 60   # min seconds between two uses of one proxy on the site
+    MIN_READY           = 10   # refill when fewer proxies than this are ready to use now
+    SEED_BATCH          = ApplyMate::Client::ProxyMate::MAX_LIMIT # first request: as many as ProxyMate gives
+    REFILL_BATCH        = 300  # proxies asked for per refill
+    ORDER               = 'stable' # best ProxyMate stability score first
+    REFILL_INTERVAL     = 5    # min seconds between refills
+    MAX_REFILL_INTERVAL = 60   # backoff cap while ProxyMate has nothing new / is failing
+    MAX_REFILL_FAILURES = 3    # refills in a row that leave the pool EMPTY (errors included) before the round ends
+    MAX_EMPTY_ROUNDS    = 2    # rounds in a row without a single successful use before the pool is drained
+
+    attr_reader :proxy_session
+
+    def initialize(source, proxy_mate, session_id:, impersonate_targets:)
+      scraper_class   = source.scraper.constantize
+      client_class    = scraper_class.http_client_class
+      clearances      = client_class.supports_cloudflare_clearance?
+      @source         = source
+      @proxy_mate     = proxy_mate
+      @session_id     = session_id
+      @proxy_session  = "applymate-#{session_id}-#{source.id}" # ProxyApi::Session::ID_FORMAT
+      @query          = {
+        site:       scraper_class.proxy_site,
+        order:      ORDER,
+        protocols:  client_class.supported_proxy_protocols,
+        cloudflare: clearances ? 'any' : 'without',
+        session_id: @proxy_session
+      }
+      @query[:impersonate_targets] = impersonate_targets if clearances
+      @by_id           = {}             # live entries (idle or in use)
+      @idle            = []             # idle entries, sorted by available_at
+      @known           = {}             # proxy id => Proxy: every proxy this run has had (brought back each round)
+      @uses            = Hash.new(0)    # proxy id => uses this round (kept after it leaves the pool)
+      @last_used_at    = {}             # proxy id => monotonic end of its last use (whole run)
+      @round           = 1
+      @round_successes = 0
+      @empty_rounds    = 0              # rounds in a row that ended without a successful use
+      @retired         = 0
+      @refilling       = false
+      @drained         = false
+      @fruitless       = 0
+      @refill_failures = 0
+      @refill_interval = REFILL_INTERVAL
+      @last_refill_at  = 0.0
+    end
+
+    def seed!
+      add_entries(@proxy_mate.proxies(**@query, limit: SEED_BATCH).proxies)
+      @last_refill_at = monotonic
+      @drained = true if @by_id.empty?
     end
 
     def size
-      @entries.size
+      @by_id.size
     end
 
-    # How many candidates the initial seed probed; `size` right after `new` is how
-    # many of them were alive.
-    def checked
-      @checked
+    def with_clearance
+      @by_id.each_value.count { |entry| entry.proxy.clearance }
     end
 
-    def dropped
-      @dropped
-    end
-
-    # Returns a usable Proxy (cooled down and not in use) or nil when the pool is
-    # momentarily busy. nil + `exhausted?` means there are genuinely no proxies left.
+    # A proxy whose interval is over, or nil when none is ready right now.
     def acquire
       maybe_refill
 
-      now   = monotonic
-      entry = @entries.find { |e| !e.in_use && e.available_at <= now }
-      return nil unless entry
+      entry = @idle.first
+      return nil unless entry && entry.available_at <= monotonic
 
+      @idle.shift
       entry.in_use = true
       entry.proxy
     end
 
-    # status:
-    #   :success — request returned data; buffer success counter + cool down
-    #   :dead    — DeadProxyError; drop from rotation + buffer fail counter
-    #   :keep    — worked but no stat change (empty page) or transient error; cool down
-    def release(proxy, status: :keep)
-      return unless proxy
-      entry = @by_id[proxy.id]
+    # One use is over: the proxy cools down USE_INTERVAL, or retires for the round after
+    # MAX_USES. `ok: false` — the request ended in an unexpected (non-proxy) error, or
+    # achieved nothing — so it is not a successful use of the round.
+    def release(proxy, ok: true)
+      entry = checked_out(proxy)
+      return unless entry
 
-      case status
-      when :dead
-        drop(entry, proxy)
-        @pending_fail << proxy
-        @dropped += 1
-      when :success
-        @pending_succ[proxy] += 1
-        cool_down(entry)
+      @round_successes += 1 if ok
+      if use!(entry) >= MAX_USES
+        @by_id.delete(proxy.id)
+        @retired += 1
       else
-        cool_down(entry)
+        entry.in_use       = false
+        entry.available_at = @last_used_at[proxy.id] + USE_INTERVAL
+        enqueue(entry)
       end
     end
 
-    def exhausted?
-      @drained && @entries.empty?
+    # The proxy failed as a proxy (DeadProxyError): the use counts and it leaves the pool
+    # until the next round.
+    def drop(proxy)
+      entry = checked_out(proxy)
+      return unless entry
+
+      use!(entry)
+      @by_id.delete(proxy.id)
     end
 
-    # Persist everything buffered in memory. Called once when the run finishes.
-    def flush!
-      with_db { flush_pending }
+    def exhausted?
+      @drained && @by_id.empty?
+    end
+
+    # Retirements since the last call and the round the pool is in, for the phase's finished event.
+    def take_counts!
+      counts = { retired_proxies: @retired, proxy_rounds: @round }
+      @retired = 0
+      counts
     end
 
     private
@@ -231,195 +241,99 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
-    # Count one request against the proxy's burst; keep it immediately reusable until
-    # it has served BURST_LIMIT requests, then rest BURST_COOLDOWN seconds.
-    def cool_down(entry)
-      return unless entry
-      entry.in_use = false
-      entry.burst += 1
-      if entry.burst >= BURST_LIMIT
-        entry.burst = 0
-        entry.available_at = monotonic + @burst_cooldown
-      else
-        entry.available_at = monotonic
-      end
+    def checked_out(proxy)
+      entry = proxy && @by_id[proxy.id]
+      entry if entry&.in_use
     end
 
-    def drop(entry, proxy)
-      @entries.delete(entry) if entry
-      @by_id.delete(proxy.id)
-      @known_ids.delete(proxy.id)
+    def use!(entry)
+      id = entry.proxy.id
+      @last_used_at[id] = monotonic
+      @uses[id] += 1
+    end
+
+    def enqueue(entry)
+      index = @idle.bsearch_index { |e| e.available_at > entry.available_at } || @idle.size
+      @idle.insert(index, entry)
+    end
+
+    def ready_count
+      now = monotonic
+      @idle.bsearch_index { |e| e.available_at > now } || @idle.size
     end
 
     def maybe_refill
-      return if @refilling
-      return unless @entries.empty? ||
-                    (@entries.size < MIN_LIVE && monotonic - @last_refill_at >= REFILL_INTERVAL)
+      return if @refilling || @drained
+      return if ready_count >= MIN_READY
+      return if monotonic - @last_refill_at < @refill_interval
+
       refill
     end
 
-    # Initial pool: load proven candidates, validate them live (so only currently-
-    # working proxies enter the pool), seed. Validation needs a reactor, so wrap in
-    # Sync (this runs before the operation's own Async blocks).
-    def seed_initial
-      candidates = with_db { candidate_proxies }
-      @checked   = candidates.size
-      mark_known(candidates)
-      live = VALIDATE_PROVEN_ON_START ? Sync { probe_alive(candidates) } : candidates
-      add_entries(live, monotonic)
-      @last_refill_at = monotonic
-      @drained = true if candidates.empty?
-    end
-
-    # Probe candidates concurrently through their proxy; keep only those that tunnel.
-    # Validate with the fast pure-Ruby AsyncHttp (no curl subprocess). Accept 2xx/3xx,
-    # OR a 403 Cloudflare challenge — the proxy reached the site and is alive; the CF
-    # source scrapes it via ImpersonateHttp (Chrome TLS), which clears the challenge.
-    def probe_alive(candidates)
-      live    = Concurrent::Array.new
-      barrier = Async::Barrier.new
-      semaphore = Async::Semaphore.new(VALIDATION_CONCURRENCY, parent: barrier)
-      candidates.each do |proxy|
-        semaphore.async do
-          client   = ApplyMate::Client::AsyncHttp.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
-          live << proxy if client.get(@validation_url)&.alive_or_cf_challenge?
-        rescue StandardError
-          nil
-        end
-      end
-      barrier.wait
-      live.to_a
-    end
-
-    # Refill mid-run also validates (like seed) — so when the pool depletes during a
-    # long phase it tops up with *live* proxies, not dead ones that would churn. We're
-    # already inside the reactor here, so probe_alive runs directly (no Sync wrapper).
     def refill
-      return if @refilling
       @refilling = true
-
-      candidates = with_db { flush_pending; candidate_proxies }
-      mark_known(candidates)
-      live = if candidates.empty? || !VALIDATE_PROVEN_ON_START
-        candidates
-      else
-        probe_alive(candidates)
-      end
-      add_entries(live, monotonic)
-      @last_refill_at = monotonic
-      @drained = true if candidates.empty? && @entries.empty?
+      batch = @proxy_mate.proxies(**@query, limit: REFILL_BATCH)
+      @refill_failures = 0
+      settle(add_entries(batch.proxies), batch.remaining)
+    rescue ApplyMate::Client::ProxyMate::Error => e
+      @refill_failures += 1
+      settle(0, nil)
+      log(event: 'vacancy_sync_proxy_refill_failed', session_id: @session_id, source: @source.name,
+          error_class: e.class.name, error: e.message.to_s.scrub.truncate(300),
+          failures: @refill_failures, alive: @by_id.size, level: :warn)
     ensure
+      @last_refill_at = monotonic
       @refilling = false
     end
 
-    # Proxies that work for THIS source, best-first — read from proxy_source_stats
-    # (the validator maintains them per source). Bootstrap fallback: a pool with no
-    # per-source stats yet (fresh DB / tests) pulls untested proxies.
-    def candidate_proxies
-      known = @known_ids.to_a
-
-      working = Proxy
-                .joins(:proxy_source_stats)
-                .where(proxy_source_stats: { source_id: @source.id })
-                .where('proxy_source_stats.success_count > 0')
-                .where('proxy_source_stats.failed_at IS NULL OR proxy_source_stats.failed_at < ?', 1.minute.ago)
-                .where.not(id: known)
-                .order(Arel.sql('proxy_source_stats.reliability DESC, proxy_source_stats.success_count DESC'))
-                .limit(BATCH_SIZE)
-                .to_a
-      return working if working.any?
-
-      # Bootstrap: no proven proxies for this source yet — try untested ones.
-      # NOT EXISTS (anti-join), not NOT IN (subquery): the latter scans ~1M proxies and
-      # pegs Postgres for minutes (and keeps running after the job is killed).
-      Proxy.where('NOT EXISTS (SELECT 1 FROM proxy_source_stats WHERE proxy_source_stats.proxy_id = proxies.id AND proxy_source_stats.source_id = ?)', @source.id)
-           .where.not(id: known)
-           .limit(DISCOVERY_BATCH).to_a
+    # Backoff and the end of a round (see the class comment). `remaining` is nil after an error.
+    # @fruitless counts refills in a row that added nothing (or failed) while the pool was empty.
+    def settle(added, remaining)
+      @refill_interval = added.zero? ? [ @refill_interval * 2, MAX_REFILL_INTERVAL ].min : REFILL_INTERVAL
+      @fruitless       = added.zero? && @by_id.empty? ? @fruitless + 1 : 0
+      next_round if @fruitless.positive? && (remaining&.zero? || @fruitless >= MAX_REFILL_FAILURES)
     end
 
-    # Every candidate we have already looked at — live or not. `candidate_proxies`
-    # excludes these, so a proxy that fails `probe_alive` is not re-selected on the
-    # next refill. Without this only *live* proxies were remembered, so a pool whose
-    # candidates were all dead re-queried and re-probed the same list forever:
-    # `candidates` never went empty, `@drained` never flipped, `exhausted?` never
-    # returned true and every worker fiber span on `sleep(0.2)` until the job was killed.
-    def mark_known(proxies)
-      @known_ids.merge(proxies.map(&:id))
+    # Only runs on an empty pool, so no proxy of the ending round is still checked out.
+    def next_round
+      @empty_rounds = @round_successes.zero? ? @empty_rounds + 1 : 0
+      if @empty_rounds >= MAX_EMPTY_ROUNDS
+        @drained = true
+        return
+      end
+
+      @round          += 1
+      @round_successes = 0
+      @fruitless       = 0
+      @uses.clear
+      # Oldest last use first (ties: the order the run got them): those come back ready, or
+      # ready soonest, and enqueue keeps this order among equal available_at — so the least
+      # recently used proxy is taken first.
+      proxies = @known.values.each_with_index
+                      .sort_by { |proxy, index| [ @last_used_at.fetch(proxy.id, -Float::INFINITY), index ] }
+                      .map(&:first)
+      add_entries(proxies)
+      log(event: 'vacancy_sync_proxy_round_started', session_id: @session_id, source: @source.name,
+          round: @round, proxies: proxies.size)
     end
 
-    def add_entries(proxies, now)
-      proxies.each do |proxy|
-        next if @by_id.key?(proxy.id)
-        entry = Entry.new(proxy, now, false, 0)
-        @entries << entry
+    # A proxy is welcome while it has uses left in this round; it waits out USE_INTERVAL
+    # from its last use.
+    def add_entries(proxies)
+      now = monotonic
+      proxies.count do |proxy|
+        next false if @by_id.key?(proxy.id) || @uses[proxy.id] >= MAX_USES
+
+        @known[proxy.id] = proxy
+        last  = @last_used_at[proxy.id]
+        entry = Entry.new(proxy, last ? [ last + USE_INTERVAL, now ].max : now, false)
         @by_id[proxy.id] = entry
-        @known_ids << proxy.id
+        enqueue(entry)
+        true
       end
-    end
-
-    # Persist buffered success/fail counters for THIS source into proxy_source_stats
-    # in one bulk upsert. Current per-source counts are loaded from the DB (the proxy
-    # object doesn't carry them) and bumped. Pruning of bad proxies is left to a job.
-    def flush_pending
-      return if @pending_succ.empty? && @pending_fail.empty?
-
-      # Yield-free swap. `release` keeps appending while the upsert below suspends
-      # this fiber; detaching the buffers first means those counters stay queued for
-      # the next flush instead of being wiped by a `clear` that never saw them.
-      succ, @pending_succ  = @pending_succ, Hash.new(0)
-      fails, @pending_fail = @pending_fail, []
-
-      now  = Time.current
-      rows = {}
-
-      succ.each do |proxy, count|
-        row = (rows[proxy.id] ||= delta_row(proxy))
-        row[:success_count] += count
-      end
-
-      fails.each do |proxy|
-        row = (rows[proxy.id] ||= delta_row(proxy))
-        row[:fail_count] += 1
-        row[:failed_at]   = now
-      end
-
-      # Only used for the INSERT branch; the UPDATE branch recomputes from the
-      # summed totals (see ProxySourceStat.apply_deltas!).
-      rows.each_value { |row| row[:reliability] = ProxySourceStat.reliability_for(row[:success_count], row[:fail_count]) }
-
-      begin
-        ProxySourceStat.apply_deltas!(rows.values)
-      rescue StandardError
-        # Re-queue the detached counters so a failed upsert doesn't silently discard
-        # them (same restore-on-error contract as VacancyBuffer#flush).
-        succ.each { |proxy, count| @pending_succ[proxy] += count }
-        @pending_fail.concat(fails)
-        raise
-      end
-    end
-
-    # A zeroed increment row for this (proxy, source) pair.
-    def delta_row(proxy)
-      {
-        proxy_id:      proxy.id,
-        source_id:     @source.id,
-        success_count: 0,
-        fail_count:    0,
-        failed_at:     nil,
-        reliability:   1.0
-      }
-    end
-
-    def with_db(&block)
-      @db.call(&block)
     end
   end
 
-  # In-memory buffer for scraped vacancies (Phase 1). Workers append listings here
-  # instead of writing per page; the DB is touched only when the buffer reaches
-  # VACANCY_BUFFER_LIMIT (bulk upsert + ES import) or on the final flush at the end
-  # of a source. One buffer per source — sources run concurrently and
-  # `clean_old_vacancies` is per source.
   class VacancyBuffer
     def initialize(db, source)
       @db       = db
@@ -490,6 +404,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     started     = monotonic
     @session_id = (Time.current.to_f * 1000).to_i
     @db         = DbGateway.new
+    @proxy_mate = ApplyMate::Client::ProxyMate.new
     @pools      = {}
     @synced     = []
     sources     = sources.to_a
@@ -497,19 +412,17 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
     log(event: 'vacancy_sync_started', session_id: @session_id, started_at_ms: @session_id,
         sources: sources.map(&:name).join(', ')) # a string: Loki's `| json` drops arrays
 
-    begin
-      runnable = sources.select { |source| seed_pool(source) }
-      raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if runnable.empty?
+    @impersonate_targets = impersonate_targets(proxy_mate_meta)
 
-      # Pipeline per source: each source runs its own listing → description in one
-      # fiber, all sources concurrent. So Dou's descriptions start the moment Dou's
-      # listing finishes instead of waiting for every source's listing (Djinni's
-      # listing is the slow one) — wall time = max over sources of (listing + desc).
-      Async do |top_task|
-        runnable.map { |source| top_task.async { sync_source_pipeline(source) } }.each(&:wait)
-      end
-    ensure
-      @pools.each_value(&:flush!)
+    runnable = sources.select { |source| seed_pool(source) }
+    raise NoProxiesError, I18n.t('vacancy.sync.no_proxies') if runnable.empty?
+
+    # Pipeline per source: each source runs its own listing → description in one
+    # fiber, all sources concurrent. So Dou's descriptions start the moment Dou's
+    # listing finishes instead of waiting for every source's listing (Djinni's
+    # listing is the slow one) — wall time = max over sources of (listing + desc).
+    Async do |top_task|
+      runnable.map { |source| top_task.async { sync_source_pipeline(source) } }.each(&:wait)
     end
   rescue StandardError => e
     error = e
@@ -520,15 +433,47 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
 
   private
 
-  # One proxy pool per source, seeded with proxies validated against THAT source's
-  # host — the alive sets barely overlap (dou blocks proxies djinni allows and
-  # vice-versa), so a shared pool starves whichever source it wasn't validated for.
-  # A source with zero live proxies (e.g. a transient Cloudflare block during seed) is
-  # skipped, not fatal — the other sources still sync. Returns whether it can run.
+  # GET /api/v1/meta, once per run, before any pool. It may not stop the sync: without it
+  # only our default target is asked for.
+  def proxy_mate_meta
+    @proxy_mate.meta
+  rescue ApplyMate::Client::ProxyMate::Error => e
+    log(event: 'vacancy_sync_proxy_mate_lookup_failed', session_id: @session_id, lookup: 'meta',
+        error_class: e.class.name, error: e.message.to_s.scrub.truncate(300), level: :warn)
+    nil
+  end
+
+  # Cloudflare tokens are bound to a curl-impersonate target, so ask only for tokens our binary
+  # can replay: ProxyMate's targets when it runs the release bin/install-curl-impersonate pins,
+  # else (or without meta) just our default target.
+  def impersonate_targets(meta)
+    client  = ApplyMate::Client::ImpersonateHttp
+    default = [ client::DEFAULT_IMPERSONATE ]
+    return default unless meta
+    return meta.curl_targets if meta.curl_release == client::RELEASE && meta.curl_targets.any?
+
+    log(event: 'vacancy_sync_curl_impersonate_mismatch', session_id: @session_id, release: client::RELEASE,
+        proxy_mate_release: meta.curl_release, targets: default.join(', '), level: :warn)
+    default
+  end
+
+  # One proxy pool per source, seeded from ProxyMate's list for THAT site — ProxyMate
+  # checks every proxy on every site separately (dou blocks proxies djinni allows and
+  # vice-versa), so a shared pool would starve whichever source it wasn't checked for.
+  # A source whose pool comes back empty — or whose ProxyMate request fails (not
+  # configured, unreachable, 401, unknown site) — is reported and skipped, not fatal: the
+  # other sources still sync, and the run ends `partial` / `failed`. Returns whether it can run.
   def seed_pool(source)
-    pool = ProxyPool.new(@db, source)
+    pool = ProxyPool.new(source, @proxy_mate, session_id: @session_id, impersonate_targets: @impersonate_targets)
+    begin
+      pool.seed!
+    rescue ApplyMate::Client::ProxyMate::Error => e
+      error = e
+    end
+
+    level = if error then :error elsif pool.size.zero? then :warn else :info end
     log(event: 'vacancy_sync_proxy_pool_ready', session_id: @session_id, source: source.name,
-        checked: pool.checked, alive: pool.size, level: pool.size.zero? ? :warn : :info)
+        alive: pool.size, with_clearance: pool.with_clearance, **error_fields(error), level: level)
     return false if pool.size.zero?
 
     @pools[source.id] = pool
@@ -552,6 +497,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   # silently missing from the charts. The block fills `summary` with phase totals and
   # counts its requests in `stats`.
   def log_phase(event, source)
+    pool    = @pools[source.id]
     summary = {}
     stats   = RequestStats.new
     started = monotonic
@@ -562,7 +508,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   ensure
     log(event: event, session_id: @session_id, source: source.name,
         result: error ? 'failed' : 'ok', duration_s: (monotonic - started).round(3),
-        **summary, **stats.to_h, **error_fields(error), level: error ? :error : :info)
+        **summary, **stats.to_h, **pool.take_counts!, **error_fields(error), level: error ? :error : :info)
   end
 
   def log_run_finished(sources, started, error)
@@ -607,12 +553,15 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         barrier.async { scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool, stats) }
       end
 
-      barrier.wait
-
-      # Drain the buffer BEFORE deciding the source failed. It holds up to
-      # VACANCY_BUFFER_LIMIT already-scraped vacancies, and `perform!`'s ensure only
-      # flushes proxy counters — raising first threw that work away.
-      buffer.flush
+      begin
+        barrier.wait
+      ensure
+        # A worker that raised (BinaryError) must not leave its siblings running (barrier.stop),
+        # and the buffer — up to VACANCY_BUFFER_LIMIT already-scraped vacancies — is drained
+        # BEFORE the source is judged failed: raising first threw that work away.
+        barrier.stop
+        buffer.flush
+      end
 
       # external_ids could have duplicates
       active_ids = external_ids.uniq
@@ -663,14 +612,18 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           barrier.async { fetch_description_worker(source, vacancies_queue, done, updates, retry_counts, stop, skipped, pool, stats) }
         end
 
-        barrier.wait
-
-        # One bulk write per cursor-batch instead of an UPDATE per vacancy.
-        if updates.any?
-          rows = updates.to_a
-          with_db do
-            bulk_update_descriptions(rows)
-            Vacancy.where(id: rows.map { |r| r[:id] }).import
+        begin
+          barrier.wait
+        ensure
+          # Siblings of a worker that raised are stopped, and descriptions already fetched
+          # in this batch are still written — one bulk write per cursor-batch.
+          barrier.stop
+          if updates.any?
+            rows = updates.to_a
+            with_db do
+              bulk_update_descriptions(rows)
+              Vacancy.where(id: rows.map { |r| r[:id] }).import
+            end
           end
         end
       end
@@ -706,8 +659,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         end
 
         stats.request!
-        client  = scraper_class.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
-        scraper = scraper_class.new(source, client)
+        scraper = build_scraper(scraper_class, source, proxy)
         html    = scraper.fetch_description(vacancy.url)
 
         if html.present?
@@ -715,8 +667,6 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           # from that same string, so the two can never describe different content.
           updates << { id: vacancy.id, description_html: html, description: scraper_class.to_plain_text(html) }
           done[0] += 1
-          pool.release(proxy, status: :success)
-          proxy = nil
         else
           stats.empty!
           count = retry_counts[vacancy.id] += 1
@@ -728,18 +678,24 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         end
       rescue ApplyMate::Scraper::Base::DeadProxyError
         stats.dead!
-        pool.release(proxy, status: :dead)
+        pool.drop(proxy)
         proxy = nil
         vacancies_queue.unshift(vacancy)
         retry
+      rescue ApplyMate::Client::ImpersonateHttp::BinaryError
+        stop[0] = true
+        pool.release(proxy, ok: false)
+        proxy = nil
+        vacancies_queue.unshift(vacancy)
+        raise # the host cannot run curl at all — retrying would only burn the pool
       rescue StandardError => e
         stats.error!(e)
-        pool.release(proxy, status: :keep)
+        pool.release(proxy, ok: false)
         proxy = nil
         vacancies_queue.unshift(vacancy)
         retry
       ensure
-        pool.release(proxy, status: :keep)
+        pool.release(proxy)
         proxy = nil
       end
     end
@@ -760,6 +716,8 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
   end
 
   def scrape_pages(source, pages_queue, external_ids, last_page, scraped_pages, stop, buffer, pool, stats)
+    scraper_class = source.scraper.constantize
+
     loop do
       begin
         proxy = nil
@@ -782,8 +740,7 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
         end
 
         stats.request!
-        client  = source.scraper.constantize.http_client_class.new(proxy: proxy.url, request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
-        scraper = source.scraper.constantize.new(source, client)
+        scraper = build_scraper(scraper_class, source, proxy)
         listing = scraper.fetch_listing(page: page)
 
         if listing&.any?
@@ -792,8 +749,6 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
           buffer.add(listing)
           external_ids.concat(listing.map(&:external_id))
           buffer.maybe_flush
-          pool.release(proxy, status: :success)
-          proxy = nil
         else
           stats.empty!
           if scraped_pages.empty? || (scraped_pages.any? && page > scraped_pages.max)
@@ -807,26 +762,45 @@ class Vacancy::Operation::SyncVacancies < ApplyMate::Operation::Base
               LAST_PAGE_CONFIRMATIONS.times { pages_queue.unshift(page) }
             end
           else
+            # A false empty below the scraped range: requeued without limit, so it is not a
+            # successful use — a page that keeps coming back empty must not keep the pool's
+            # rounds going forever (ProxyPool's termination rule).
+            pool.release(proxy, ok: false)
+            proxy = nil
             pages_queue.unshift(page)
           end
         end
       rescue ApplyMate::Scraper::Base::DeadProxyError
         stats.dead!
-        pool.release(proxy, status: :dead)
+        pool.drop(proxy)
         proxy = nil
         pages_queue.unshift(page)
         retry
+      rescue ApplyMate::Client::ImpersonateHttp::BinaryError
+        stop[0] = true
+        pool.release(proxy, ok: false)
+        proxy = nil
+        pages_queue.unshift(page)
+        raise # the host cannot run curl at all — retrying would only burn the pool
       rescue StandardError => e
         stats.error!(e)
-        pool.release(proxy, status: :keep)
+        pool.release(proxy, ok: false)
         proxy = nil
         pages_queue.unshift(page)
         retry
       ensure
-        pool.release(proxy, status: :keep)
+        pool.release(proxy)
         proxy = nil
       end
     end
+  end
+
+  # One client + scraper per proxied request. `proxy` is an ApplyMate::Client::ProxyMate::Proxy;
+  # its Cloudflare clearance (if any) travels with it into the client.
+  def build_scraper(scraper_class, source, proxy)
+    client = scraper_class.http_client_class.new(proxy: proxy.url, clearance: proxy.clearance,
+                                                 request_timeout: HTTP_REQUEST_TIMEOUT, connect_timeout: HTTP_CONNECT_TIMEOUT)
+    scraper_class.new(source, client)
   end
 
   def with_db(&block)
