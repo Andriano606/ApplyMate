@@ -70,9 +70,9 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     end
 
     it 'updates existing vacancies' do
-      existing_vacancy = create(:vacancy, source: source_djinni, external_id: '823988', title: 'Old Title')
+      existing_vacancy = create(:vacancy, source: source_djinni, external_id: '860253', title: 'Old Title')
       operation.call
-      expect(existing_vacancy.reload.title).to eq('Operator Experience Designer UI/UX')
+      expect(existing_vacancy.reload.title).to eq('Java Developer')
     end
 
     it 'removes stale vacancies' do
@@ -83,17 +83,17 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
 
     it 'correctly parses all fields' do
       operation.call
-      vacancy = source_djinni.vacancies.find_by(external_id: '823990')
+      vacancy = source_djinni.vacancies.find_by(external_id: '799019')
 
       expect(vacancy).to be_present
-      expect(vacancy.title).to eq('Copywriter / Script Writer (Web3 / FinTech / Performance Marketing)')
-      expect(vacancy.company_name).to eq('DarkSide')
-      expect(vacancy.url).to eq('https://djinni.co/jobs/823990-copywriter-script-writer-web3-fintech-perform/')
-      expect(vacancy.company_icon_url).to eq('https://p.djinni.co/f6/759465ffbaeb7add22812612b475ed/photo_2025-04-07_16.14.27_400.jpeg')
-      expect(vacancy.description).to include('Ми — performance marketing команда')
+      expect(vacancy.title).to eq('UI / Visual Designer — eCommerce (Flowers and Gifts, US/Canada)')
+      expect(vacancy.company_name).to eq('Lime Vizio')
+      expect(vacancy.url).to eq('https://djinni.co/jobs/799019-ui-visual-designer-ecommerce-flowers-and-gift/')
+      expect(vacancy.company_icon_url).to eq('https://p.djinni.co/55/69eb49944219b5db50dbec7b84c3d6/lime_vizio_inc_logo_400.jpeg')
+      expect(vacancy.description).to include('Lime Vizio runs 6 eCommerce brands')
       # Djinni's description comes from the listing, so the markup is stored there too.
       expect(vacancy.description_html).to include('<p>')
-      expect(vacancy.description_html).to include('Ми — performance marketing команда')
+      expect(vacancy.description_html).to include('Lime Vizio runs 6 eCommerce brands')
     end
 
     it 'does not visit vacancy pages — the listing already carries the description' do
@@ -105,7 +105,7 @@ RSpec.describe Vacancy::Operation::SyncVacancies, type: :operation do
     # These events feed the Grafana dashboard (.ai/docs/observability.md); the field
     # names are its contract.
     it 'reports the run to Grafana: pool, listing summary with new/stale counts, result' do
-      create(:vacancy, source: source_djinni, external_id: '823988')
+      create(:vacancy, source: source_djinni, external_id: '860253')
       create(:vacancy, source: source_djinni, external_id: 'stale_id')
       events = capture_logged_events
 

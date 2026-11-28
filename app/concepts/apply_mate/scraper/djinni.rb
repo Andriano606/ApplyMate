@@ -48,7 +48,8 @@ class ApplyMate::Scraper::Djinni < ApplyMate::Scraper::Base
     # Elasticsearch and the card preview.
     description_html = content_html(description_node)
     description = self.class.to_plain_text(description_html)
-    company_name = element.at_css('.small.text-gray-800, .job-list-item__company-name')&.text&.strip
+    # The company name is the secondary line under the title inside the card header.
+    company_name = element.at_css('header .fs-5.text-secondary')&.text&.strip
     company_icon_url = element.at_css('img.userpic-image')&.[]('src')
 
     ApplyMate::Operation::Struct.new(
